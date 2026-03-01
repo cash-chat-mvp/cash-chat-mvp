@@ -69,7 +69,7 @@ chore: Jira와 GitHub 연동
 
 #done
 
-``` text
+```
 
 - **수정 요청(Request Changes)을 받거나, 병합 없이 닫히는(Close) 경우**, \
 **Jira**에서 해당되는 작업의 상태를 다시 `진행 중(IN PROGRESS)` 상태로 변경합니다.
