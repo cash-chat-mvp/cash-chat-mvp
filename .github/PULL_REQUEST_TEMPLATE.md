@@ -28,7 +28,7 @@ PROJ-76 : Jira와 GitHub 상태 연동
 
 > 확인 목록 (Check List)
 
-병합 요청(Merge Reuqest)을 하기 전에, 아래 항목을 확인해 주세요.
+병합 요청(Merge Request)을 하기 전에, 아래 항목을 확인해 주세요.
 
 - [ ] **Local** 환경에서 **Build** 성공
 - [ ] **Local** 환경에서 **Test** 성공
