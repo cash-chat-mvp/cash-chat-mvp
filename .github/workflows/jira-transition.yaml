@@ -53,20 +53,36 @@ jobs:
         id: get_transition
         run: |
           ISSUE_TRANSITIONS_URL="${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/${{ steps.extract.outputs.issue }}/transitions"
+          TARGET_TRANSITION_NAME="${{ steps.resolve_transition.outputs.name }}"
 
-          RESPONSE=$(curl --silent --user "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_TOKEN }}" \
+          HTTP_STATUS=$(curl --silent --show-error --write-out "%{http_code}" --output response.json \
+            --user "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_TOKEN }}" \
             --request GET \
             --header "Accept: application/json" \
             "$ISSUE_TRANSITIONS_URL")
 
-          TRANSITION_ID=$(echo "$RESPONSE" | jq --raw-output --arg transitionName "${{ steps.resolve_transition.outputs.name }}" '
-            .transitions[]
-            | select(.name == $transitionName)
-            | .id
-          ')
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "::error::Failed to fetch transitions. HTTP status: $HTTP_STATUS"
+            echo "::group::Jira response body"
+            cat response.json
+            echo "::endgroup::"
+            exit 1
+          fi
 
-          if [ "$TRANSITION_ID" = "null" ]; then
-            TRANSITION_ID=""
+          TRANSITION_ID=$(jq --raw-output --arg transitionName "$TARGET_TRANSITION_NAME" '
+            (.transitions // [])
+            | map(select(.name == $transitionName))
+            | .[0].id // empty
+          ' response.json)
+
+          if [ -z "$TRANSITION_ID" ]; then
+            AVAILABLE_TRANSITIONS=$(jq --raw-output '
+              (.transitions // [])
+              | map(.name)
+              | join(", ")
+            ' response.json)
+            echo "::error::Transition '$TARGET_TRANSITION_NAME' not found for issue ${{ steps.extract.outputs.issue }}. Available transitions: $AVAILABLE_TRANSITIONS"
+            exit 1
           fi
 
           echo "transition_id=$TRANSITION_ID" >> "$GITHUB_OUTPUT"
