@@ -1,0 +1,86 @@
+name: Jira Transition via API
+
+on:
+  pull_request:
+    types: [opened, reopened, closed]
+
+jobs:
+  transition:
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_KEY_PREFIX: CC
+      REVIEW_ON_PULL_REQUEST_OPENED: In Review
+      REVIEW_ON_PULL_REQUEST_REOPENED: In Review
+      IN_PROGRESS_ON_PULL_REQUEST_CLOSED: In Progress
+      DONE_ON_PULL_REQUEST_MERGED: Done
+
+    steps:
+      - name: Extract Issue Key
+        id: extract
+        run: |
+          PULL_REQUEST_TITLE="${{ github.event.pull_request.title }}"
+          ISSUE_PATTERN="${ISSUE_KEY_PREFIX}-[0-9]+"
+          ISSUE=$(echo "$PULL_REQUEST_TITLE" | grep --only-matching --extended-regexp "$ISSUE_PATTERN")
+          echo "issue=$ISSUE" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Target Transition
+        id: resolve_transition
+        run: |
+          TRANSITION_NAME=""
+
+          case "${{ github.event.action }}" in
+            opened)
+              TRANSITION_NAME="$REVIEW_ON_PULL_REQUEST_OPENED"
+              ;;
+            reopened)
+              TRANSITION_NAME="$REVIEW_ON_PULL_REQUEST_REOPENED"
+              ;;
+            closed)
+              if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+                TRANSITION_NAME="$DONE_ON_PULL_REQUEST_MERGED"
+              else
+                TRANSITION_NAME="$IN_PROGRESS_ON_PULL_REQUEST_CLOSED"
+              fi
+              ;;
+          esac
+
+          echo "name=$TRANSITION_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Get Transition ID
+        if: >
+          steps.extract.outputs.issue != '' &&
+          steps.resolve_transition.outputs.name != ''
+        id: get_transition
+        run: |
+          ISSUE_TRANSITIONS_URL="${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/${{ steps.extract.outputs.issue }}/transitions"
+
+          RESPONSE=$(curl --silent --user "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_TOKEN }}" \
+            --request GET \
+            --header "Accept: application/json" \
+            "$ISSUE_TRANSITIONS_URL")
+
+          TRANSITION_ID=$(echo "$RESPONSE" | jq --raw-output --arg transitionName "${{ steps.resolve_transition.outputs.name }}" '
+            .transitions[]
+            | select(.name == $transitionName)
+            | .id
+          ')
+
+          if [ "$TRANSITION_ID" = "null" ]; then
+            TRANSITION_ID=""
+          fi
+
+          echo "transition_id=$TRANSITION_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Transition Issue
+        if: >
+          steps.extract.outputs.issue != '' &&
+          steps.get_transition.outputs.transition_id != ''
+        run: |
+          ISSUE_TRANSITIONS_URL="${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/${{ steps.extract.outputs.issue }}/transitions"
+          REQUEST_BODY="{\"transition\":{\"id\":\"${{ steps.get_transition.outputs.transition_id }}\"}}"
+
+          curl --silent --user "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_TOKEN }}" \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --data "$REQUEST_BODY" \
+            "$ISSUE_TRANSITIONS_URL"
