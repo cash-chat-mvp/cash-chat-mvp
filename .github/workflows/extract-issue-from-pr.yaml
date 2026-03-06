@@ -1,0 +1,75 @@
+name: Extract Issue from PR
+
+on:
+  pull_request:
+    types: [opened, reopened, closed]
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    env:
+      REVIEW_ON_PULL_REQUEST_OPENED: IN REVIEW
+      REVIEW_ON_PULL_REQUEST_REOPENED: IN REVIEW
+      IN_PROGRESS_ON_PULL_REQUEST_CLOSED: IN PROGRESS
+      DONE_ON_PULL_REQUEST_MERGED: DONE
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Load config
+        id: config
+        run: |
+          CONFIG=".github/jira-transition.config.json"
+          if [ ! -f "$CONFIG" ]; then
+            echo "::error::Config not found: $CONFIG"
+            exit 1
+          fi
+          echo "issue_key_prefix=$(jq -r '.issue_key_prefix' "$CONFIG")" >> "$GITHUB_OUTPUT"
+
+      - name: Extract Issue Key
+        id: extract
+        env:
+          PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+          ISSUE_KEY_PREFIX: ${{ steps.config.outputs.issue_key_prefix }}
+        run: |
+          ISSUE_PATTERN="${ISSUE_KEY_PREFIX}-[0-9]+"
+          ISSUE=$(echo "$PULL_REQUEST_TITLE" | grep --only-matching --extended-regexp "$ISSUE_PATTERN" || true)
+          echo "issue=$ISSUE" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve Target Transition
+        id: resolve_transition
+        run: |
+          TRANSITION_NAME=""
+
+          case "${{ github.event.action }}" in
+            opened)
+              TRANSITION_NAME="$REVIEW_ON_PULL_REQUEST_OPENED"
+              ;;
+            reopened)
+              TRANSITION_NAME="$REVIEW_ON_PULL_REQUEST_REOPENED"
+              ;;
+            closed)
+              if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+                TRANSITION_NAME="$DONE_ON_PULL_REQUEST_MERGED"
+              else
+                TRANSITION_NAME="$IN_PROGRESS_ON_PULL_REQUEST_CLOSED"
+              fi
+              ;;
+          esac
+
+          echo "name=$TRANSITION_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Jira context
+        run: |
+          mkdir -p jira-context
+          echo "${{ steps.extract.outputs.issue }}" > jira-context/issue
+          echo "${{ steps.resolve_transition.outputs.name }}" > jira-context/transition_name
+        if: always()
+
+      - name: Persist Jira context
+        uses: actions/upload-artifact@v7
+        with:
+          name: jira-context
+          path: jira-context/
+        if: always()
