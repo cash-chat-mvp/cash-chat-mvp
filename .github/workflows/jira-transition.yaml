@@ -14,6 +14,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: jira-context
+          path: jira-context
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
