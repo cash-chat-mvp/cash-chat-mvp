@@ -42,7 +42,11 @@ jobs:
           ISSUE_KEY_PREFIX: ${{ steps.config.outputs.issue_key_prefix }}
         run: |
           ISSUE_PATTERN="${ISSUE_KEY_PREFIX}-[0-9]+"
-          ISSUE=$(echo "$PULL_REQUEST_TITLE" | grep --only-matching --extended-regexp "$ISSUE_PATTERN" || true)
+          ISSUE=$(echo "$PULL_REQUEST_TITLE" | grep --only-matching --extended-regexp "$ISSUE_PATTERN" | head -n1 || true)
+          if [ -z "$ISSUE" ]; then
+            echo "::error::No Jira issue key found in PR title: $PULL_REQUEST_TITLE"
+            exit 1
+          fi
           echo "issue=$ISSUE" >> "$GITHUB_OUTPUT"
 
       - name: Resolve Target Transition
