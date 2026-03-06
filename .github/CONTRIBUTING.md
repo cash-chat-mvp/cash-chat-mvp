@@ -58,7 +58,7 @@
 
 > **작업 흐름 (Work Flow)** 
 
-\* GitHub Actionis를 통해 Jira와 연동되어 Issue의 상태가 갱신됩니다.
+\* GitHub Actions를 통해 Jira와 연동되어 Issue의 상태가 갱신됩니다.
 
 \- GitHub에서 병합 요청 시, Jira의 Issue가 검토 중(In Review) 상태로 전환됩니다.
 
@@ -70,4 +70,4 @@
 
 > **참고** 
 
-GitHub의  Issue 기능은 사용하지 않으며, Jira를 통해 작업이 관리됩니다.
+GitHub의 Issue 기능은 사용하지 않으며, Jira를 통해 작업이 관리됩니다.

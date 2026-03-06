@@ -15,6 +15,7 @@ jobs:
         with:
           name: jira-context
           run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Read context
         id: context

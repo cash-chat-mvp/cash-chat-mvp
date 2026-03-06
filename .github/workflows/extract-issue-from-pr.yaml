@@ -29,6 +29,12 @@ jobs:
 
       - name: Extract Issue Key
         id: extract
+        env:
+          PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+          ISSUE_KEY_PREFIX: ${{ steps.config.outputs.issue_key_prefix }}
+        run: |
+          ISSUE_PATTERN="${ISSUE_KEY_PREFIX}-[0-9]+"
+
         run: |
           PULL_REQUEST_TITLE="${{ github.event.pull_request.title }}"
           ISSUE_PATTERN="${{ steps.config.outputs.issue_key_prefix }}-[0-9]+"
