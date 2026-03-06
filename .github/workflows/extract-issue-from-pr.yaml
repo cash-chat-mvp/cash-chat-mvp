@@ -16,6 +16,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: .github/jira-transition.config.json
+          sparse-checkout-cone-mode: false
 
       - name: Load config
         id: config
@@ -25,8 +29,12 @@ jobs:
             echo "::error::Config not found: $CONFIG"
             exit 1
           fi
-          echo "issue_key_prefix=$(jq -r '.issue_key_prefix' "$CONFIG")" >> "$GITHUB_OUTPUT"
-
+          PREFIX=$(jq -r '.issue_key_prefix // empty' "$CONFIG")
+          if [ -z "$PREFIX" ] || ! [[ "$PREFIX" =~ ^[A-Z][A-Z0-9_]*$ ]]; then
+            echo "::error::Invalid issue_key_prefix in $CONFIG"
+            exit 1
+          fi
+          echo "issue_key_prefix=$PREFIX" >> "$GITHUB_OUTPUT"
       - name: Extract Issue Key
         id: extract
         env:
