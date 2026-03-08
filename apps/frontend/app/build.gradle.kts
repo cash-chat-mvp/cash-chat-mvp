@@ -1,6 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+
+    // Add the Google services Gradle plugin
+    id("com.google.gms.google-services")
+
+}
+
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(keystorePropertiesFile.inputStream())
 }
 
 android {
@@ -21,6 +33,16 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = (keystoreProperties["keyAlias"] as String?) ?: System.getenv("KEYSTORE_KEY_ALIAS")
+            keyPassword = (keystoreProperties["keyPassword"] as String?) ?: System.getenv("KEYSTORE_KEY_PASSWORD")
+            storeFile = (keystoreProperties["storeFile"] as String?)?.let { file(it) }
+                ?: System.getenv("KEYSTORE_PATH")?.let { file(it) }
+            storePassword = (keystoreProperties["storePassword"] as String?) ?: System.getenv("KEYSTORE_STORE_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -28,6 +50,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
