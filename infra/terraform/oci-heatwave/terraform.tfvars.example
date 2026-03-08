@@ -1,0 +1,25 @@
+tenancy_ocid     = "ocid1.tenancy.oc1..replace_me"
+user_ocid        = "ocid1.user.oc1..replace_me"
+fingerprint      = "12:34:56:78:90:ab:cd:ef:12:34:56:78:90:ab:cd:ef"
+private_key_path = "C:/Users/your-user/.oci/oci_api_key.pem"
+region           = "ap-seoul-1"
+compartment_ocid = "ocid1.compartment.oc1..replace_me"
+existing_vcn_id  = "ocid1.vcn.oc1.ap-seoul-1..replace_me"
+
+# 홈 리전의 첫 번째 AD면 보통 0
+availability_domain_index = 0
+
+db_system_name        = "mysql-db"
+db_system_description = "MySQL HeatWave DB System"
+db_system_shape_name  = "MySQL.VM.Standard.E3.1.8GB"
+hostname_label        = "mysqldb"
+
+admin_username = "admin"
+admin_password = "ReplaceThisWithAStrongPassword1!"
+
+enable_lakehouse = false
+heatwave_shape_name = "HeatWave.32GB"
+
+# ARM 스택 기본 VCN이 10.0.0.0/16 이므로 겹치지 않는 private subnet을 잡습니다.
+subnet_cidr        = "10.0.1.0/24"
+mysql_ingress_cidr = "10.0.0.0/16"

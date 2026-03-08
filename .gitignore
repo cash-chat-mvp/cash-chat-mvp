@@ -1,0 +1,29 @@
+# Terraform local state and caches
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/crash.log
+**/crash.*.log
+**/override.tf
+**/override.tf.json
+**/*_override.tf
+**/*_override.tf.json
+
+# Terraform variable files that commonly hold secrets
+**/*.tfvars
+**/*.tfvars.json
+
+# Local plan outputs
+**/*.tfplan
+**/plan.out
+
+# OCI and SSH private keys
+**/*.pem
+**/*.key
+**/id_rsa
+**/id_ed25519
+**/.oci/
+
+# Optional local env files
+**/.env
+**/.env.*
