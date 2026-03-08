@@ -1,62 +1,44 @@
-name: Jira Transition via API
+name: Jira Transition
 
 on:
-  pull_request:
-    types: [opened, reopened, closed]
+  workflow_run:
+    workflows: ["Extract Issue from PR"]
+    types: [completed]
 
 jobs:
   transition:
     runs-on: ubuntu-latest
-    env:
-      ISSUE_KEY_PREFIX: CC
-      REVIEW_ON_PULL_REQUEST_OPENED: IN REVIEW
-      REVIEW_ON_PULL_REQUEST_REOPENED: IN REVIEW
-      IN_PROGRESS_ON_PULL_REQUEST_CLOSED: IN PROGRESS
-      DONE_ON_PULL_REQUEST_MERGED: DONE
-
+    if: github.event.workflow_run.conclusion == 'success'
     steps:
-      - name: Extract Issue Key
-        id: extract
+      - name: Download Jira context
+        uses: actions/download-artifact@v7
+        with:
+          name: jira-context
+          path: jira-context
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read context
+        id: context
         run: |
-          PULL_REQUEST_TITLE="${{ github.event.pull_request.title }}"
-          ISSUE_PATTERN="${ISSUE_KEY_PREFIX}-[0-9]+"
-          ISSUE=$(echo "$PULL_REQUEST_TITLE" | grep --only-matching --extended-regexp "$ISSUE_PATTERN")
+          ISSUE=$(cat jira-context/issue 2>/dev/null || true)
+          TRANSITION_NAME=$(cat jira-context/transition_name 2>/dev/null || true)
           echo "issue=$ISSUE" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve Target Transition
-        id: resolve_transition
-        run: |
-          TRANSITION_NAME=""
-
-          case "${{ github.event.action }}" in
-            opened)
-              TRANSITION_NAME="$REVIEW_ON_PULL_REQUEST_OPENED"
-              ;;
-            reopened)
-              TRANSITION_NAME="$REVIEW_ON_PULL_REQUEST_REOPENED"
-              ;;
-            closed)
-              if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
-                TRANSITION_NAME="$DONE_ON_PULL_REQUEST_MERGED"
-              else
-                TRANSITION_NAME="$IN_PROGRESS_ON_PULL_REQUEST_CLOSED"
-              fi
-              ;;
-          esac
-
-          echo "name=$TRANSITION_NAME" >> "$GITHUB_OUTPUT"
+          echo "transition_name=$TRANSITION_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Get Transition ID
-        if: >
-          steps.extract.outputs.issue != '' &&
-          steps.resolve_transition.outputs.name != ''
-        id: get_transition
+        if: steps.context.outputs.issue != '' && steps.context.outputs.transition_name != ''
+        id: get_transition_name
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         run: |
-          ISSUE_TRANSITIONS_URL="${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/${{ steps.extract.outputs.issue }}/transitions"
-          TARGET_TRANSITION_NAME="${{ steps.resolve_transition.outputs.name }}"
+          ISSUE_TRANSITIONS_URL="${JIRA_BASE_URL}/rest/api/3/issue/${{ steps.context.outputs.issue }}/transitions"
+          TARGET_TRANSITION_NAME="${{ steps.context.outputs.transition_name }}"
 
           HTTP_STATUS=$(curl --silent --show-error --write-out "%{http_code}" --output response.json \
-            --user "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_TOKEN }}" \
+            --user "${JIRA_EMAIL}:${JIRA_TOKEN}" \
             --request GET \
             --header "Accept: application/json" \
             "$ISSUE_TRANSITIONS_URL")
@@ -69,33 +51,37 @@ jobs:
             exit 1
           fi
 
-          TRANSITION_ID=$(jq --raw-output --arg transitionName "$TARGET_TRANSITION_NAME" '
-            (.transitions // [])
-            | map(select(.name == $transitionName))
-            | .[0].id // empty
-          ' response.json)
+          TRANSITION_ID=$(jq -r --arg name "$TARGET_TRANSITION_NAME" '
+            .transitions // []
+            | .[]
+            | select(.name == $name)
+            | .id
+          ' response.json | head -1)
 
           if [ -z "$TRANSITION_ID" ]; then
-            AVAILABLE_TRANSITIONS=$(jq --raw-output '
-              (.transitions // [])
-              | map(.name)
-              | join(", ")
+            TRANSITION_NAMES=$(jq -r '
+              .transitions // []
+              | .[]
+              | .name
             ' response.json)
-            echo "::error::Transition '$TARGET_TRANSITION_NAME' not found for issue ${{ steps.extract.outputs.issue }}. Available transitions: $AVAILABLE_TRANSITIONS"
+            AVAILABLE=$(echo "$TRANSITION_NAMES" | paste -sd ", " -)
+            echo "::error::Transition '$TARGET_TRANSITION_NAME' not found for issue ${{ steps.context.outputs.issue }}. Available: $AVAILABLE"
             exit 1
           fi
 
           echo "transition_id=$TRANSITION_ID" >> "$GITHUB_OUTPUT"
 
       - name: Transition Issue
-        if: >
-          steps.extract.outputs.issue != '' &&
-          steps.get_transition.outputs.transition_id != ''
+        if: steps.context.outputs.issue != '' && steps.get_transition_name.outputs.transition_id != ''
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         run: |
-          ISSUE_TRANSITIONS_URL="${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/${{ steps.extract.outputs.issue }}/transitions"
-          REQUEST_BODY="{\"transition\":{\"id\":\"${{ steps.get_transition.outputs.transition_id }}\"}}"
+          ISSUE_TRANSITIONS_URL="${JIRA_BASE_URL}/rest/api/3/issue/${{ steps.context.outputs.issue }}/transitions"
+          REQUEST_BODY="{\"transition\":{\"id\":\"${{ steps.get_transition_name.outputs.transition_id }}\"}}"
 
-          curl --silent --user "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_TOKEN }}" \
+          curl --silent --user "${JIRA_EMAIL}:${JIRA_TOKEN}" \
             --request POST \
             --header "Content-Type: application/json" \
             --data "$REQUEST_BODY" \
