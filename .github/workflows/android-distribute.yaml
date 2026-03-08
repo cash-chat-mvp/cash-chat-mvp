@@ -51,6 +51,9 @@ jobs:
           FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: printenv FIREBASE_SA > service-account.json
 
+      - name: Verify service account JSON
+        run: python3 -c "import json; d=json.load(open('service-account.json')); print('Keys:', sorted(d.keys()))"
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
