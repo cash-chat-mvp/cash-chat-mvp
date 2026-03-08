@@ -4,11 +4,17 @@ plugins {
 }
 
 kotlin {
-    androidTarget()
+    androidTarget {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        }
+    }
 
     iosX64()
     iosArm64()
     iosSimulatorArm64()
+
+    jvmToolchain(21)
 
     targets.withType<org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget>().configureEach {
         binaries.framework {

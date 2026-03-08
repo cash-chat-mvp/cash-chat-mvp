@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class ChatStore(
     private val scope: CoroutineScope
@@ -28,7 +30,9 @@ class ChatStore(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val stateMutex = Mutex()
     private var sentCount = 0
+    private var inFlightCount = 0
 
     private val adDatabase = listOf(
         AdInfo("배달의민족", "지금 주문하면 3,000원 즉시 할인!", "지금 주문하기", "🍔", 0xFFFFF4E8, 0xFFFF6B00)
@@ -40,26 +44,36 @@ class ChatStore(
             val now = currentTimeMillis().toString()
             val userMessage = ChatMessage.Text(id = now, text = text, isUser = true)
             _messages.update { it + userMessage }
-            sentCount++
-
-            _isLoading.value = true
-            delay(1500)
-
-            if (sentCount % 3 == 0) {
-                _messages.update { it + ChatMessage.RewardPrompt(id = "${currentTimeMillis()}-reward") }
-            } else {
-                val aiResponse = ChatMessage.Text(
-                    id = "${currentTimeMillis()}-ai",
-                    text = getAiResponse(text),
-                    isUser = false
-                )
-                _messages.update { it + aiResponse }
-
-                delay(400)
-                val ad = getAdForMessage(text)
-                _messages.update { it + ChatMessage.InlineAd(id = "${currentTimeMillis()}-ad", ad = ad) }
+            val turn = stateMutex.withLock {
+                sentCount += 1
+                inFlightCount += 1
+                _isLoading.value = inFlightCount > 0
+                sentCount
             }
-            _isLoading.value = false
+
+            try {
+                delay(1500)
+
+                if (turn % 3 == 0) {
+                    _messages.update { it + ChatMessage.RewardPrompt(id = "${currentTimeMillis()}-reward") }
+                } else {
+                    val aiResponse = ChatMessage.Text(
+                        id = "${currentTimeMillis()}-ai",
+                        text = getAiResponse(text),
+                        isUser = false
+                    )
+                    _messages.update { it + aiResponse }
+
+                    delay(400)
+                    val ad = getAdForMessage(text)
+                    _messages.update { it + ChatMessage.InlineAd(id = "${currentTimeMillis()}-ad", ad = ad) }
+                }
+            } finally {
+                stateMutex.withLock {
+                    inFlightCount = (inFlightCount - 1).coerceAtLeast(0)
+                    _isLoading.value = inFlightCount > 0
+                }
+            }
         }
     }
 
