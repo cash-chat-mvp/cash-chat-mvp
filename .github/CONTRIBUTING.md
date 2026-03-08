@@ -1,88 +1,73 @@
-> Git Branch 전략
+> **Git Work Flow**
 
-`Repository Work Flow`
-- **main** : 안정적인 서비스를 배포 (원본 레포지토리에서 직접 관리)
-- **dev** : 작업 상황을 통합하고, 변경 사항을 확인 (원본 레포지토리에서 직접 작업)
+`Branching 전략`
 
-`Forking Work Flow`
-- **topic** : 새로운 기능을 구현하거나 설계를 진행 (개인 Fork에서 브랜치 생성 후 원본 레포지토리에 PR)
-- **hot-fix** : 긴급하게 장애를 위한 수정이 필요한 경우 (개인 Fork에서 브랜치 생성 후 원본 레포지토리에 PR)
+\* 안정적인 서비스를 배포하고, 작업 상황 통합 및 변경 사항을 확인합니다.
 
-> 작업 흐름 (Work Flow)
+\- main : 안정적인 서비스를 배포
 
-**Jira**와의 원활한 연동을 위해 `Smart Commit`을 활용합니다.
+\- dev : 작업 상황을 통합하고, 변경 사항을 확인
 
-- `main`, `dev` 관련 작업은 원본 레포지토리 브랜치에서 직접 진행합니다.
-- `topic`, `hot-fix` 관련 작업은 개인 Fork 브랜치에서 작업 후 원본 레포지토리로 PR을 생성합니다.
+`Fork-Based Collaboration` 
 
-- **병합 요청(Merge Request)을 하는 경우**, \
-먼저 **Local** 환경에서 **Build** 및 **Test** 성공 여부를 확인합니다. \
-그리고 제목에는 **Jira**에 명시된 **Ticket**의 **ID**와 작업 내용의 요약을 반드시 포함하고, \
-설명에 상세 작업 내용을 명확하게 작성하고, `#in-review` Tag를 포함하여 **Jira**에서 작업 상태를 `검토 중(IN REVIEW)` 상태로 변경합니다.
+\* 저장소(Repository)를 개인 작업 공간으로 복제(Fork)하여 권한을 분리하고 독립적으로 개발합니다.
 
+\- topic : 새로운 기능을 구현하거나 설계를 진행
 
+\- hot-fix : 긴급하게 장애를 위한 수정이 필요한 경우
+
+<br>
+
+> **Commit Message 규칙** 
+
+``` markdown
+[ISSUE-#] type : description
 ```
 
-[양식]
+\* Commit Message는 위의 형식을 준수해야 합니다.
 
-* Title
+\- feat : 기능 구현
 
-- [Jira Ticket ID] : <Summary>
+\- fix : 오류 수정
 
-* Description
+\- refactor : 코드 Refactoring
 
-<#Command>
+\- docs : 문서 작성
 
-<Message>
+\- chore : 기타 (Package 관리, Build 설정 등)
 
-[예시]
+<br>
 
-[PROJ-76] Jira와 GitHub 상태 연동
+> **병합 요청 (Merge Request) 방법** 
 
-#in-review
+``` markdown
+`제목 (Title)`
+[ISSUE-#] Summary
 
-* Jira와 GitHub 상태 연동을 체계를 구축하였습니다.
-* 기여 방법 문서(CONTRIBUTING.md)를 작성하였습니다.
-
+`설명 (Description)`
+* 배경 (Context)
+* 변경 사항 (Change)
+- 세부 사항 (Detail)
 ```
 
-- **검토(Review) 후 병합(Merge)되는 경우**, \
-Commit Message에 `#done` Tag를 포함하여 **Jira**에서 작업 상태를 `완료(DONE)`로 변경합니다.
+\* 제목에 Jira의 Issue를 반드시 포함하세요.
 
-```
+\- 설명에 배경, 변경 사항, 세부 사항 등을 작성합니다.
 
-[양식]
+<br>
 
-* Commit Message
+> **작업 흐름 (Work Flow)** 
 
-Merge pull request #76 from user-name/branch-name (Auto Generated)
+\* GitHub Actions를 통해 Jira와 연동되어 Issue의 상태가 갱신됩니다.
 
-* Description
+\- GitHub에서 병합 요청 시, Jira의 Issue가 검토 중(In Review) 상태로 전환됩니다.
 
-<Commit Message> (Auto Generated)
+\- GitHub에서 검토한 후, 병합된 경우 Jira의 Issue가 완료(Done) 상태로 전환됩니다.
 
-<Content>
+\- GitHub에서 검토를 통과하지 못해 수정 요청(Change Requested)을 받거나, 병합 없이 닫히는(Close) 경우 Jira의 Issue가 진행 중(In Progress) 상태로 다시 전환됩니다.
 
-#done
+<br>
 
-<Message>
+> **참고** 
 
-[예시]
-
-Merge pull request #76 from admin/proj-76-jira-github
-
-chore: Jira와 GitHub 연동
-
-* Jira와 GitHub 상태 연동을 확인했습니다.
-* 이와 관련된 기여 방법 문서(CONTRIBUTING.md)를 확인했습니다.
-
-#done
-
-```
-
-- **수정 요청(Request Changes)을 받거나, 병합 없이 닫히는(Close) 경우**, \
-**Jira**에서 해당되는 작업의 상태를 다시 `진행 중(IN PROGRESS)` 상태로 변경합니다.
-
-> 참고
-
-**GitHub**의 `issue` 기능은 사용하지 않습니다. 
+GitHub의 Issue 기능은 사용하지 않으며, Jira를 통해 작업이 관리됩니다.
