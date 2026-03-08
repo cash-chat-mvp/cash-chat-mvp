@@ -1,0 +1,17 @@
+*.iml
+.gradle
+/.gradle-user-home
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+ #  - /.gradle, /.gradle-user-home: Gradle 캐시/다운로드 파일 (재생성 가능)
+ #  - /.idea, *.iml: Android Studio/IntelliJ 개인 IDE 설정 (팀 공용 소스 아님)
+ #  - /build, .externalNativeBuild, .cxx: 빌드 산출물/중간 파일 (빌드시 다시 생성)
+ #  - /captures, .DS_Store: 스크린샷/OS 메타파일
+ #  - /local.properties: 로컬 SDK 경로 같은 개인 환경 설정 (보안/환경 차이 때문에 보통 미커밋)
