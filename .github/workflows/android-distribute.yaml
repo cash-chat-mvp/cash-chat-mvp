@@ -49,7 +49,7 @@ jobs:
       - name: Write Firebase Service Account
         env:
           FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-        run: echo "$FIREBASE_SA" > service-account.json
+        run: printenv FIREBASE_SA > service-account.json
 
       - name: Make gradlew executable
         run: chmod +x gradlew
