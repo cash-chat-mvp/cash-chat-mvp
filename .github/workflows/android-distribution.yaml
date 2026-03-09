@@ -8,6 +8,7 @@ on:
 
 jobs:
   build-and-distribute:
+    if: github.repository == 'cash-chat-mvp/cash-chat-mvp'
     runs-on: ubuntu-latest
     defaults:
       run:
