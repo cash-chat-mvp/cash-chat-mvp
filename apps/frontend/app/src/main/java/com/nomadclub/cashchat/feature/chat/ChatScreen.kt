@@ -9,10 +9,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,16 +45,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -62,7 +67,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -71,15 +75,17 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nomadclub.cashchat.feature.chat.models.AdInfo
-import com.nomadclub.cashchat.feature.chat.models.ChatMessage
+import com.nomadclub.cashchat.shared.chat.model.AdInfo
+import com.nomadclub.cashchat.shared.chat.model.ChatMessage
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -133,6 +139,14 @@ private val rewardAds = listOf(
     AdInfo("현대자동차 아이오닉6", "전기차 시대의 혁신. 지금 시승 신청하세요!", "시승 신청", "🚗", 0xFFFFF3E0, 0xFF002C5F, "자동차")
 )
 
+private data class ChatHistorySession(
+    val id: String,
+    val title: String,
+    val preview: String,
+    val updatedAt: Long,
+    val messages: List<ChatMessage>
+)
+
 /**
  * AI 채팅 메인 화면.
  */
@@ -141,20 +155,54 @@ fun ChatScreen(
     points: Int,
     messageCount: Int,
     addPoints: (Int) -> Unit,
+    bottomNavInset: Dp,
     onNavigateTab: (String) -> Unit,
     incrementMessageCount: () -> Unit
 ) {
-    var messages by remember {
-        mutableStateOf<List<ChatMessage>>(
-            listOf(
-                ChatMessage.Text(
-                    id = "1",
-                    text = "안녕하세요! 저는 CashAI 비서예요 🤖\n무엇이든 물어보세요. 대화할수록 포인트도 쌓여요!",
-                    isUser = false
+    val welcomeMessage = remember {
+        ChatMessage.Text(
+            id = "1",
+            text = "안녕하세요! 저는 CashAI 비서예요 🤖\n무엇이든 물어보세요. 대화할수록 포인트도 쌓여요!",
+            isUser = false
+        )
+    }
+    val initialSessions = remember {
+        listOf(
+            ChatHistorySession(
+                id = "new-chat",
+                title = "새 채팅",
+                preview = "새로운 대화를 시작해보세요",
+                updatedAt = System.currentTimeMillis(),
+                messages = listOf(welcomeMessage)
+            ),
+            ChatHistorySession(
+                id = "history-1",
+                title = "점심 메뉴 추천",
+                preview = "오늘 점심으로는 파스타 어때요?",
+                updatedAt = System.currentTimeMillis() - 86_400_000,
+                messages = listOf(
+                    welcomeMessage,
+                    ChatMessage.Text(id = "h1-u", text = "오늘 점심 추천해줘", isUser = true),
+                    ChatMessage.Text(id = "h1-a", text = "오늘 점심으로는 파스타 어때요? 가볍고 맛있어요.", isUser = false)
+                )
+            ),
+            ChatHistorySession(
+                id = "history-2",
+                title = "여행 계획",
+                preview = "2박 3일 제주 여행 코스를 정리해드릴게요",
+                updatedAt = System.currentTimeMillis() - 172_800_000,
+                messages = listOf(
+                    welcomeMessage,
+                    ChatMessage.Text(id = "h2-u", text = "제주도 여행 계획 짜줘", isUser = true),
+                    ChatMessage.Text(id = "h2-a", text = "2박 3일 제주 여행 코스를 정리해드릴게요.", isUser = false)
                 )
             )
         )
     }
+
+    var sessions by remember { mutableStateOf(initialSessions) }
+    var selectedSessionId by rememberSaveable { mutableStateOf(initialSessions.first().id) }
+    var messages by remember { mutableStateOf(initialSessions.first().messages) }
     var inputValue by rememberSaveable { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var chatIdle by remember { mutableStateOf(true) }
@@ -167,49 +215,17 @@ fun ChatScreen(
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val suggestions = remember {
         listOf("오늘 점심 추천해줘", "여행 계획 짜줘", "영어 공부 방법", "다이어트 팁")
-    }
-
-    // --- 플로팅 네비게이션 바 노출 제어 로직 ---
-    var isScrollingUp by remember { mutableStateOf(true) }
-    var previousIndex by remember { mutableIntStateOf(0) }
-    var previousScrollOffset by remember { mutableIntStateOf(0) }
-
-    // 현재 리스트가 스크롤 가능한 상태인지 확인 (아이템이 화면을 꽉 채웠는지)
-    val isScrollable by remember {
-        derivedStateOf {
-            listState.layoutInfo.visibleItemsInfo.size < listState.layoutInfo.totalItemsCount ||
-            listState.canScrollBackward || listState.canScrollForward
-        }
-    }
-
-    // 스크롤 방향 감지
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) ->
-                if (index > previousIndex) {
-                    isScrollingUp = false
-                } else if (index < previousIndex) {
-                    isScrollingUp = true
-                } else {
-                    if (offset > previousScrollOffset + 10) {
-                        isScrollingUp = false
-                    } else if (offset < previousScrollOffset - 10) {
-                        isScrollingUp = true
-                    }
-                }
-                previousIndex = index
-                previousScrollOffset = offset
-            }
     }
 
     LaunchedEffect(messages.size, isLoading) {
         if (messages.isNotEmpty()) {
             delay(100)
             listState.animateScrollToItem(messages.lastIndex + if (isLoading) 1 else 0)
-            // 새 메시지가 추가될 때 스크롤이 끝에 도달하면 잠시 네비바를 숨김 (자연스러운 연출)
-            if (isScrollable) isScrollingUp = false
         }
     }
 
@@ -219,32 +235,98 @@ fun ChatScreen(
         }
     }
 
+    fun previewFrom(list: List<ChatMessage>): String {
+        return list.lastOrNull { it is ChatMessage.Text }?.let { (it as ChatMessage.Text).text }?.trim().orEmpty()
+            .ifBlank { "새로운 대화를 시작해보세요" }
+            .take(36)
+    }
+
+    fun titleFrom(list: List<ChatMessage>): String {
+        val firstUser = list.firstOrNull { it is ChatMessage.Text && it.isUser } as? ChatMessage.Text
+        return firstUser?.text?.trim()?.take(18)?.ifBlank { "새 채팅" } ?: "새 채팅"
+    }
+
+    fun syncSelectedSession(list: List<ChatMessage>) {
+        sessions = sessions.map { session ->
+            if (session.id == selectedSessionId) {
+                val newTitle = if (session.title == "새 채팅") titleFrom(list) else session.title
+                session.copy(
+                    title = newTitle,
+                    preview = previewFrom(list),
+                    updatedAt = System.currentTimeMillis(),
+                    messages = list
+                )
+            } else {
+                session
+            }
+        }.sortedByDescending { it.updatedAt }
+    }
+
+    fun setMessages(list: List<ChatMessage>) {
+        messages = list
+        syncSelectedSession(list)
+    }
+
     suspend fun appendAiWithAd(text: String, response: String) {
         delay(2000)
-        messages = messages + ChatMessage.Text(
+        setMessages(messages + ChatMessage.Text(
             id = "${System.currentTimeMillis()}-ai",
             text = response,
             isUser = false
-        )
+        ))
         isLoading = false
         delay(400)
-        messages = messages + ChatMessage.InlineAd(
+        setMessages(messages + ChatMessage.InlineAd(
             id = "${System.currentTimeMillis()}-ad",
             ad = matchAd(text)
+        ))
+    }
+
+    fun selectSession(session: ChatHistorySession) {
+        selectedSessionId = session.id
+        messages = session.messages
+        inputValue = ""
+        isLoading = false
+        pendingAIResponse = ""
+        chatIdle = session.id == "new-chat"
+    }
+
+    fun createNewSession() {
+        val newSession = ChatHistorySession(
+            id = "new-${System.currentTimeMillis()}",
+            title = "새 채팅",
+            preview = "새로운 대화를 시작해보세요",
+            updatedAt = System.currentTimeMillis(),
+            messages = listOf(
+                ChatMessage.Text(
+                    id = "welcome-${System.currentTimeMillis()}",
+                    text = "안녕하세요! 저는 CashAI 비서예요 🤖\n무엇이든 물어보세요. 대화할수록 포인트도 쌓여요!",
+                    isUser = false
+                )
+            )
         )
+        sessions = listOf(newSession) + sessions
+        selectedSessionId = newSession.id
+        messages = newSession.messages
+        inputValue = ""
+        isLoading = false
+        pendingAIResponse = ""
+        chatIdle = true
     }
 
     fun submitMessage(override: String? = null) {
         val text = (override ?: inputValue).trim()
         if (text.isEmpty() || isLoading) return
 
+        focusManager.clearFocus()
+        keyboardController?.hide()
         chatIdle = false
         sentCount += 1
-        messages = messages + ChatMessage.Text(
+        setMessages(messages + ChatMessage.Text(
             id = System.currentTimeMillis().toString(),
             text = text,
             isUser = true
-        )
+        ))
         inputValue = ""
         isLoading = true
         incrementMessageCount()
@@ -258,19 +340,69 @@ fun ChatScreen(
             if (isRewardTurn) {
                 delay(1800)
                 isLoading = false
-                messages = messages + ChatMessage.RewardPrompt(id = "${System.currentTimeMillis()}-reward")
+                setMessages(messages + ChatMessage.RewardPrompt(id = "${System.currentTimeMillis()}-reward"))
             } else {
                 appendAiWithAd(text, generateAiResponse(text))
             }
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF4F6F8))
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = "채팅 내역",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                    )
+                    TextButton(
+                        onClick = {
+                            createNewSession()
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("+ 새 채팅")
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(sessions, key = { it.id }) { session ->
+                            ChatHistoryRow(
+                                title = session.title,
+                                preview = session.preview,
+                                selected = session.id == selectedSessionId,
+                                onClick = {
+                                    selectSession(session)
+                                    scope.launch { drawerState.close() }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF4F6F8))
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = {
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                        }
+                    )
+                }
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
             // 상단 바
             Row(
                 modifier = Modifier
@@ -280,7 +412,7 @@ fun ChatScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconButton(onClick = {}) {
+                IconButton(onClick = { scope.launch { drawerState.open() } }) {
                     Icon(Icons.Default.Menu, contentDescription = "menu")
                 }
                 Text("CashAI 비서", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -303,7 +435,9 @@ fun ChatScreen(
             // 메시지 목록
             LazyColumn(
                 state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -329,16 +463,27 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.White)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .imePadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(bottom = if (chatIdle) 8.dp else 8.dp + bottomNavInset),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
                     value = inputValue,
                     onValueChange = { inputValue = it },
-                    placeholder = { Text("메시지를 입력하세요...") },
+                    placeholder = { Text("메시지를 입력하세요...", color = Color(0xFF9CA3AF)) },
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
-                    shape = RoundedCornerShape(999.dp)
+                    shape = RoundedCornerShape(999.dp),
+                    colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedTextColor = Color(0xFF111827),
+                        unfocusedTextColor = Color(0xFF111827),
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedIndicatorColor = Color(0xFFCBD5E1),
+                        unfocusedIndicatorColor = Color(0xFFE5E7EB),
+                        cursorColor = Color(0xFF5C6BFA)
+                    )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
@@ -349,38 +494,6 @@ fun ChatScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "send")
-                }
-            }
-        }
-
-        // --- 채팅 중 나타나는 플로팅 네비게이션 바 ---
-        // 조건: 아이들 상태가 아니어야 하며 (대화 중), (스크롤이 불가능한 상태이거나 OR 위로 스크롤 중이어야 함)
-        AnimatedVisibility(
-            visible = !chatIdle && (!isScrollable || isScrollingUp),
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 80.dp)
-        ) {
-            Surface(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp)
-                    .clip(RoundedCornerShape(32.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(32.dp)),
-                color = Color.White.copy(alpha = 0.95f),
-                shadowElevation = 8.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IdleNavItem(icon = Icons.AutoMirrored.Filled.Chat, label = "채팅", active = true, onClick = {})
-                    Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.Gray.copy(alpha = 0.2f)))
-                    IdleNavItem(icon = Icons.Default.CardGiftcard, label = "리워드", active = false, onClick = { onNavigateTab("rewards") })
-                    IdleNavItem(icon = Icons.Default.Store, label = "상점", active = false, onClick = { onNavigateTab("shop") })
-                    IdleNavItem(icon = Icons.Default.Person, label = "MY", active = false, onClick = { onNavigateTab("mypage") })
                 }
             }
         }
@@ -406,11 +519,11 @@ fun ChatScreen(
                     showRewardAdModal = false
                     scope.launch {
                         delay(300)
-                        messages = messages + ChatMessage.Text(
+                        setMessages(messages + ChatMessage.Text(
                             id = "${System.currentTimeMillis()}-ai",
                             text = pendingAIResponse,
                             isUser = false
-                        )
+                        ))
                     }
                 },
                 onComplete = {
@@ -419,15 +532,16 @@ fun ChatScreen(
                     showRewardAdModal = false
                     scope.launch {
                         delay(300)
-                        messages = messages + ChatMessage.Text(
+                        setMessages(messages + ChatMessage.Text(
                             id = "${System.currentTimeMillis()}-ai",
                             text = pendingAIResponse,
                             isUser = false
-                        )
+                        ))
                     }
                 }
             )
         }
+    }
     }
 }
 
@@ -835,10 +949,13 @@ private fun IdleOverlay(
                         .padding(start = 8.dp),
                     maxLines = 1,
                     colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedTextColor = Color(0xFF111827),
+                        unfocusedTextColor = Color(0xFF111827),
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = Color(0xFF5C6BFA)
                     )
                 )
                 Button(
@@ -885,56 +1002,36 @@ private fun IdleOverlay(
             }
         }
 
-        // Bottom Nav (Static Preview)
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp)
-                .clip(RoundedCornerShape(32.dp))
-                .background(Color.White.copy(alpha = 0.8f))
-                .border(1.dp, Color.White, RoundedCornerShape(32.dp))
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            IdleNavItem(icon = Icons.AutoMirrored.Filled.Chat, label = "채팅", active = true, onClick = {})
-            Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.Gray.copy(alpha = 0.2f)).align(Alignment.CenterVertically))
-            IdleNavItem(icon = Icons.Default.CardGiftcard, label = "리워드", active = false, onClick = { onNavigateTab("rewards") })
-            IdleNavItem(icon = Icons.Default.Store, label = "상점", active = false, onClick = { onNavigateTab("shop") })
-            IdleNavItem(icon = Icons.Default.Person, label = "MY", active = false, onClick = { onNavigateTab("mypage") })
-        }
     }
 }
 
-/** IdleOverlay 하단의 탭 버튼 하나 (채팅/리워드/상점/MY) */
 @Composable
-private fun IdleNavItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    active: Boolean,
+private fun ChatHistoryRow(
+    title: String,
+    preview: String,
+    selected: Boolean,
     onClick: () -> Unit
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(if (active) Color(0xFF5C6BFA) else Color.Transparent)
-                .size(48.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = if (active) Color.White else Color(0xFF9CA3AF),
-                modifier = Modifier.size(24.dp)
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) Color(0xFFEFF2FF) else Color.Transparent
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF111827)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = preview,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF6B7280),
+                maxLines = 1
             )
         }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            color = if (active) Color(0xFF5C6BFA) else Color(0xFF9CA3AF),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
-        )
     }
 }
 

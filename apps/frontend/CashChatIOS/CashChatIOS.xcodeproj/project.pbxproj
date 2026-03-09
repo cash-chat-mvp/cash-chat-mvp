@@ -1,0 +1,599 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		FBEF9B9C2F5D5C2C009F83ED /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FBEF9B862F5D5C2B009F83ED /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FBEF9B8D2F5D5C2B009F83ED;
+			remoteInfo = CashChatIOS;
+		};
+		FBEF9BA62F5D5C2C009F83ED /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FBEF9B862F5D5C2B009F83ED /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FBEF9B8D2F5D5C2B009F83ED;
+			remoteInfo = CashChatIOS;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		FBEF9B8E2F5D5C2B009F83ED /* CashChatIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CashChatIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FBEF9B9B2F5D5C2C009F83ED /* CashChatIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CashChatIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FBEF9BA52F5D5C2C009F83ED /* CashChatIOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CashChatIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		FBEF9B902F5D5C2B009F83ED /* CashChatIOS */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CashChatIOS;
+			sourceTree = "<group>";
+		};
+		FBEF9B9E2F5D5C2C009F83ED /* CashChatIOSTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CashChatIOSTests;
+			sourceTree = "<group>";
+		};
+		FBEF9BA82F5D5C2C009F83ED /* CashChatIOSUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CashChatIOSUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FBEF9B8B2F5D5C2B009F83ED /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FBEF9B982F5D5C2C009F83ED /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FBEF9BA22F5D5C2C009F83ED /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		FBEF9B852F5D5C2B009F83ED = {
+			isa = PBXGroup;
+			children = (
+				FBEF9B902F5D5C2B009F83ED /* CashChatIOS */,
+				FBEF9B9E2F5D5C2C009F83ED /* CashChatIOSTests */,
+				FBEF9BA82F5D5C2C009F83ED /* CashChatIOSUITests */,
+				FBEF9B8F2F5D5C2B009F83ED /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		FBEF9B8F2F5D5C2B009F83ED /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				FBEF9B8E2F5D5C2B009F83ED /* CashChatIOS.app */,
+				FBEF9B9B2F5D5C2C009F83ED /* CashChatIOSTests.xctest */,
+				FBEF9BA52F5D5C2C009F83ED /* CashChatIOSUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		FBEF9B8D2F5D5C2B009F83ED /* CashChatIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FBEF9BAF2F5D5C2C009F83ED /* Build configuration list for PBXNativeTarget "CashChatIOS" */;
+			buildPhases = (
+				FBEF9B8A2F5D5C2B009F83ED /* Sources */,
+				FBEF9BC42F5D5F3B009F83ED /* Embed Shared Framework */,
+				FBEF9B8B2F5D5C2B009F83ED /* Frameworks */,
+				FBEF9B8C2F5D5C2B009F83ED /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				FBEF9B902F5D5C2B009F83ED /* CashChatIOS */,
+			);
+			name = CashChatIOS;
+			packageProductDependencies = (
+			);
+			productName = CashChatIOS;
+			productReference = FBEF9B8E2F5D5C2B009F83ED /* CashChatIOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		FBEF9B9A2F5D5C2C009F83ED /* CashChatIOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FBEF9BB22F5D5C2C009F83ED /* Build configuration list for PBXNativeTarget "CashChatIOSTests" */;
+			buildPhases = (
+				FBEF9B972F5D5C2C009F83ED /* Sources */,
+				FBEF9B982F5D5C2C009F83ED /* Frameworks */,
+				FBEF9B992F5D5C2C009F83ED /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FBEF9B9D2F5D5C2C009F83ED /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				FBEF9B9E2F5D5C2C009F83ED /* CashChatIOSTests */,
+			);
+			name = CashChatIOSTests;
+			packageProductDependencies = (
+			);
+			productName = CashChatIOSTests;
+			productReference = FBEF9B9B2F5D5C2C009F83ED /* CashChatIOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		FBEF9BA42F5D5C2C009F83ED /* CashChatIOSUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FBEF9BB52F5D5C2C009F83ED /* Build configuration list for PBXNativeTarget "CashChatIOSUITests" */;
+			buildPhases = (
+				FBEF9BA12F5D5C2C009F83ED /* Sources */,
+				FBEF9BA22F5D5C2C009F83ED /* Frameworks */,
+				FBEF9BA32F5D5C2C009F83ED /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FBEF9BA72F5D5C2C009F83ED /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				FBEF9BA82F5D5C2C009F83ED /* CashChatIOSUITests */,
+			);
+			name = CashChatIOSUITests;
+			packageProductDependencies = (
+			);
+			productName = CashChatIOSUITests;
+			productReference = FBEF9BA52F5D5C2C009F83ED /* CashChatIOSUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FBEF9B862F5D5C2B009F83ED /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					FBEF9B8D2F5D5C2B009F83ED = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					FBEF9B9A2F5D5C2C009F83ED = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = FBEF9B8D2F5D5C2B009F83ED;
+					};
+					FBEF9BA42F5D5C2C009F83ED = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = FBEF9B8D2F5D5C2B009F83ED;
+					};
+				};
+			};
+			buildConfigurationList = FBEF9B892F5D5C2B009F83ED /* Build configuration list for PBXProject "CashChatIOS" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = FBEF9B852F5D5C2B009F83ED;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = FBEF9B8F2F5D5C2B009F83ED /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				FBEF9B8D2F5D5C2B009F83ED /* CashChatIOS */,
+				FBEF9B9A2F5D5C2C009F83ED /* CashChatIOSTests */,
+				FBEF9BA42F5D5C2C009F83ED /* CashChatIOSUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		FBEF9B8C2F5D5C2B009F83ED /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FBEF9B992F5D5C2C009F83ED /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FBEF9BA32F5D5C2C009F83ED /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		FBEF9BC42F5D5F3B009F83ED /* Embed Shared Framework */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed Shared Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -euo pipefail\ncd \"$SRCROOT/..\"\n\nif [ -x \"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java\" ]; then\n  JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\"\nelif [ -x \"/Applications/AndroidStudio.app/Contents/jbr/Contents/Home/bin/java\" ]; then\n  JAVA_HOME=\"/Applications/AndroidStudio.app/Contents/jbr/Contents/Home\"\nelse\n  JAVA_HOME=\"$(/usr/libexec/java_home -v 21)\" || {\n    echo \"error: Java 21 is required for :shared:embedAndSignAppleFrameworkForXcode\" >&2\n    exit 1\n  }\nfi\n\nexport JAVA_HOME\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\n\necho \"JAVA_HOME=$JAVA_HOME\"\n\"$JAVA_HOME/bin/java\" -version\n\"$JAVA_HOME/bin/java\" -version 2>&1 | grep -q \"version \\\"21\\.\" || {\n  echo \"error: Java 21 is required for :shared:embedAndSignAppleFrameworkForXcode\" >&2\n  exit 1\n}\n\nbash ./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		FBEF9B8A2F5D5C2B009F83ED /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FBEF9B972F5D5C2C009F83ED /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FBEF9BA12F5D5C2C009F83ED /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		FBEF9B9D2F5D5C2C009F83ED /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FBEF9B8D2F5D5C2B009F83ED /* CashChatIOS */;
+			targetProxy = FBEF9B9C2F5D5C2C009F83ED /* PBXContainerItemProxy */;
+		};
+		FBEF9BA72F5D5C2C009F83ED /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FBEF9B8D2F5D5C2B009F83ED /* CashChatIOS */;
+			targetProxy = FBEF9BA62F5D5C2C009F83ED /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		FBEF9BAD2F5D5C2C009F83ED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		FBEF9BAE2F5D5C2C009F83ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		FBEF9BB02F5D5C2C009F83ED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nomadlab.CashChatIOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		FBEF9BB12F5D5C2C009F83ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nomadlab.CashChatIOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		FBEF9BB32F5D5C2C009F83ED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nomadlab.CashChatIOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CashChatIOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CashChatIOS";
+			};
+			name = Debug;
+		};
+		FBEF9BB42F5D5C2C009F83ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nomadlab.CashChatIOSTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CashChatIOS.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CashChatIOS";
+			};
+			name = Release;
+		};
+		FBEF9BB62F5D5C2C009F83ED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nomadlab.CashChatIOSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CashChatIOS;
+			};
+			name = Debug;
+		};
+		FBEF9BB72F5D5C2C009F83ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nomadlab.CashChatIOSUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CashChatIOS;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		FBEF9B892F5D5C2B009F83ED /* Build configuration list for PBXProject "CashChatIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FBEF9BAD2F5D5C2C009F83ED /* Debug */,
+				FBEF9BAE2F5D5C2C009F83ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FBEF9BAF2F5D5C2C009F83ED /* Build configuration list for PBXNativeTarget "CashChatIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FBEF9BB02F5D5C2C009F83ED /* Debug */,
+				FBEF9BB12F5D5C2C009F83ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FBEF9BB22F5D5C2C009F83ED /* Build configuration list for PBXNativeTarget "CashChatIOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FBEF9BB32F5D5C2C009F83ED /* Debug */,
+				FBEF9BB42F5D5C2C009F83ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FBEF9BB52F5D5C2C009F83ED /* Build configuration list for PBXNativeTarget "CashChatIOSUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FBEF9BB62F5D5C2C009F83ED /* Debug */,
+				FBEF9BB72F5D5C2C009F83ED /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FBEF9B862F5D5C2B009F83ED /* Project object */;
+}

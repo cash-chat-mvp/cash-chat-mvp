@@ -9,6 +9,11 @@
 .externalNativeBuild
 .cxx
 local.properties
+/shared/build
+/.gradle-local
+/CashChatIOS/.git
+/CashChatIOS/**/xcuserdata
+/CashChatIOS/**/*.xcuserstate
 key.properties
 *.keystore
 *.jks
