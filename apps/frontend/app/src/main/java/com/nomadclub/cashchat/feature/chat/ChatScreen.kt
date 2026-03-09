@@ -12,6 +12,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -73,8 +75,12 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nomadclub.cashchat.shared.chat.model.AdInfo
@@ -149,6 +155,7 @@ fun ChatScreen(
     points: Int,
     messageCount: Int,
     addPoints: (Int) -> Unit,
+    bottomNavInset: Dp,
     onNavigateTab: (String) -> Unit,
     incrementMessageCount: () -> Unit
 ) {
@@ -209,6 +216,8 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val suggestions = remember {
         listOf("오늘 점심 추천해줘", "여행 계획 짜줘", "영어 공부 방법", "다이어트 팁")
     }
@@ -309,6 +318,8 @@ fun ChatScreen(
         val text = (override ?: inputValue).trim()
         if (text.isEmpty() || isLoading) return
 
+        focusManager.clearFocus()
+        keyboardController?.hide()
         chatIdle = false
         sentCount += 1
         setMessages(messages + ChatMessage.Text(
@@ -382,6 +393,14 @@ fun ChatScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFFF4F6F8))
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = {
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                        }
+                    )
+                }
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
             // 상단 바
@@ -444,16 +463,27 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.White)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .imePadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(bottom = if (chatIdle) 8.dp else 8.dp + bottomNavInset),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
                     value = inputValue,
                     onValueChange = { inputValue = it },
-                    placeholder = { Text("메시지를 입력하세요...") },
+                    placeholder = { Text("메시지를 입력하세요...", color = Color(0xFF9CA3AF)) },
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
-                    shape = RoundedCornerShape(999.dp)
+                    shape = RoundedCornerShape(999.dp),
+                    colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedTextColor = Color(0xFF111827),
+                        unfocusedTextColor = Color(0xFF111827),
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White,
+                        focusedIndicatorColor = Color(0xFFCBD5E1),
+                        unfocusedIndicatorColor = Color(0xFFE5E7EB),
+                        cursorColor = Color(0xFF5C6BFA)
+                    )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
@@ -919,10 +949,13 @@ private fun IdleOverlay(
                         .padding(start = 8.dp),
                     maxLines = 1,
                     colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedTextColor = Color(0xFF111827),
+                        unfocusedTextColor = Color(0xFF111827),
                         focusedContainerColor = Color.Transparent,
                         unfocusedContainerColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = Color(0xFF5C6BFA)
                     )
                 )
                 Button(

@@ -249,7 +249,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\ncd \"$SRCROOT/..\"\n\nif [ -x \"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java\" ]; then\n  JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\"\nelif [ -x \"/Applications/AndroidStudio.app/Contents/jbr/Contents/Home/bin/java\" ]; then\n  JAVA_HOME=\"/Applications/AndroidStudio.app/Contents/jbr/Contents/Home\"\nelse\n  JAVA_HOME=\"$(/usr/libexec/java_home)\"\nfi\n\nexport JAVA_HOME\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\n\necho \"JAVA_HOME=$JAVA_HOME\"\n\"$JAVA_HOME/bin/java\" -version\n\nbash ./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
+			shellScript = "set -euo pipefail\ncd \"$SRCROOT/..\"\n\nif [ -x \"/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java\" ]; then\n  JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\"\nelif [ -x \"/Applications/AndroidStudio.app/Contents/jbr/Contents/Home/bin/java\" ]; then\n  JAVA_HOME=\"/Applications/AndroidStudio.app/Contents/jbr/Contents/Home\"\nelse\n  JAVA_HOME=\"$(/usr/libexec/java_home -v 21)\" || {\n    echo \"error: Java 21 is required for :shared:embedAndSignAppleFrameworkForXcode\" >&2\n    exit 1\n  }\nfi\n\nexport JAVA_HOME\nexport PATH=\"$JAVA_HOME/bin:$PATH\"\n\necho \"JAVA_HOME=$JAVA_HOME\"\n\"$JAVA_HOME/bin/java\" -version\n\"$JAVA_HOME/bin/java\" -version 2>&1 | grep -q \"version \\\"21\\.\" || {\n  echo \"error: Java 21 is required for :shared:embedAndSignAppleFrameworkForXcode\" >&2\n  exit 1\n}\n\nbash ./gradlew :shared:embedAndSignAppleFrameworkForXcode\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

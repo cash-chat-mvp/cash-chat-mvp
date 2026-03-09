@@ -1,5 +1,8 @@
 package com.nomadclub.cashchat.feature.main
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,12 +61,20 @@ fun MainScreen(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val currentRoute = currentDestination?.route
     val density = LocalDensity.current
     val statusBarTop = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
     val navBarBottom = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
     val floatingBarHeight = 62.dp
     val floatingBarBottomMargin = 12.dp
-    val contentBottomPadding = floatingBarHeight + floatingBarBottomMargin + navBarBottom + 12.dp
+    val bottomNavInset = floatingBarHeight + floatingBarBottomMargin + navBarBottom + 12.dp
+    val showBottomNav = !isKeyboardVisible
+    val contentBottomPadding = when {
+        currentRoute == MainTab.CHAT.route -> 0.dp
+        showBottomNav -> bottomNavInset
+        else -> navBarBottom + 12.dp
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         NavHost(
@@ -78,6 +90,7 @@ fun MainScreen(
                     points = points,
                     messageCount = messageCount,
                     addPoints = addPoints,
+                    bottomNavInset = if (showBottomNav) bottomNavInset else 0.dp,
                     onNavigateTab = { route ->
                         navController.navigate(route) {
                             popUpTo(navController.graph.findStartDestination().id) {
@@ -101,59 +114,75 @@ fun MainScreen(
             }
         }
 
-        // Floating nav 뒤쪽 받침 레이어: 콘텐츠가 그대로 비쳐 어색해 보이는 현상을 완화
-        Box(
+        AnimatedVisibility(
+            visible = showBottomNav,
+            enter = fadeIn(),
+            exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height(120.dp + navBarBottom)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color(0xFFF4F6F8).copy(alpha = 0.70f),
-                            Color(0xFFF4F6F8)
+        ) {
+            // Floating nav 뒤쪽 받침 레이어: 콘텐츠가 그대로 비쳐 어색해 보이는 현상을 완화
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp + navBarBottom)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0xFFF4F6F8).copy(alpha = 0.70f),
+                                Color(0xFFF4F6F8)
+                            )
                         )
                     )
-                )
-        )
+            )
+        }
 
-        Surface(
+        AnimatedVisibility(
+            visible = showBottomNav,
+            enter = fadeIn(),
+            exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = floatingBarBottomMargin + navBarBottom)
-                .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(28.dp)),
-            shape = RoundedCornerShape(28.dp),
-            color = Color.White.copy(alpha = 0.96f),
-            shadowElevation = 10.dp
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = floatingBarBottomMargin + navBarBottom)
+                    .border(1.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(28.dp)),
+                shape = RoundedCornerShape(28.dp),
+                color = Color.White.copy(alpha = 0.96f),
+                shadowElevation = 10.dp
             ) {
-                MainTab.values().forEach { tab ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == tab.route } == true
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        FloatingNavItem(
-                            icon = tab.icon,
-                            label = tab.label,
-                            active = selected,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MainTab.values().forEach { tab ->
+                        val selected = currentDestination?.hierarchy?.any { it.route == tab.route } == true
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            FloatingNavItem(
+                                icon = tab.icon,
+                                label = tab.label,
+                                active = selected,
+                                onClick = {
+                                    navController.navigate(tab.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
