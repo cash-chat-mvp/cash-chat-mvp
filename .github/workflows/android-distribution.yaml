@@ -8,6 +8,7 @@ on:
 
 jobs:
   build-and-distribute:
+    if: github.repository == 'cash-chat-mvp/cash-chat-mvp'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -49,7 +50,7 @@ jobs:
       - name: Write Firebase Service Account
         env:
           FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-        run: echo "$FIREBASE_SA" > service-account.json
+        run: printenv FIREBASE_SA > service-account.json
 
       - name: Make gradlew executable
         run: chmod +x gradlew
