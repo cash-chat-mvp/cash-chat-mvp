@@ -17,7 +17,8 @@ class UserController(
     @GetMapping("/me")
     fun getMe(authentication: Authentication): ResponseEntity<UserResponse> {
 
-        val userId = authentication.principal as Long
+        val userId = authentication.principal as? Long
+            ?: return ResponseEntity.badRequest().build()
         val user = userService.findById(userId) ?: return ResponseEntity.notFound().build()
 
         return ResponseEntity.ok(UserResponse.from(user))
