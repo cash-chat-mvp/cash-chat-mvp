@@ -1,0 +1,59 @@
+name: Jira PR Sync
+
+on:
+  pull_request_target:
+    types: [opened, reopened, closed]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Jira Issue Key
+        id: extract
+        run: |
+          ISSUE_KEY=$(echo "${{ github.head_ref }} ${{ github.event.pull_request.title }}" \
+            | grep -oE '[A-Z]+-[0-9]+' | head -1)
+          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+
+      - name: PR 오픈
+        if: |
+          steps.extract.outputs.issue_key != '' &&
+          (github.event.action == 'opened' || github.event.action == 'reopened')
+        run: |
+          curl -X POST \
+            -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "body": {
+                "type": "doc", "version": 1,
+                "content": [{"type": "paragraph", "content": [
+                  {"type": "text", "text": "🔗 PR 오픈: ${{ github.event.pull_request.title }}"},
+                  {"type": "hardBreak"},
+                  {"type": "text", "text": "${{ github.event.pull_request.html_url }}",
+                   "marks": [{"type": "link", "attrs": {"href": "${{ github.event.pull_request.html_url }}"}}]}
+                ]}]
+              }
+            }' \
+            "https://moneyfactoryslave.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/comment"
+
+      - name: PR 머지 완료
+        if: |
+          steps.extract.outputs.issue_key != '' &&
+          github.event.action == 'closed' &&
+          github.event.pull_request.merged == true
+        run: |
+          curl -X POST \
+            -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "body": {
+                "type": "doc", "version": 1,
+                "content": [{"type": "paragraph", "content": [
+                  {"type": "text", "text": "✅ PR 머지 완료: ${{ github.event.pull_request.title }}"},
+                  {"type": "hardBreak"},
+                  {"type": "text", "text": "${{ github.event.pull_request.html_url }}",
+                   "marks": [{"type": "link", "attrs": {"href": "${{ github.event.pull_request.html_url }}"}}]}
+                ]}]
+              }
+            }' \
+            "https://moneyfactoryslave.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/comment"
