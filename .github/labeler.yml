@@ -1,36 +1,36 @@
-안드로이드:
+🤖 안드로이드:
   - changed-files:
     - any-glob-to-any-file: 'apps/frontend/app/**'
 
-IOS:
+🍎 iOS:
   - changed-files:
     - any-glob-to-any-file: 'apps/frontend/CashChatIOS/**'
 
-BE:
+🖥️ BE:
   - changed-files:
     - any-glob-to-any-file: 'apps/backend/**'
 
-FE:
+📱 FE:
   - changed-files:
     - any-glob-to-any-file: 'apps/frontend/**'
 
-INFRA:
+⚙️ INFRA:
   - changed-files:
     - any-glob-to-any-file: 'infra/**'
 
-문서:
+📝 문서:
   - changed-files:
     - any-glob-to-any-file: 'docs/**'
 
-CICD:
+🔧 CICD:
   - changed-files:
     - any-glob-to-any-file: '.github/**'
 
-기능추가:
+✨ 기능추가:
   - head-branch: ['^feature/', '^feat/']
 
-버그수정:
+🐛 버그수정:
   - head-branch: ['^fix/', '^bugfix/']
 
-리펙토링:
+♻️ 리팩토링:
   - head-branch: ['^refactor/']
