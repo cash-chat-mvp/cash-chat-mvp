@@ -42,7 +42,8 @@ terraform apply
 Example connection:
 
 ```bash
-mysql -h <db_system_private_ip> -u admin -p
+# Run from inside the VCN (for example: ARM instance, Bastion, or VPN-connected host)
+mysql -h <db_system_private_ip> -u <admin_username> -p
 ```
 
 If you are reusing the VCN from the ARM stack, get it with:

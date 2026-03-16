@@ -18,3 +18,11 @@ db_workload = "OLTP"
 
 # 비워두면 OCI가 해당 리전에서 지원되는 버전을 자동 선택
 db_version = null
+
+# Public endpoint ACL
+is_access_control_enabled = true
+whitelisted_ips           = ["203.0.113.4/32"] # Replace with your egress/fixed IP CIDR
+
+# Optional: automatically read reserved egress IP from ../oci-arm/terraform.tfstate
+use_oci_arm_reserved_ip_for_acl = false
+oci_arm_state_path              = "../oci-arm/terraform.tfstate"

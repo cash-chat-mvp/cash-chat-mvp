@@ -9,6 +9,7 @@ Resources created:
 - Route Table
 - Security List
 - ARM compute instance
+- Reserved Public IP (static)
 
 Current sizing defaults:
 - Shape: `VM.Standard.A1.Flex`
@@ -26,29 +27,21 @@ terraform plan
 terraform apply
 ```
 
-Retry helper:
-
-```powershell
-cd C:\Work\CashChat\cash-chat-mvp\infra\terraform\oci-arm
-.\retry-apply.ps1 -RunInitFirst
-```
-
-Another example:
-
-```powershell
-.\retry-apply.ps1 -DelaySeconds 120 -MaxAttempts 100
-```
+Retry behavior:
+- This stack currently uses the standard `terraform apply` flow only.
 
 Notes:
 - Capacity for `VM.Standard.A1.Flex` can vary by region and availability domain.
 - If instance creation fails due to capacity, try another `availability_domain_index` or `region`.
 - `ssh_allowed_cidr` defaults to `0.0.0.0/0`; narrow it to your public IP when possible.
 - `open_tcp_ports` defaults to `80` and `443`; remove ports you do not need.
+- A reserved public IP is attached to the instance so upstream ACL rules can rely on a stable egress IP.
 
 Useful outputs:
 - `vcn_id`
 - `public_subnet_id`
 - `instance_public_ip`
+- `instance_reserved_public_ip`
 - `instance_private_ip`
 - `instance_id`
 

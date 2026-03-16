@@ -16,8 +16,11 @@ Current behavior:
 
 Notes:
 - `db_name_prefix` is normalized to letters and digits only.
+- Leading digits in `db_name_prefix` are removed so generated DB names always start with a letter.
 - The normalized prefix is uppercased and truncated before the `01` / `02` suffix is appended.
-- This stack does not configure IP access control during creation.
+- Public endpoint ACL is enabled by default (`is_access_control_enabled = true`).
+- Replace `whitelisted_ips` in `terraform.tfvars` with your actual client egress/fixed CIDR.
+- You can set `use_oci_arm_reserved_ip_for_acl = true` to auto-read `instance_reserved_public_ip` from the `oci-arm` stack state.
 - Exact service availability depends on region, tenancy limits, and OCI quotas.
 
 Required inputs:
@@ -28,6 +31,11 @@ Required inputs:
 - `region`
 - `compartment_ocid`
 - `admin_password`
+- `whitelisted_ips` (recommended to set explicitly for your environment)
+
+Optional cross-stack inputs:
+- `use_oci_arm_reserved_ip_for_acl`
+- `oci_arm_state_path`
 
 Usage:
 
@@ -39,6 +47,8 @@ terraform init
 terraform plan
 terraform apply
 ```
+
+If using `use_oci_arm_reserved_ip_for_acl = true`, apply `oci-arm` first so its `terraform.tfstate` already contains `instance_reserved_public_ip`.
 
 Destroy:
 

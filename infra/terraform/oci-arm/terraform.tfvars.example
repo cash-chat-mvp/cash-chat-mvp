@@ -5,7 +5,7 @@ private_key_path = "C:/Users/your-user/.oci/oci_api_key.pem"
 region           = "ap-seoul-1"
 compartment_ocid = "ocid1.compartment.oc1..replace_me"
 
-# 홈 리전의 첫 번째 AD면 보통 0
+# Use the first AD in your home region in most cases.
 availability_domain_index = 0
 
 name_prefix    = "core-net"
@@ -13,23 +13,22 @@ instance_name  = "app-server"
 hostname_label = "appserver"
 
 # ARM instance sizing example
-ocpus         = 4
-memory_in_gbs = 24
-boot_volume_size_in_gbs      = 50
+ocpus                          = 4
+memory_in_gbs                  = 24
+boot_volume_size_in_gbs        = 50
 image_operating_system         = "Canonical Ubuntu"
 image_operating_system_version = "22.04"
 
 ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... replace_me"
 
-# 필요하면 cloud-init 내용을 문자열로 넣으세요.
+# Optional cloud-init content.
 cloud_init = ""
 
 vcn_cidr           = "10.0.0.0/16"
 subnet_cidr        = "10.0.0.0/24"
 vcn_dns_label      = "corenetvcn"
 subnet_dns_label   = "publicsubnet"
-ssh_allowed_cidr   = "0.0.0.0/0"
 ingress_allowed_cidr = "0.0.0.0/0"
 
-# 필요한 포트만 유지하는 편이 안전합니다.
+# Keep only required ports.
 open_tcp_ports = [80, 443]

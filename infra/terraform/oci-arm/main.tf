@@ -32,7 +32,7 @@ data "oci_identity_availability_domains" "ads" {
   compartment_id = var.tenancy_ocid
 }
 
-data "oci_core_images" "oracle_linux_arm" {
+data "oci_core_images" "selected_arm_image" {
   compartment_id           = var.compartment_ocid
   operating_system         = var.image_operating_system
   operating_system_version = var.image_operating_system_version
@@ -131,11 +131,37 @@ resource "oci_core_instance" "arm_instance" {
 
   source_details {
     source_type             = "image"
-    source_id               = data.oci_core_images.oracle_linux_arm.images[0].id
+    source_id               = data.oci_core_images.selected_arm_image.images[0].id
     boot_volume_size_in_gbs = var.boot_volume_size_in_gbs
+  }
+
+  instance_options {
+    are_legacy_imds_endpoints_disabled = true
   }
 
   metadata = local.instance_metadata
 
   preserve_boot_volume = false
+}
+
+data "oci_core_vnic_attachments" "arm_instance_vnics" {
+  compartment_id = var.compartment_ocid
+  instance_id    = oci_core_instance.arm_instance.id
+
+  depends_on = [oci_core_instance.arm_instance]
+}
+
+data "oci_core_vnic" "arm_instance_primary_vnic" {
+  vnic_id = data.oci_core_vnic_attachments.arm_instance_vnics.vnic_attachments[0].vnic_id
+}
+
+data "oci_core_private_ips" "arm_instance_primary_private_ips" {
+  vnic_id = data.oci_core_vnic.arm_instance_primary_vnic.id
+}
+
+resource "oci_core_public_ip" "arm_reserved_public_ip" {
+  compartment_id = var.compartment_ocid
+  display_name   = "${var.instance_name}-reserved-public-ip"
+  lifetime       = "RESERVED"
+  private_ip_id  = data.oci_core_private_ips.arm_instance_primary_private_ips.private_ips[0].id
 }

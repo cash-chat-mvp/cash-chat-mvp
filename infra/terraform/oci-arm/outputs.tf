@@ -1,6 +1,6 @@
 output "instance_public_ip" {
-  description = "Ephemeral public IP assigned to the instance."
-  value       = oci_core_instance.arm_instance.public_ip
+  description = "Public IP currently assigned to the instance (reserved/static)."
+  value       = oci_core_public_ip.arm_reserved_public_ip.ip_address
 }
 
 output "vcn_id" {
@@ -25,5 +25,10 @@ output "instance_id" {
 
 output "image_name" {
   description = "Resolved image name."
-  value       = data.oci_core_images.oracle_linux_arm.images[0].display_name
+  value       = try(data.oci_core_images.selected_arm_image.images[0].display_name, null)
+}
+
+output "instance_reserved_public_ip" {
+  description = "Reserved public IP assigned to the instance, suitable for ACL allowlists."
+  value       = oci_core_public_ip.arm_reserved_public_ip.ip_address
 }

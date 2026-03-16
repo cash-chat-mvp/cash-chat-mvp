@@ -124,13 +124,13 @@ variable "subnet_dns_label" {
 }
 
 variable "ssh_allowed_cidr" {
-  description = "CIDR allowed to access SSH."
+  description = "CIDR allowed to access SSH. Development convenience default opens to all; restrict in production."
   type        = string
   default     = "0.0.0.0/0"
 }
 
 variable "ingress_allowed_cidr" {
-  description = "CIDR allowed for open_tcp_ports."
+  description = "CIDR allowed for open_tcp_ports. Development convenience default opens to all; restrict in production."
   type        = string
   default     = "0.0.0.0/0"
 }

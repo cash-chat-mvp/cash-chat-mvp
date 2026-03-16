@@ -58,6 +58,30 @@ variable "db_version" {
   default     = null
 }
 
+variable "is_access_control_enabled" {
+  description = "Enable public endpoint access control list (ACL) for Autonomous Database."
+  type        = bool
+  default     = true
+}
+
+variable "whitelisted_ips" {
+  description = "Allowed client CIDRs/IPs when access control is enabled. Replace example CIDR with your egress IP."
+  type        = list(string)
+  default     = ["203.0.113.4/32"]
+}
+
+variable "use_oci_arm_reserved_ip_for_acl" {
+  description = "If true, read OCI ARM Terraform state and use instance_reserved_public_ip/32 for ADB ACL."
+  type        = bool
+  default     = false
+}
+
+variable "oci_arm_state_path" {
+  description = "Local path to oci-arm terraform.tfstate when use_oci_arm_reserved_ip_for_acl is enabled."
+  type        = string
+  default     = "../oci-arm/terraform.tfstate"
+}
+
 variable "license_model" {
   description = "License model for the Autonomous Database."
   type        = string
