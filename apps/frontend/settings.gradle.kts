@@ -24,4 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "cashchat"
 include(":app")
+include(":shared")
  

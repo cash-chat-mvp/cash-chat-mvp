@@ -1,0 +1,30 @@
+default_platform(:android)
+
+platform :android do
+  desc "Build release APK and distribute to Firebase App Distribution"
+  lane :distribute do
+    gradle(
+      task: "assemble",
+      build_type: "Release"
+    )
+
+    firebase_app_distribution(
+      app: ENV.fetch("FIREBASE_APP_ID"),
+      groups: "testers",
+      service_credentials_file: "service-account.json",
+      release_notes: ENV.fetch("RELEASE_NOTES", "New build available")
+    )
+  end
+end
+
+# TODO: iOS lanes
+# platform :ios do
+#   lane :distribute do
+#     build_app(scheme: "CashChat")
+#     pilot(groups: ["testers"])  # TestFlight
+#   end
+#
+#   lane :release do
+#     deliver                      # App Store
+#   end
+# end

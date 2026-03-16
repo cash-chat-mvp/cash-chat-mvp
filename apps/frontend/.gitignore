@@ -9,6 +9,16 @@
 .externalNativeBuild
 .cxx
 local.properties
+/shared/build
+/.gradle-local
+/CashChatIOS/.git
+/CashChatIOS/**/xcuserdata
+/CashChatIOS/**/*.xcuserstate
+key.properties
+*.keystore
+*.jks
+app/google-services.json
+service-account.json
 
  #  - /.gradle, /.gradle-user-home: Gradle 캐시/다운로드 파일 (재생성 가능)
  #  - /.idea, *.iml: Android Studio/IntelliJ 개인 IDE 설정 (팀 공용 소스 아님)
