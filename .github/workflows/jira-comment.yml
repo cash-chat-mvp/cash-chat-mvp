@@ -25,13 +25,59 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{
               "body": {
-                "type": "doc", "version": 1,
-                "content": [{"type": "paragraph", "content": [
-                  {"type": "text", "text": "🔗 PR 오픈: ${{ github.event.pull_request.title }}"},
-                  {"type": "hardBreak"},
-                  {"type": "text", "text": "${{ github.event.pull_request.html_url }}",
-                   "marks": [{"type": "link", "attrs": {"href": "${{ github.event.pull_request.html_url }}"}}]}
-                ]}]
+                "type": "doc",
+                "version": 1,
+                "content": [
+                  {
+                    "type": "panel",
+                    "attrs": {"panelType": "info"},
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {"type": "text", "text": "🔗  PR 오픈", "marks": [{"type": "strong"}]}
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {"type": "text", "text": "제목  ", "marks": [{"type": "strong"}]},
+                      {"type": "text", "text": "${{ github.event.pull_request.title }}"}
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {"type": "text", "text": "작성자  ", "marks": [{"type": "strong"}]},
+                      {"type": "text", "text": "${{ github.event.pull_request.user.login }}"}
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {"type": "text", "text": "브랜치  ", "marks": [{"type": "strong"}]},
+                      {"type": "text", "text": "${{ github.head_ref }}", "marks": [{"type": "code"}]},
+                      {"type": "text", "text": "  →  "},
+                      {"type": "text", "text": "${{ github.base_ref }}", "marks": [{"type": "code"}]}
+                    ]
+                  },
+                  {
+                    "type": "rule"
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {"type": "text", "text": "🔗  PR 링크  ", "marks": [{"type": "strong"}]},
+                      {
+                        "type": "text",
+                        "text": "${{ github.event.pull_request.html_url }}",
+                        "marks": [{"type": "link", "attrs": {"href": "${{ github.event.pull_request.html_url }}"}}]
+                      }
+                    ]
+                  }
+                ]
               }
             }' \
             "https://moneyfactoryslave.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/comment"
@@ -47,13 +93,66 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{
               "body": {
-                "type": "doc", "version": 1,
-                "content": [{"type": "paragraph", "content": [
-                  {"type": "text", "text": "✅ PR 머지 완료: ${{ github.event.pull_request.title }}"},
-                  {"type": "hardBreak"},
-                  {"type": "text", "text": "${{ github.event.pull_request.html_url }}",
-                   "marks": [{"type": "link", "attrs": {"href": "${{ github.event.pull_request.html_url }}"}}]}
-                ]}]
+                "type": "doc",
+                "version": 1,
+                "content": [
+                  {
+                    "type": "panel",
+                    "attrs": {"panelType": "success"},
+                    "content": [
+                      {
+                        "type": "paragraph",
+                        "content": [
+                          {"type": "text", "text": "✅  PR 머지 완료", "marks": [{"type": "strong"}]}
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {"type": "text", "text": "제목  ", "marks": [{"type": "strong"}]},
+                      {"type": "text", "text": "${{ github.event.pull_request.title }}"}
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {"type": "text", "text": "머지한 사람  ", "marks": [{"type": "strong"}]},
+                      {"type": "text", "text": "${{ github.event.pull_request.merged_by.login }}"}
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {"type": "text", "text": "브랜치  ", "marks": [{"type": "strong"}]},
+                      {"type": "text", "text": "${{ github.head_ref }}", "marks": [{"type": "code"}]},
+                      {"type": "text", "text": "  →  "},
+                      {"type": "text", "text": "${{ github.base_ref }}", "marks": [{"type": "code"}]}
+                    ]
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {"type": "text", "text": "변경  ", "marks": [{"type": "strong"}]},
+                      {"type": "text", "text": "+${{ github.event.pull_request.additions }} / -${{ github.event.pull_request.deletions }}  |  커밋 ${{ github.event.pull_request.commits }}개"}
+                    ]
+                  },
+                  {
+                    "type": "rule"
+                  },
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {"type": "text", "text": "🔗  PR 링크  ", "marks": [{"type": "strong"}]},
+                      {
+                        "type": "text",
+                        "text": "${{ github.event.pull_request.html_url }}",
+                        "marks": [{"type": "link", "attrs": {"href": "${{ github.event.pull_request.html_url }}"}}]
+                      }
+                    ]
+                  }
+                ]
               }
             }' \
             "https://moneyfactoryslave.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/comment"
