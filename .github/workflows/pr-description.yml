@@ -15,16 +15,16 @@ jobs:
 
       - name: Get Commit List
         id: commits
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          # --no-merges: 머지 커밋 제외
-          # --first-parent: 브랜치 직접 커밋만 (딸려온 커밋 제외)
-          COMMITS=$(git log origin/${{ github.base_ref }}..origin/${{ github.head_ref }} \
+          COMMITS=$(git log "origin/${BASE_REF}..origin/${HEAD_REF}" \
             --no-merges \
             --first-parent \
             --pretty=format:"- %s (%h)" 2>/dev/null || \
-            git log --no-merges --pretty=format:"- %s (%h)" -10)
+            git log --no-merges --first-parent --pretty=format:"- %s (%h)" -10)
 
-          # 커밋이 없는 경우 처리
           if [ -z "$COMMITS" ]; then
             COMMITS="- 커밋 내역 없음"
           fi
@@ -36,8 +36,11 @@ jobs:
 
       - name: Extract Jira Issue Key
         id: extract
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          ISSUE_KEY=$(echo "${{ github.head_ref }} ${{ github.event.pull_request.title }}" \
+          ISSUE_KEY=$(echo "${HEAD_REF} ${PR_TITLE}" \
             | grep -oE '[A-Z]+-[0-9]+' | head -1)
           echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
 
@@ -52,4 +55,26 @@ jobs:
               ? `https://moneyfactoryslave.atlassian.net/browse/${issueKey}`
               : '없음';
 
-            const body = `
+            const checklist = [
+              '- [ ] 코드 리뷰 요청 전 셀프 리뷰 완료',
+              '- [ ] 테스트 확인',
+              '- [ ] 불필요한 코드/주석 제거',
+            ].join('\n');
+
+            const body = [
+              '## 📋 연관 Jira 티켓',
+              issueKey ? `[${issueKey}](${jiraUrl})` : '없음',
+              '',
+              '## 📝 커밋 내역',
+              commits,
+              '',
+              '## ✅ 체크리스트',
+              checklist,
+            ].join('\n');
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: body.trim()
+            });
