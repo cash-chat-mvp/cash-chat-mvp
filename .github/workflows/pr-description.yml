@@ -57,7 +57,7 @@ jobs:
             const currentTitle = context.payload.pull_request.title;
 
             // 이미 [CC-XXX] 형식이면 스킵
-            if (/^\[CC-\d+\]/.test(currentTitle)) {
+            if (/^\[CC-\d+\]\s+\S.*/.test(currentTitle)) {
               console.log('✅ 제목 이미 올바른 형식:', currentTitle);
               return;
             }
