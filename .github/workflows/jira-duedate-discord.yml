@@ -2,24 +2,43 @@ name: Jira Due Date 알림
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 매일 오전 9시 KST
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - name: D-1 마감 이슈 조회 후 Discord 전송
+        id: jira-check
         run: |
           TOMORROW=$(date -d "+1 day" +%Y-%m-%d 2>/dev/null || date -v+1d +%Y-%m-%d)
+          echo "내일 날짜: $TOMORROW"
 
-          curl -s \
+          RESPONSE=$(curl -sS --fail-with-body \
             -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
-            "https://moneyfactoryslave.atlassian.net/rest/api/3/search?jql=project=CC%20AND%20duedate=$TOMORROW%20AND%20statusCategory%20!=%20Done&fields=summary,assignee,duedate,status" \
-          | python3 -c "
-          import sys, json, urllib.request
+            -H "Content-Type: application/json" \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --get \
+            --data-urlencode "jql=project=CC AND duedate=$TOMORROW AND statusCategory != Done" \
+            --data-urlencode "fields=summary,assignee,duedate,status" \
+            "https://moneyfactoryslave.atlassian.net/rest/api/3/search") || { echo "Jira API 호출 실패"; exit 1; }
 
-          d = json.load(sys.stdin)
-          if d['total'] == 0:
+          echo "Jira 응답 수신 완료"
+
+          echo "$RESPONSE" | python3 -c "
+          import sys, json, urllib.request, urllib.error
+
+          raw = sys.stdin.read()
+          d = json.loads(raw)
+
+          if 'errorMessages' in d or 'errors' in d:
+              print('Jira API 에러 발생')
+              exit(1)
+
+          if d.get('total', 0) == 0:
+              print('마감 임박 이슈 없음')
               exit(0)
 
           embeds = []
@@ -29,16 +48,15 @@ jobs:
               status = f['status']['name'] if f['status'] else '알 수 없음'
               key = issue['key']
               url = f'https://moneyfactoryslave.atlassian.net/browse/{key}'
-
               embeds.append({
                   'color': 15548997,
-                  'title': f'⏰  마감 D-1',
+                  'title': '⏰  마감 D-1',
                   'url': url,
                   'description': f'**[{key}] {f[\"summary\"]}**',
                   'fields': [
                       {'name': '담당자', 'value': f'\`{assignee}\`', 'inline': True},
                       {'name': '마감일', 'value': f'\`{f[\"duedate\"]}\`', 'inline': True},
-                      {'name': '상태', 'value': f'\`{status}\`', 'inline': True}
+                      {'name': '상태',   'value': f'\`{status}\`',   'inline': True}
                   ],
                   'footer': {'text': 'Cash Chat · Jira 자동 알림'},
               })
@@ -54,5 +72,32 @@ jobs:
               headers={'Content-Type': 'application/json'},
               method='POST'
           )
-          urllib.request.urlopen(req)
+          try:
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  if resp.status < 200 or resp.status >= 300:
+                      raise RuntimeError(f'Discord webhook 실패: HTTP {resp.status}')
+              print('Discord 알림 전송 완료')
+          except urllib.error.URLError as e:
+              print(f'Discord 전송 실패: {e}')
+              exit(1)
           "
+
+      # 위 step이 실패하면 실행됨
+      - name: 워크플로우 실패 알림
+        if: failure()
+        run: |
+          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "embeds": [{
+                "color": 15548997,
+                "title": "🚨  워크플로우 실패",
+                "description": "**Jira Due Date 알림 워크플로우가 실패했어요**",
+                "fields": [
+                  {"name": "워크플로우", "value": "`jira-duedate-discord.yml`", "inline": true},
+                  {"name": "실행자", "value": "`${{ github.actor }}`", "inline": true},
+                  {"name": "로그 확인", "value": "[Actions 로그 바로가기](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
+                ],
+                "footer": {"text": "Cash Chat · GitHub Actions"}
+              }]
+            }'
