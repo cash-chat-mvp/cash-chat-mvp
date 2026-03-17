@@ -19,7 +19,7 @@ provider "oci" {
 
 locals {
   cloud_init_content = trimspace(var.cloud_init) != "" ? var.cloud_init : (
-    trimspace(var.cloud_init_path) != "" ? file(var.cloud_init_path) : ""
+    trimspace(var.cloud_init_path) != "" ? file("${path.module}/${trimspace(var.cloud_init_path)}") : ""
   )
 
   instance_metadata = merge(

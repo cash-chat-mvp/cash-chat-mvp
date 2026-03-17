@@ -50,9 +50,19 @@ write_files:
 
       if ! docker compose version >/dev/null 2>&1; then
         COMPOSE_VERSION="v2.27.0"
-        curl -fsSL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-aarch64" \
-          -o /usr/local/lib/docker/cli-plugins/docker-compose
-        chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+        COMPOSE_BIN="docker-compose-linux-aarch64"
+        TMP_DIR="$(mktemp -d)"
+        curl -fsSL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/${COMPOSE_BIN}" \
+          -o "${TMP_DIR}/${COMPOSE_BIN}"
+        curl -fsSL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/checksums.txt" \
+          -o "${TMP_DIR}/checksums.txt"
+        grep " ${COMPOSE_BIN}$" "${TMP_DIR}/checksums.txt" > "${TMP_DIR}/checksums-${COMPOSE_BIN}.txt"
+        (
+          cd "${TMP_DIR}"
+          sha256sum -c "checksums-${COMPOSE_BIN}.txt"
+        )
+        install -m 0755 "${TMP_DIR}/${COMPOSE_BIN}" /usr/local/lib/docker/cli-plugins/docker-compose
+        rm -rf "${TMP_DIR}"
       fi
 
       docker --version | tee /var/log/docker-version.txt
