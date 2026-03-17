@@ -2,7 +2,8 @@ name: Jira Due Date 알림
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 매일 오전 9시 KST
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   check:
@@ -11,15 +12,31 @@ jobs:
       - name: D-1 마감 이슈 조회 후 Discord 전송
         run: |
           TOMORROW=$(date -d "+1 day" +%Y-%m-%d 2>/dev/null || date -v+1d +%Y-%m-%d)
+          echo "내일 날짜: $TOMORROW"
 
-          curl -s \
+          RESPONSE=$(curl -s \
             -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
-            "https://moneyfactoryslave.atlassian.net/rest/api/3/search?jql=project=CC%20AND%20duedate=$TOMORROW%20AND%20statusCategory%20!=%20Done&fields=summary,assignee,duedate,status" \
-          | python3 -c "
+            -H "Content-Type: application/json" \
+            --get \
+            --data-urlencode "jql=project=CC AND duedate=$TOMORROW AND statusCategory != Done" \
+            --data-urlencode "fields=summary,assignee,duedate,status" \
+            "https://moneyfactoryslave.atlassian.net/rest/api/3/search")
+
+          echo "Jira 응답: $RESPONSE"
+
+          echo "$RESPONSE" | python3 -c "
           import sys, json, urllib.request
 
-          d = json.load(sys.stdin)
-          if d['total'] == 0:
+          raw = sys.stdin.read()
+          d = json.loads(raw)
+
+          # 에러 응답 처리
+          if 'errorMessages' in d or 'errors' in d:
+              print('Jira API 에러:', d)
+              exit(1)
+
+          if d.get('total', 0) == 0:
+              print('마감 임박 이슈 없음')
               exit(0)
 
           embeds = []
@@ -32,7 +49,7 @@ jobs:
 
               embeds.append({
                   'color': 15548997,
-                  'title': f'⏰  마감 D-1',
+                  'title': '⏰  마감 D-1',
                   'url': url,
                   'description': f'**[{key}] {f[\"summary\"]}**',
                   'fields': [
@@ -55,4 +72,5 @@ jobs:
               method='POST'
           )
           urllib.request.urlopen(req)
+          print('Discord 알림 전송 완료')
           "
