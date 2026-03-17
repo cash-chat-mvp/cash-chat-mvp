@@ -18,12 +18,16 @@ provider "oci" {
 }
 
 locals {
+  cloud_init_content = trimspace(var.cloud_init) != "" ? var.cloud_init : (
+    trimspace(var.cloud_init_path) != "" ? file(var.cloud_init_path) : ""
+  )
+
   instance_metadata = merge(
     {
       ssh_authorized_keys = trimspace(var.ssh_public_key)
     },
-    var.cloud_init == "" ? {} : {
-      user_data = base64encode(var.cloud_init)
+    local.cloud_init_content == "" ? {} : {
+      user_data = base64encode(local.cloud_init_content)
     }
   )
 }
@@ -123,8 +127,10 @@ resource "oci_core_instance" "arm_instance" {
   }
 
   create_vnic_details {
-    subnet_id        = oci_core_subnet.public.id
-    assign_public_ip = true
+    subnet_id = oci_core_subnet.public.id
+    # Always attach the reserved public IP resource below.
+    # Disabling ephemeral public IP avoids assignment conflicts on replacement.
+    assign_public_ip = false
     display_name     = "${var.instance_name}-vnic"
     hostname_label   = var.hostname_label
   }
