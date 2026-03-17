@@ -48,6 +48,38 @@ jobs:
             | grep -oE 'CC-[0-9]+' | head -1)
           echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
 
+      - name: Update PR Title
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueKey = ${{ toJSON(steps.extract.outputs.issue_key) }};
+            const currentTitle = context.payload.pull_request.title;
+
+            // 이미 [CC-XXX] 형식이면 스킵
+            if (/^\[CC-\d+\]\s+\S.*/.test(currentTitle)) {
+              console.log('✅ 제목 이미 올바른 형식:', currentTitle);
+              return;
+            }
+
+            // 티켓 번호가 없으면 스킵 (제목 없이 붙이면 이상해짐)
+            if (!issueKey) {
+              console.log('⚠️ Jira 티켓 번호를 찾을 수 없어 제목을 수정하지 않습니다.');
+              return;
+            }
+
+            // 제목 중간에 CC-XXX 가 있으면 제거 후 앞으로 이동
+            const cleanTitle = currentTitle.replace(/CC-\d+\s*/g, '').trim();
+            const newTitle = `[${issueKey}] ${cleanTitle}`;
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              title: newTitle
+            });
+            console.log(`✅ 제목 변경: "${currentTitle}" → "${newTitle}"`);
+
       - name: Update PR Description
         uses: actions/github-script@v7
         with:
