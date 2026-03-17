@@ -45,37 +45,57 @@ jobs:
       # PR에 빌드 결과 댓글
       - name: 빌드 성공 Discord 알림
         if: success()
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_REF: ${{ github.head_ref }}
+          ACTOR: ${{ github.actor }}
         run: |
+          PAYLOAD=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg branch "$HEAD_REF" \
+            --arg actor "$ACTOR" \
+            '{embeds: [{
+              color: 5763719,
+              title: "✅  PR 빌드 검증 통과",
+              description: ("**[" + $title + "](" + $url + ")**"),
+              fields: [
+                {name: "브랜치", value: ("`" + $branch + "` → `dev`"), inline: true},
+                {name: "작성자", value: ("`" + $actor + "`"), inline: true}
+              ],
+              footer: {text: "Cash Chat · Android Build Check"}
+            }]}')
           curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "embeds": [{
-                "color": 5763719,
-                "title": "✅  PR 빌드 검증 통과",
-                "description": "**[${{ github.event.pull_request.title }}](${{ github.event.pull_request.html_url }})**",
-                "fields": [
-                  {"name": "브랜치", "value": "`${{ github.head_ref }}` → `dev`", "inline": true},
-                  {"name": "작성자", "value": "`${{ github.actor }}`", "inline": true}
-                ],
-                "footer": {"text": "Cash Chat · Android Build Check"}
-              }]
-            }'
+            -d "$PAYLOAD"
 
       - name: 빌드 실패 Discord 알림
         if: failure()
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_REF: ${{ github.head_ref }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          PAYLOAD=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg branch "$HEAD_REF" \
+            --arg actor "$ACTOR" \
+            --arg run_url "$RUN_URL" \
+            '{embeds: [{
+              color: 15548997,
+              title: "🚨  PR 빌드 검증 실패",
+              description: ("**[" + $title + "](" + $url + ")**"),
+              fields: [
+                {name: "브랜치", value: ("`" + $branch + "` → `dev`"), inline: true},
+                {name: "작성자", value: ("`" + $actor + "`"), inline: true},
+                {name: "로그 확인", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat · Android Build Check"}
+            }]}')
           curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "embeds": [{
-                "color": 15548997,
-                "title": "🚨  PR 빌드 검증 실패",
-                "description": "**[${{ github.event.pull_request.title }}](${{ github.event.pull_request.html_url }})**",
-                "fields": [
-                  {"name": "브랜치", "value": "`${{ github.head_ref }}` → `dev`", "inline": true},
-                  {"name": "작성자", "value": "`${{ github.actor }}`", "inline": true},
-                  {"name": "로그 확인", "value": "[Actions 로그 바로가기](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
-                ],
-                "footer": {"text": "Cash Chat · Android Build Check"}
-              }]
-            }'
+            -d "$PAYLOAD"

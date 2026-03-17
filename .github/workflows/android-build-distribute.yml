@@ -69,40 +69,58 @@ jobs:
 
       - name: Discord 배포 성공 알림
         if: success()
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          TIMESTAMP: ${{ github.event.head_commit.timestamp }}
         run: |
+          PAYLOAD=$(jq -n \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg ts "$TIMESTAMP" \
+            '{embeds: [{
+              color: 5763719,
+              title: "✅  Android 배포 완료",
+              description: "**Firebase App Distribution 배포 성공**",
+              fields: [
+                {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
+                {name: "배포자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false}
+              ],
+              footer: {text: "Cash Chat · Android Build"},
+              timestamp: $ts
+            }]}')
           curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "embeds": [{
-                "color": 5763719,
-                "title": "✅  Android 배포 완료",
-                "description": "**Firebase App Distribution 배포 성공**",
-                "fields": [
-                  {"name": "브랜치", "value": "`${{ github.ref_name }}`", "inline": true},
-                  {"name": "배포자", "value": "`${{ github.actor }}`", "inline": true},
-                  {"name": "커밋 메시지", "value": "`${{ github.event.head_commit.message }}`", "inline": false}
-                ],
-                "footer": {"text": "Cash Chat · Android Build"},
-                "timestamp": "${{ github.event.head_commit.timestamp }}"
-              }]
-            }'
+            -d "$PAYLOAD"
 
       - name: Discord 배포 실패 알림
         if: failure()
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          PAYLOAD=$(jq -n \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg run_url "$RUN_URL" \
+            '{embeds: [{
+              color: 15548997,
+              title: "🚨  Android 빌드/배포 실패",
+              description: "**`dev` 브랜치 빌드 또는 Firebase 배포가 실패했어요**",
+              fields: [
+                {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
+                {name: "실패자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false},
+                {name: "로그 확인", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat · Android Build"}
+            }]}')
           curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "embeds": [{
-                "color": 15548997,
-                "title": "🚨  Android 빌드/배포 실패",
-                "description": "**`dev` 브랜치 빌드 또는 Firebase 배포가 실패했어요**",
-                "fields": [
-                  {"name": "브랜치", "value": "`${{ github.ref_name }}`", "inline": true},
-                  {"name": "실패자", "value": "`${{ github.actor }}`", "inline": true},
-                  {"name": "커밋 메시지", "value": "`${{ github.event.head_commit.message }}`", "inline": false},
-                  {"name": "로그 확인", "value": "[Actions 로그 바로가기](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
-                ],
-                "footer": {"text": "Cash Chat · Android Build"}
-              }]
-            }'
+            -d "$PAYLOAD"
