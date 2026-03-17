@@ -22,7 +22,10 @@ image_operating_system_version = "22.04"
 ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... replace_me"
 
 # Optional cloud-init content.
-cloud_init = ""
+# To bootstrap Docker and Docker Compose on first boot:
+# Note: cloud-init/user_data changes apply on new instance creation (or instance replacement),
+# not immediately to an already-running instance.
+cloud_init_path = "cloud-init/docker-bootstrap.yaml"
 
 vcn_cidr           = "10.0.0.0/16"
 subnet_cidr        = "10.0.0.0/24"

@@ -99,6 +99,12 @@ variable "cloud_init" {
   default     = ""
 }
 
+variable "cloud_init_path" {
+  description = "Optional path to a cloud-init file. Use this from terraform.tfvars instead of file() calls."
+  type        = string
+  default     = ""
+}
+
 variable "vcn_cidr" {
   description = "VCN CIDR block."
   type        = string
