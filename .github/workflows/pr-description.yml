@@ -17,9 +17,12 @@ jobs:
         id: commits
         env:
           BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}  # ← HEAD_REF 대신 PR 번호
         run: |
-          COMMITS=$(git log "origin/${BASE_REF}..origin/${HEAD_REF}" \
+          # 포크 PR도 안전하게 head를 직접 fetch
+          git fetch --no-tags origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}-head"
+
+          COMMITS=$(git log "origin/${BASE_REF}..pr-${PR_NUMBER}-head" \
             --no-merges \
             --first-parent \
             --pretty=format:"- %s (%h)" 2>/dev/null || \
@@ -40,8 +43,9 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
+          # CC- 로 한정 (프로젝트 prefix 고정)
           ISSUE_KEY=$(echo "${HEAD_REF} ${PR_TITLE}" \
-            | grep -oE '[A-Z]+-[0-9]+' | head -1)
+            | grep -oE 'CC-[0-9]+' | head -1)
           echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
 
       - name: Update PR Description
@@ -49,8 +53,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const issueKey = '${{ steps.extract.outputs.issue_key }}';
-            const commits = `${{ steps.commits.outputs.commits }}`;
+            // toJSON()으로 안전하게 직렬화 → 특수문자 파괴 방지
+            const issueKey = ${{ toJSON(steps.extract.outputs.issue_key) }};
+            const commits = ${{ toJSON(steps.commits.outputs.commits) }};
+
             const jiraUrl = issueKey
               ? `https://moneyfactoryslave.atlassian.net/browse/${issueKey}`
               : '없음';
