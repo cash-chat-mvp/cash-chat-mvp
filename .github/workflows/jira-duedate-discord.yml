@@ -14,25 +14,29 @@ jobs:
           TOMORROW=$(date -d "+1 day" +%Y-%m-%d 2>/dev/null || date -v+1d +%Y-%m-%d)
           echo "내일 날짜: $TOMORROW"
 
-          RESPONSE=$(curl -s \
+          # ① curl 타임아웃 + 실패 처리 추가
+          RESPONSE=$(curl -sS --fail-with-body \
             -H "Authorization: Basic ${{ secrets.JIRA_AUTH }}" \
             -H "Content-Type: application/json" \
+            --connect-timeout 10 \
+            --max-time 30 \
             --get \
             --data-urlencode "jql=project=CC AND duedate=$TOMORROW AND statusCategory != Done" \
             --data-urlencode "fields=summary,assignee,duedate,status" \
-            "https://moneyfactoryslave.atlassian.net/rest/api/3/search")
+            "https://moneyfactoryslave.atlassian.net/rest/api/3/search") || { echo "Jira API 호출 실패"; exit 1; }
 
-          echo "Jira 응답: $RESPONSE"
+          # ② 응답 전체 대신 수신 완료 메시지만 출력
+          echo "Jira 응답 수신 완료"
 
           echo "$RESPONSE" | python3 -c "
-          import sys, json, urllib.request
+          import sys, json, urllib.request, urllib.error
 
           raw = sys.stdin.read()
           d = json.loads(raw)
 
-          # 에러 응답 처리
+          # 에러 응답 처리 (민감 정보 노출 없이)
           if 'errorMessages' in d or 'errors' in d:
-              print('Jira API 에러:', d)
+              print('Jira API 에러 발생')
               exit(1)
 
           if d.get('total', 0) == 0:
@@ -71,6 +75,14 @@ jobs:
               headers={'Content-Type': 'application/json'},
               method='POST'
           )
-          urllib.request.urlopen(req)
-          print('Discord 알림 전송 완료')
+
+          # ③ Discord webhook 타임아웃 + 응답 상태 검증
+          try:
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  if resp.status < 200 or resp.status >= 300:
+                      raise RuntimeError(f'Discord webhook 실패: HTTP {resp.status}')
+              print('Discord 알림 전송 완료')
+          except urllib.error.URLError as e:
+              print(f'Discord 전송 실패: {e}')
+              exit(1)
           "
