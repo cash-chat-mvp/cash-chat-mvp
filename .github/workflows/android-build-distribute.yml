@@ -1,0 +1,128 @@
+name: Android Build & Distribute
+
+on:
+  push:
+    branches: [ dev ]        # ← PR 머지 후에만 실행
+    paths:
+      - 'apps/frontend/**'
+
+jobs:
+  build-and-distribute:
+    if: github.repository == 'cash-chat-mvp/cash-chat-mvp'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: apps/frontend
+
+      - name: Cache Gradle
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/frontend/**/*.gradle.kts', 'apps/frontend/gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Decode Keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > cashchat-release.keystore
+
+      - name: Write google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+
+      - name: Write Firebase Service Account
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: printenv FIREBASE_SA > service-account.json
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Run Fastlane distribute
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/apps/frontend/cashchat-release.keystore
+          KEYSTORE_STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          RELEASE_NOTES: |
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            ${{ github.event.head_commit.message }}
+        run: bundle exec fastlane android distribute
+
+      - name: Discord 배포 성공 알림
+        if: success()
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg ts "$TIMESTAMP" \
+            '{embeds: [{
+              color: 5763719,
+              title: "✅  Android 배포 완료",
+              description: "**Firebase App Distribution 배포 성공**",
+              fields: [
+                {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
+                {name: "배포자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false}
+              ],
+              footer: {text: "Cash Chat · Android Build"},
+              timestamp: $ts
+            }]}')
+          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
+
+      - name: Discord 배포 실패 알림
+        if: failure()
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          PAYLOAD=$(jq -n \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg run_url "$RUN_URL" \
+            '{embeds: [{
+              color: 15548997,
+              title: "🚨  Android 빌드/배포 실패",
+              description: "**`dev` 브랜치 빌드 또는 Firebase 배포가 실패했어요**",
+              fields: [
+                {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
+                {name: "실패자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false},
+                {name: "로그 확인", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat · Android Build"}
+            }]}')
+          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
