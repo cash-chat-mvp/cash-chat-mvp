@@ -16,6 +16,7 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 - `GHCR_USERNAME`: GitHub username for pulling GHCR image on server
 - `GHCR_TOKEN`: GitHub PAT with `read:packages` scope
 - `BACKEND_SPRING_PROFILES_ACTIVE`: optional, defaults to `prod`
+- `OPENAI_API_KEY`: OpenAI API key (required for prod profile)
 
 ## First-time Server Setup
 Run once on server:

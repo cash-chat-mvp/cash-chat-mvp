@@ -79,18 +79,28 @@ jobs:
 
       - name: Create deploy env file
         shell: bash
+        env:
+          BACKEND_SPRING_PROFILES_ACTIVE: ${{ secrets.BACKEND_SPRING_PROFILES_ACTIVE }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          SPRING_PROFILE="${{ secrets.BACKEND_SPRING_PROFILES_ACTIVE }}"
+          SPRING_PROFILE="${BACKEND_SPRING_PROFILES_ACTIVE}"
           if [ -z "${SPRING_PROFILE}" ]; then
             SPRING_PROFILE="prod"
           fi
+
+          if [ "${SPRING_PROFILE}" = "prod" ] && [ -z "${OPENAI_API_KEY}" ]; then
+            echo "OPENAI_API_KEY must be set when SPRING_PROFILES_ACTIVE=prod" >&2
+            exit 1
+          fi
+
           {
             echo "BACKEND_IMAGE=ghcr.io/${{ github.repository_owner }}/cash-chat-backend:latest"
             echo "SPRING_PROFILES_ACTIVE=${SPRING_PROFILE}"
+            echo "OPENAI_API_KEY=${OPENAI_API_KEY}"
           } > infra/deploy/backend/.deploy.env
 
       - name: Upload compose files to server
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
@@ -100,17 +110,21 @@ jobs:
           strip_components: 3
 
       - name: Deploy backend via Docker Compose
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: GHCR_TOKEN,GHCR_USERNAME
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
 
-            if [ -n "${{ secrets.GHCR_TOKEN }}" ] && [ -n "${{ secrets.GHCR_USERNAME }}" ]; then
-              echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+            if [ -n "${GHCR_TOKEN}" ] && [ -n "${GHCR_USERNAME}" ]; then
+              echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
             fi
 
             docker compose --env-file .deploy.env -f docker-compose.yml pull

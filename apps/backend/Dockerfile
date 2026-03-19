@@ -11,7 +11,12 @@ RUN ./gradlew --no-daemon clean bootJar -x test
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-COPY --from=builder /app/build/libs/*.jar /app/app.jar
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -u 1001 -S appuser -G appgroup
+
+COPY --from=builder --chown=appuser:appgroup /app/build/libs/*.jar /app/app.jar
+
+USER appuser
 
 EXPOSE 8080
 

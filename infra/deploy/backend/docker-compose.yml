@@ -7,3 +7,10 @@ services:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider --tries=1 --timeout=5 http://localhost:8080 >/dev/null 2>&1 || [ $? -eq 8 ]"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
