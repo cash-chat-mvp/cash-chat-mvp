@@ -1,60 +1,68 @@
-# Nginx Reverse Proxy + Let's Encrypt (CC-146)
+# Nginx Reverse Proxy + Let's Encrypt (Docker) (CC-146)
 
-This directory provides deployment assets to configure:
+This directory provides Docker-based assets to configure:
 - Nginx reverse proxy (`80`/`443`)
-- HTTPS certificate issuance with Let's Encrypt
-- Automatic certificate renewal with `certbot.timer`
+- HTTPS certificate issuance with Let's Encrypt (`certbot`)
+- Automatic certificate renewal in a long-running `certbot` container
 
 ## Prerequisites
 
 - Ubuntu server (ARM instance) with sudo access
-- Backend service running on host-reachable endpoint (default `127.0.0.1:8080`)
-- Domain A/AAAA record already pointing to the server public IP
+- Docker + Docker Compose plugin installed
+- Backend reachable from Docker Nginx container
+  - Default upstream: `http://host.docker.internal:8080`
+- Domain A/AAAA record already pointing to server public IP
 - OCI Security List open for inbound `80` and `443`
 
 ## Files
 
-- `setup-nginx-ssl.sh`: Idempotent bootstrap script for Nginx + Certbot
+- `docker-compose.yml`: Nginx + Certbot services
+- `setup-nginx-ssl.sh`: bootstrap script (render config, issue cert, start renew loop)
+- `nginx/conf.d/http.conf.template`: HTTP bootstrap template
+- `nginx/conf.d/https.conf.template`: HTTPS reverse proxy template
 
 ## Quick Start
 
-Run on the server:
+Run on the server (from this repository path):
 
 ```bash
-cd /tmp
-curl -fsSL https://raw.githubusercontent.com/Jeonj95/cash-chat-mvp/feature/cc-146-nginx-ssl/infra/deploy/nginx/setup-nginx-ssl.sh -o setup-nginx-ssl.sh
+cd /path/to/cash-chat-mvp/infra/deploy/nginx
 chmod +x setup-nginx-ssl.sh
 sudo ./setup-nginx-ssl.sh \
   --domain api.example.com \
   --email you@example.com \
-  --backend-host 127.0.0.1 \
+  --backend-host host.docker.internal \
   --backend-port 8080
 ```
 
 ### Optional flags
 
 - Add SAN for `www`: `--enable-www`
-- Test against staging CA first: `--staging`
-- Configure HTTP proxy only (no cert yet): `--skip-certbot`
+- Test with staging CA first: `--staging`
+- Configure HTTP only: `--skip-certbot`
+- Force reissue certificate: `--force-renewal`
 
 ## Verification
 
 ```bash
-sudo nginx -t
-systemctl is-active nginx
-systemctl is-enabled certbot.timer
+cd /path/to/cash-chat-mvp/infra/deploy/nginx
+docker compose ps
+docker compose logs --tail=100 nginx
+docker compose logs --tail=100 certbot
 curl -I http://api.example.com
 curl -I https://api.example.com
-sudo certbot certificates
 ```
 
 Expected:
-- HTTP returns `301/308` redirect to HTTPS
+- HTTP returns `301/308` redirect to HTTPS (except ACME path)
 - HTTPS returns `200`/`401` depending on backend auth
-- `certbot.timer` is `enabled` and `active`
+- `certbot` container stays up and runs periodic renew
 
 ## Notes
 
-- The script writes `/etc/nginx/sites-available/cash-chat.conf` by default.
-- Re-run script safely after backend port/domain changes.
-- For rate-limit safety, test first with `--staging`, then run again without it.
+- Runtime files are generated under:
+  - `letsencrypt/`
+  - `certbot-www/`
+  - `nginx/conf.d/default.conf`
+- These runtime files are git-ignored.
+- If backend runs in another host/IP, rerun script with new `--backend-host/--backend-port`.

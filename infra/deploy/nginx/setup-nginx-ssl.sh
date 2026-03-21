@@ -7,23 +7,23 @@ Usage:
   sudo ./setup-nginx-ssl.sh \
     --domain api.example.com \
     --email devops@example.com \
-    [--backend-host 127.0.0.1] \
+    [--backend-host host.docker.internal] \
     [--backend-port 8080] \
-    [--site-name cash-chat] \
     [--enable-www] \
     [--staging] \
-    [--skip-certbot]
+    [--skip-certbot] \
+    [--force-renewal]
 
 Options:
-  --domain        Primary domain for backend API (required).
-  --email         Email for Let's Encrypt expiry notices (required unless --skip-certbot).
-  --backend-host  Upstream backend host. Default: 127.0.0.1
-  --backend-port  Upstream backend port. Default: 8080
-  --site-name     Nginx site config file name. Default: cash-chat
-  --enable-www    Also request cert for www.<domain>.
-  --staging       Use Let's Encrypt staging CA to avoid rate limits while testing.
-  --skip-certbot  Configure Nginx only (HTTP), skip certificate issuance.
-  -h, --help      Show help.
+  --domain         Primary domain for backend API (required)
+  --email          Email for Let's Encrypt notices (required unless --skip-certbot)
+  --backend-host   Upstream backend host. Default: host.docker.internal
+  --backend-port   Upstream backend port. Default: 8080
+  --enable-www     Also request cert for www.<domain>
+  --staging        Use Let's Encrypt staging CA while testing
+  --skip-certbot   Configure HTTP reverse proxy only
+  --force-renewal  Force certbot to reissue/renew certificate
+  -h, --help       Show help
 USAGE
 }
 
@@ -34,12 +34,12 @@ fi
 
 DOMAIN=""
 EMAIL=""
-BACKEND_HOST="127.0.0.1"
+BACKEND_HOST="host.docker.internal"
 BACKEND_PORT="8080"
-SITE_NAME="cash-chat"
 ENABLE_WWW=0
 STAGING=0
 SKIP_CERTBOT=0
+FORCE_RENEWAL=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -59,10 +59,6 @@ while [[ $# -gt 0 ]]; do
       BACKEND_PORT="${2:-}"
       shift 2
       ;;
-    --site-name)
-      SITE_NAME="${2:-}"
-      shift 2
-      ;;
     --enable-www)
       ENABLE_WWW=1
       shift 1
@@ -73,6 +69,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-certbot)
       SKIP_CERTBOT=1
+      shift 1
+      ;;
+    --force-renewal)
+      FORCE_RENEWAL=1
       shift 1
       ;;
     -h|--help)
@@ -97,63 +97,64 @@ if [[ "${SKIP_CERTBOT}" -eq 0 && -z "${EMAIL}" ]]; then
   exit 1
 fi
 
-echo "==> Installing packages (nginx, certbot, python3-certbot-nginx)"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update
-apt-get install -y nginx certbot python3-certbot-nginx
+if ! command -v docker >/dev/null 2>&1; then
+  echo "docker command not found. Install Docker first." >&2
+  exit 1
+fi
 
-echo "==> Writing Nginx reverse proxy config"
+if ! docker compose version >/dev/null 2>&1; then
+  echo "docker compose command not found. Install Docker Compose plugin first." >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
+HTTP_TEMPLATE="${SCRIPT_DIR}/nginx/conf.d/http.conf.template"
+HTTPS_TEMPLATE="${SCRIPT_DIR}/nginx/conf.d/https.conf.template"
+ACTIVE_CONF="${SCRIPT_DIR}/nginx/conf.d/default.conf"
+LETSENCRYPT_DIR="${SCRIPT_DIR}/letsencrypt"
+WEBROOT_DIR="${SCRIPT_DIR}/certbot-www"
+
+install -d -m 0755 "${SCRIPT_DIR}/nginx/conf.d" "${LETSENCRYPT_DIR}" "${WEBROOT_DIR}"
+
+BACKEND_UPSTREAM="http://${BACKEND_HOST}:${BACKEND_PORT}"
 SERVER_NAMES="${DOMAIN}"
 if [[ "${ENABLE_WWW}" -eq 1 ]]; then
   SERVER_NAMES="${SERVER_NAMES} www.${DOMAIN}"
 fi
 
-SITE_FILE="/etc/nginx/sites-available/${SITE_NAME}.conf"
-cat > "${SITE_FILE}" <<EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name ${SERVER_NAMES};
+render_template() {
+  local src="$1"
+  local dst="$2"
 
-    client_max_body_size 20m;
-
-    location / {
-        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 300s;
-    }
+  sed \
+    -e "s|__SERVER_NAMES__|${SERVER_NAMES}|g" \
+    -e "s|__BACKEND_UPSTREAM__|${BACKEND_UPSTREAM}|g" \
+    -e "s|__CERT_NAME__|${DOMAIN}|g" \
+    "${src}" > "${dst}"
 }
-EOF
 
-ln -sfn "${SITE_FILE}" "/etc/nginx/sites-enabled/${SITE_NAME}.conf"
-if [[ -L /etc/nginx/sites-enabled/default ]]; then
-  rm -f /etc/nginx/sites-enabled/default
-fi
+echo "==> Preparing Nginx HTTP config (ACME challenge + reverse proxy)"
+render_template "${HTTP_TEMPLATE}" "${ACTIVE_CONF}"
 
-nginx -t
-systemctl enable --now nginx
-systemctl reload nginx
+echo "==> Starting Nginx container"
+docker compose -f "${COMPOSE_FILE}" up -d nginx
 
 if [[ "${SKIP_CERTBOT}" -eq 1 ]]; then
-  echo "==> --skip-certbot set. Nginx HTTP reverse proxy configured only."
+  echo "==> --skip-certbot set. HTTP reverse proxy configured."
   echo "Done."
   exit 0
 fi
 
-echo "==> Requesting/renewing Let's Encrypt certificate"
+echo "==> Issuing/Renewing Let's Encrypt certificate"
 CERTBOT_ARGS=(
-  --nginx
+  certonly
+  --webroot
+  -w /var/www/certbot
   --non-interactive
   --agree-tos
   --email "${EMAIL}"
-  --keep-until-expiring
-  --redirect
+  --cert-name "${DOMAIN}"
   -d "${DOMAIN}"
 )
 
@@ -165,21 +166,26 @@ if [[ "${STAGING}" -eq 1 ]]; then
   CERTBOT_ARGS+=(--staging)
 fi
 
-certbot "${CERTBOT_ARGS[@]}"
+if [[ "${FORCE_RENEWAL}" -eq 1 ]]; then
+  CERTBOT_ARGS+=(--force-renewal)
+fi
 
-echo "==> Ensuring auto-renewal hook (nginx reload)"
-install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
-cat > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-systemctl reload nginx
-EOF
-chmod 0755 /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+if [[ -f "${LETSENCRYPT_DIR}/live/${DOMAIN}/fullchain.pem" && "${FORCE_RENEWAL}" -eq 0 ]]; then
+  echo "==> Existing certificate found. Skipping initial issue (use --force-renewal to reissue)."
+else
+  docker compose -f "${COMPOSE_FILE}" run --rm certbot "${CERTBOT_ARGS[@]}"
+fi
 
-echo "==> Enabling certbot timer"
-systemctl enable --now certbot.timer
+echo "==> Switching Nginx config to HTTPS mode"
+render_template "${HTTPS_TEMPLATE}" "${ACTIVE_CONF}"
+docker compose -f "${COMPOSE_FILE}" up -d nginx
+docker compose -f "${COMPOSE_FILE}" exec -T nginx nginx -t
+docker compose -f "${COMPOSE_FILE}" exec -T nginx nginx -s reload
 
-echo "==> Validating certificate auto-renewal (dry run)"
-certbot renew --dry-run
+echo "==> Starting background auto-renew container"
+docker compose -f "${COMPOSE_FILE}" up -d certbot
+docker compose -f "${COMPOSE_FILE}" run --rm certbot renew --dry-run
 
+echo "==> Current container status"
+docker compose -f "${COMPOSE_FILE}" ps
 echo "Done."
