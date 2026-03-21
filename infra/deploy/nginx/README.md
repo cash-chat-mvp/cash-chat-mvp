@@ -66,3 +66,26 @@ Expected:
   - `nginx/conf.d/default.conf`
 - These runtime files are git-ignored.
 - If backend runs in another host/IP, rerun script with new `--backend-host/--backend-port`.
+
+## GitHub Actions Setup
+
+Workflow file:
+- `.github/workflows/nginx-deploy.yml`
+
+Required repository Variables:
+- `NGINX_DEPLOY_PATH` (example: `/home/ubuntu/cash-chat-mvp/infra/deploy/nginx`)
+- `NGINX_DOMAIN` (example: `api.example.com`)
+- `NGINX_LE_EMAIL` (example: `devops@example.com`)
+- `NGINX_BACKEND_HOST` (default recommended: `host.docker.internal`)
+- `NGINX_BACKEND_PORT` (default: `8080`)
+
+Optional repository Variables:
+- `NGINX_ENABLE_WWW` (`true` or `false`)
+- `NGINX_CERTBOT_STAGING` (`true` or `false`)
+- `NGINX_SKIP_CERTBOT` (`true` or `false`)
+- `NGINX_FORCE_RENEWAL` (`true` or `false`)
+
+Required repository Secrets:
+- `DEPLOY_HOST` (server public IP or DNS)
+- `DEPLOY_USER` (SSH user, usually `ubuntu`)
+- `DEPLOY_SSH_KEY` (private key content)
