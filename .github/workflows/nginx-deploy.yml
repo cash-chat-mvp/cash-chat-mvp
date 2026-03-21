@@ -47,12 +47,12 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: "infra/deploy/nginx/*"
+          source: "infra/deploy/nginx/docker-compose.yml,infra/deploy/nginx/nginx/conf.d/http.conf.template,infra/deploy/nginx/nginx/conf.d/https.conf.template"
           target: ${{ vars.NGINX_DEPLOY_PATH }}
           strip_components: 3
           overwrite: true
 
-      - name: Run nginx ssl setup
+      - name: Configure and deploy nginx stack
         uses: appleboy/ssh-action@v1.2.5
         env:
           NGINX_DEPLOY_PATH: ${{ vars.NGINX_DEPLOY_PATH }}
@@ -72,26 +72,55 @@ jobs:
           script: |
             set -euo pipefail
             cd "${NGINX_DEPLOY_PATH}"
-            chmod +x setup-nginx-ssl.sh
+            install -d -m 0755 nginx/conf.d letsencrypt certbot-www
 
-            ARGS=(
-              --domain "${NGINX_DOMAIN}"
-              --email "${NGINX_LE_EMAIL}"
-              --backend-host "${NGINX_BACKEND_HOST:-host.docker.internal}"
-              --backend-port "${NGINX_BACKEND_PORT:-8080}"
-            )
-
+            SERVER_NAMES="${NGINX_DOMAIN}"
             if [ "${NGINX_ENABLE_WWW:-false}" = "true" ]; then
-              ARGS+=(--enable-www)
-            fi
-            if [ "${NGINX_CERTBOT_STAGING:-false}" = "true" ]; then
-              ARGS+=(--staging)
-            fi
-            if [ "${NGINX_SKIP_CERTBOT:-false}" = "true" ]; then
-              ARGS+=(--skip-certbot)
-            fi
-            if [ "${NGINX_FORCE_RENEWAL:-false}" = "true" ]; then
-              ARGS+=(--force-renewal)
+              SERVER_NAMES="${SERVER_NAMES} www.${NGINX_DOMAIN}"
             fi
 
-            sudo ./setup-nginx-ssl.sh "${ARGS[@]}"
+            BACKEND_UPSTREAM="http://${NGINX_BACKEND_HOST:-host.docker.internal}:${NGINX_BACKEND_PORT:-8080}"
+
+            sed \
+              -e "s|__SERVER_NAMES__|${SERVER_NAMES}|g" \
+              -e "s|__BACKEND_UPSTREAM__|${BACKEND_UPSTREAM}|g" \
+              -e "s|__CERT_NAME__|${NGINX_DOMAIN}|g" \
+              nginx/conf.d/http.conf.template > nginx/conf.d/default.conf
+
+            docker compose up -d nginx
+
+            if [ "${NGINX_SKIP_CERTBOT:-false}" != "true" ]; then
+              set -- certonly --webroot -w /var/www/certbot --non-interactive --agree-tos \
+                --email "${NGINX_LE_EMAIL}" --cert-name "${NGINX_DOMAIN}" -d "${NGINX_DOMAIN}"
+
+              if [ "${NGINX_ENABLE_WWW:-false}" = "true" ]; then
+                set -- "$@" -d "www.${NGINX_DOMAIN}"
+              fi
+              if [ "${NGINX_CERTBOT_STAGING:-false}" = "true" ]; then
+                set -- "$@" --staging
+              fi
+              if [ "${NGINX_FORCE_RENEWAL:-false}" = "true" ]; then
+                set -- "$@" --force-renewal
+              fi
+
+              if [ -f "letsencrypt/live/${NGINX_DOMAIN}/fullchain.pem" ] && [ "${NGINX_FORCE_RENEWAL:-false}" != "true" ]; then
+                echo "Existing certificate found. Skip issue."
+              else
+                docker compose run --rm certbot "$@"
+              fi
+
+              sed \
+                -e "s|__SERVER_NAMES__|${SERVER_NAMES}|g" \
+                -e "s|__BACKEND_UPSTREAM__|${BACKEND_UPSTREAM}|g" \
+                -e "s|__CERT_NAME__|${NGINX_DOMAIN}|g" \
+                nginx/conf.d/https.conf.template > nginx/conf.d/default.conf
+
+              docker compose up -d nginx
+              docker compose exec -T nginx nginx -t
+              docker compose exec -T nginx nginx -s reload
+
+              docker compose up -d certbot
+              docker compose run --rm certbot renew --dry-run
+            fi
+
+            docker compose ps

@@ -17,30 +17,25 @@ This directory provides Docker-based assets to configure:
 ## Files
 
 - `docker-compose.yml`: Nginx + Certbot services
-- `setup-nginx-ssl.sh`: bootstrap script (render config, issue cert, start renew loop)
 - `nginx/conf.d/http.conf.template`: HTTP bootstrap template
 - `nginx/conf.d/https.conf.template`: HTTPS reverse proxy template
 
 ## Quick Start
 
-Run on the server (from this repository path):
+Use GitHub Actions (`nginx-deploy.yml`) with configured Variables/Secrets.
+Manual run on server is possible, but primary flow is CI deployment.
 
 ```bash
 cd /path/to/cash-chat-mvp/infra/deploy/nginx
-chmod +x setup-nginx-ssl.sh
-sudo ./setup-nginx-ssl.sh \
-  --domain api.example.com \
-  --email you@example.com \
-  --backend-host host.docker.internal \
-  --backend-port 8080
+docker compose up -d nginx
 ```
 
-### Optional flags
+### Optional behavior (via Repository Variables)
 
-- Add SAN for `www`: `--enable-www`
-- Test with staging CA first: `--staging`
-- Configure HTTP only: `--skip-certbot`
-- Force reissue certificate: `--force-renewal`
+- Add SAN for `www`: `NGINX_ENABLE_WWW=true`
+- Test with staging CA first: `NGINX_CERTBOT_STAGING=true`
+- Configure HTTP only: `NGINX_SKIP_CERTBOT=true`
+- Force reissue certificate: `NGINX_FORCE_RENEWAL=true`
 
 ## Verification
 
@@ -65,7 +60,7 @@ Expected:
   - `certbot-www/`
   - `nginx/conf.d/default.conf`
 - These runtime files are git-ignored.
-- If backend runs in another host/IP, rerun script with new `--backend-host/--backend-port`.
+- If backend host/port changes, update Variables and rerun workflow.
 
 ## GitHub Actions Setup
 
