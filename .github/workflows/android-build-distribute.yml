@@ -2,7 +2,6 @@ name: Android Build & Distribute
 
 on:
   # release/* 브랜치에 머지(push)될 때 배포
-  # PR 시점이 아니라 머지 확정 후 실행 → 시크릿 접근 보장
   push:
     branches:
       - 'release/**'
@@ -48,7 +47,9 @@ jobs:
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > cashchat-release.keystore
 
       - name: Write google-services.json
-        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
       - name: Write Firebase Service Account
         env:
@@ -74,11 +75,16 @@ jobs:
       - name: Discord 배포 성공 알림
         if: success()
         env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
           TIMESTAMP: ${{ github.event.head_commit.timestamp }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
           PAYLOAD=$(jq -n \
             --arg msg "$COMMIT_MESSAGE" \
             --arg branch "$BRANCH" \
@@ -96,18 +102,23 @@ jobs:
               footer: {text: "Cash Chat · Android Build"},
               timestamp: $ts
             }]}')
-          curl -sS -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
 
       - name: Discord 배포 실패 알림
         if: failure()
         env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
           PAYLOAD=$(jq -n \
             --arg msg "$COMMIT_MESSAGE" \
             --arg branch "$BRANCH" \
@@ -125,6 +136,6 @@ jobs:
               ],
               footer: {text: "Cash Chat · Android Build"}
             }]}')
-          curl -sS -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
