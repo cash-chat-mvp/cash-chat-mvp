@@ -1,8 +1,11 @@
 name: Android Build & Distribute
 
 on:
+  # release/* 브랜치에 머지(push)될 때 배포
+  # PR 시점이 아니라 머지 확정 후 실행 → 시크릿 접근 보장
   push:
-    branches: [ dev ]        # ← PR 머지 후에만 실행
+    branches:
+      - 'release/**'
     paths:
       - 'apps/frontend/**'
 
@@ -13,6 +16,7 @@ jobs:
     defaults:
       run:
         working-directory: apps/frontend
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -44,9 +48,7 @@ jobs:
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > cashchat-release.keystore
 
       - name: Write google-services.json
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
       - name: Write Firebase Service Account
         env:
@@ -94,7 +96,7 @@ jobs:
               footer: {text: "Cash Chat · Android Build"},
               timestamp: $ts
             }]}')
-          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+          curl -sS -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
 
@@ -114,7 +116,7 @@ jobs:
             '{embeds: [{
               color: 15548997,
               title: "🚨  Android 빌드/배포 실패",
-              description: "**`dev` 브랜치 빌드 또는 Firebase 배포가 실패했어요**",
+              description: "**release 브랜치 빌드 또는 Firebase 배포가 실패했어요**",
               fields: [
                 {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
                 {name: "실패자", value: ("`" + $actor + "`"), inline: true},
@@ -123,6 +125,6 @@ jobs:
               ],
               footer: {text: "Cash Chat · Android Build"}
             }]}')
-          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+          curl -sS -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
