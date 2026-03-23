@@ -1,8 +1,10 @@
 name: Android Build & Distribute
 
 on:
+  # release/* 브랜치에 머지(push)될 때 배포
   push:
-    branches: [ dev ]        # ← PR 머지 후에만 실행
+    branches:
+      - 'release/**'
     paths:
       - 'apps/frontend/**'
 
@@ -13,6 +15,7 @@ jobs:
     defaults:
       run:
         working-directory: apps/frontend
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -72,11 +75,16 @@ jobs:
       - name: Discord 배포 성공 알림
         if: success()
         env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
           TIMESTAMP: ${{ github.event.head_commit.timestamp }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
           PAYLOAD=$(jq -n \
             --arg msg "$COMMIT_MESSAGE" \
             --arg branch "$BRANCH" \
@@ -94,18 +102,23 @@ jobs:
               footer: {text: "Cash Chat · Android Build"},
               timestamp: $ts
             }]}')
-          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
 
       - name: Discord 배포 실패 알림
         if: failure()
         env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
           PAYLOAD=$(jq -n \
             --arg msg "$COMMIT_MESSAGE" \
             --arg branch "$BRANCH" \
@@ -114,7 +127,7 @@ jobs:
             '{embeds: [{
               color: 15548997,
               title: "🚨  Android 빌드/배포 실패",
-              description: "**`dev` 브랜치 빌드 또는 Firebase 배포가 실패했어요**",
+              description: "**release 브랜치 빌드 또는 Firebase 배포가 실패했어요**",
               fields: [
                 {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
                 {name: "실패자", value: ("`" + $actor + "`"), inline: true},
@@ -123,6 +136,6 @@ jobs:
               ],
               footer: {text: "Cash Chat · Android Build"}
             }]}')
-          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
