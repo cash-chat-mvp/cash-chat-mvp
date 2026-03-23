@@ -2,7 +2,7 @@ name: Jira Due Date 알림
 
 on:
   schedule:
-    # 매일 한국시간 오전 9시 (UTC 0시)
+    # 매일 한국시간 오전 9시 (UTC 0시), 평일만
     - cron: '0 0 * * 1-5'
   workflow_dispatch:
 
@@ -20,6 +20,7 @@ jobs:
           TODAY=$(date -u +%Y-%m-%d)
           D1=$(date -u -d "+1 day" +%Y-%m-%d 2>/dev/null || date -u -v+1d +%Y-%m-%d)
           D3=$(date -u -d "+3 days" +%Y-%m-%d 2>/dev/null || date -u -v+3d +%Y-%m-%d)
+          export TODAY D1 D3
           echo "오늘: $TODAY / D-1: $D1 / D-3: $D3"
 
           # ── Jira API 호출 (신규 엔드포인트: /search/jql) ──
@@ -142,7 +143,7 @@ jobs:
           except urllib.error.URLError as e:
               print(f'::error::Discord 전송 실패: {e}')
               exit(1)
-          " TODAY="$TODAY" D1="$D1" D3="$D3"
+          "
 
       # 위 step이 실패하면 실행됨
       - name: 워크플로우 실패 알림
@@ -150,6 +151,10 @@ jobs:
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
           curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
             -d '{
