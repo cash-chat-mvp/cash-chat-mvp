@@ -106,7 +106,7 @@ jobs:
               if [ -f "letsencrypt/live/${NGINX_DOMAIN}/fullchain.pem" ] && [ "${NGINX_FORCE_RENEWAL:-false}" != "true" ]; then
                 echo "Existing certificate found. Skip issue."
               else
-                docker compose run --rm certbot "$@"
+                docker compose run --rm --entrypoint certbot certbot "$@"
               fi
 
               sed \
@@ -119,7 +119,7 @@ jobs:
               docker compose exec -T nginx nginx -s reload
 
               docker compose up -d certbot
-              docker compose run --rm certbot renew --dry-run
+              docker compose run --rm --entrypoint certbot certbot renew --dry-run
             fi
 
             docker compose ps
