@@ -115,7 +115,6 @@ jobs:
                 -e "s|__CERT_NAME__|${NGINX_DOMAIN}|g" \
                 nginx/conf.d/https.conf.template > nginx/conf.d/default.conf
 
-              docker compose up -d nginx
               docker compose exec -T nginx nginx -t
               docker compose exec -T nginx nginx -s reload
 
