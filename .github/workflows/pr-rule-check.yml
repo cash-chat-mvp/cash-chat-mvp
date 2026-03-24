@@ -1,0 +1,43 @@
+name: PR Title & Branch Check
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title & branch name
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          FAILED=0
+
+          # ── 1. PR 제목 체크 ───────────────────────────────────────────
+          if [[ ! "$TITLE" =~ ^\[CC-[0-9]+\][[:space:]]+[^[:space:]].* ]]; then
+            echo "❌ PR 제목이 올바르지 않습니다."
+            echo "   현재: $TITLE"
+            echo "   필요: [CC-123] 제목 내용"
+            FAILED=1
+          else
+            echo "✅ PR 제목 형식 OK: $TITLE"
+          fi
+
+          # ── 2. 브랜치명 체크 ─────────────────────────────────────────
+          VALID_BRANCH_PATTERN='^(feature|feat|fix|bugfix|refactor|chore|docs|test|hotfix|release)/'
+
+          if [[ ! "$BRANCH" =~ $VALID_BRANCH_PATTERN ]]; then
+            echo "❌ 브랜치명이 허용된 prefix로 시작하지 않습니다."
+            echo "   현재: $BRANCH"
+            echo "   허용: feature/ feat/ fix/ bugfix/ refactor/ chore/ docs/ test/ hotfix/ release/"
+            FAILED=1
+          else
+            echo "✅ 브랜치명 형식 OK: $BRANCH"
+          fi
+
+          # ── 3. 결과 ───────────────────────────────────────────────────
+          if [[ $FAILED -eq 1 ]]; then
+            exit 1
+          fi

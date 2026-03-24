@@ -1,0 +1,101 @@
+name: Discord 알림
+
+on:
+  pull_request_target:
+    types: [opened, reopened, closed]
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Jira Issue Key
+        id: extract
+        run: |
+          ISSUE_KEY=$(echo "${{ github.head_ref }} ${{ github.event.pull_request.title }}" \
+            | grep -oE '[A-Z]+-[0-9]+' | head -1)
+          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+
+      - name: PR 오픈 알림
+        if: |
+          github.event_name == 'pull_request_target' &&
+          (github.event.action == 'opened' || github.event.action == 'reopened')
+        run: |
+          JIRA_URL="https://moneyfactoryslave.atlassian.net/browse/${{ steps.extract.outputs.issue_key }}"
+          JIRA_FIELD="${{ steps.extract.outputs.issue_key != '' && format('[{0}]({1})', steps.extract.outputs.issue_key, 'https://moneyfactoryslave.atlassian.net/browse/' ) || '없음' }}"
+
+          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "embeds": [{
+                "color": 5793266,
+                "author": {
+                  "name": "새 PR 오픈",
+                  "icon_url": "https://github.com/${{ github.event.pull_request.user.login }}.png?size=32"
+                },
+                "title": "${{ github.event.pull_request.title }}",
+                "url": "${{ github.event.pull_request.html_url }}",
+                "fields": [
+                  {"name": "작성자", "value": "`${{ github.event.pull_request.user.login }}`", "inline": true},
+                  {"name": "Jira 티켓", "value": "[`${{ steps.extract.outputs.issue_key }}`](https://moneyfactoryslave.atlassian.net/browse/${{ steps.extract.outputs.issue_key }})", "inline": true},
+                  {"name": "브랜치", "value": "`${{ github.head_ref }}` → `${{ github.base_ref }}`", "inline": false},
+                  {"name": "변경 파일", "value": "`+${{ github.event.pull_request.additions }}` / `-${{ github.event.pull_request.deletions }}`", "inline": true},
+                  {"name": "커밋 수", "value": "`${{ github.event.pull_request.commits }}` commits", "inline": true}
+                ],
+                "footer": {"text": "Cash Chat • GitHub"},
+                "timestamp": "${{ github.event.pull_request.created_at }}"
+              }]
+            }'
+
+      - name: PR 머지 알림
+        if: |
+          github.event_name == 'pull_request_target' &&
+          github.event.action == 'closed' &&
+          github.event.pull_request.merged == true
+        run: |
+          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "embeds": [{
+                "color": 5763719,
+                "author": {
+                  "name": "PR 머지 완료 ✅",
+                  "icon_url": "https://github.com/${{ github.event.pull_request.merged_by.login }}.png?size=32"
+                },
+                "title": "${{ github.event.pull_request.title }}",
+                "url": "${{ github.event.pull_request.html_url }}",
+                "fields": [
+                  {"name": "머지한 사람", "value": "`${{ github.event.pull_request.merged_by.login }}`", "inline": true},
+                  {"name": "Jira 티켓", "value": "[`${{ steps.extract.outputs.issue_key }}`](https://moneyfactoryslave.atlassian.net/browse/${{ steps.extract.outputs.issue_key }})", "inline": true},
+                  {"name": "브랜치", "value": "`${{ github.head_ref }}` → `${{ github.base_ref }}`", "inline": false},
+                  {"name": "총 변경", "value": "`+${{ github.event.pull_request.additions }}` / `-${{ github.event.pull_request.deletions }}`", "inline": true},
+                  {"name": "커밋 수", "value": "`${{ github.event.pull_request.commits }}` commits", "inline": true}
+                ],
+                "footer": {"text": "Cash Chat • GitHub"},
+                "timestamp": "${{ github.event.pull_request.merged_at }}"
+              }]
+            }'
+
+      - name: main 배포 알림
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "embeds": [{
+                "color": 16763904,
+                "author": {
+                  "name": "main 브랜치 업데이트 🚀",
+                  "icon_url": "https://github.com/${{ github.actor }}.png?size=32"
+                },
+                "title": "${{ github.event.head_commit.message }}",
+                "url": "https://github.com/${{ github.repository }}/commit/${{ github.sha }}",
+                "fields": [
+                  {"name": "푸시한 사람", "value": "`${{ github.actor }}`", "inline": true},
+                  {"name": "커밋", "value": "[`${{ github.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})", "inline": true}
+                ],
+                "footer": {"text": "Cash Chat • GitHub"},
+                "timestamp": "${{ github.event.head_commit.timestamp }}"
+              }]
+            }'
