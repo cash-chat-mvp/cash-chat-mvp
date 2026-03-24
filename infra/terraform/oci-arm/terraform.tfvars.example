@@ -1,0 +1,37 @@
+tenancy_ocid     = "ocid1.tenancy.oc1..replace_me"
+user_ocid        = "ocid1.user.oc1..replace_me"
+fingerprint      = "12:34:56:78:90:ab:cd:ef:12:34:56:78:90:ab:cd:ef"
+private_key_path = "C:/Users/your-user/.oci/oci_api_key.pem"
+region           = "ap-seoul-1"
+compartment_ocid = "ocid1.compartment.oc1..replace_me"
+
+# Use the first AD in your home region in most cases.
+availability_domain_index = 0
+
+name_prefix    = "core-net"
+instance_name  = "app-server"
+hostname_label = "appserver"
+
+# ARM instance sizing example
+ocpus                          = 4
+memory_in_gbs                  = 24
+boot_volume_size_in_gbs        = 50
+image_operating_system         = "Canonical Ubuntu"
+image_operating_system_version = "22.04"
+
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... replace_me"
+
+# Optional cloud-init content.
+# To bootstrap Docker and Docker Compose on first boot:
+# Note: cloud-init/user_data changes apply on new instance creation (or instance replacement),
+# not immediately to an already-running instance.
+cloud_init_path = "cloud-init/docker-bootstrap.yaml"
+
+vcn_cidr           = "10.0.0.0/16"
+subnet_cidr        = "10.0.0.0/24"
+vcn_dns_label      = "corenetvcn"
+subnet_dns_label   = "publicsubnet"
+ingress_allowed_cidr = "0.0.0.0/0"
+
+# Keep only required ports.
+open_tcp_ports = [80, 443]
