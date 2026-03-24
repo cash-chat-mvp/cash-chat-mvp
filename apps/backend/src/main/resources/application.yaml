@@ -3,6 +3,11 @@ spring:
   config:
     import: optional:file:.env[.properties]
 
+  jackson:
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+
   profiles:
     active: dev
 
@@ -16,13 +21,8 @@ spring:
     username: sa
 
 # O-Auth (Open Authorization)
+# registration 설정은 프로파일별로 분리: application-dev.yaml / application-prod.yaml
 oauth:
-  registration:
-    google-app:
-      provider: google
-      client-id: ${GOOGLE_CLIENT_ID:your-client-id}
-      client-secret: ${GOOGLE_CLIENT_SECRET:your-client-secret}
-      redirect-uri: http://localhost:8080/api/auth/callback/google
   provider:
     google:
       token-uri: https://oauth2.googleapis.com/token
