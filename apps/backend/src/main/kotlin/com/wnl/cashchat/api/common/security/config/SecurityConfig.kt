@@ -16,6 +16,14 @@ class SecurityConfig(
     private val jwtTokenHandler: JwtTokenHandler
 ) {
 
+    companion object {
+        private val SWAGGER_PATHS = arrayOf(
+            "/v3/api-docs/**",
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+        )
+    }
+
     @Bean
     fun jwtAuthenticationFilter(): JwtAuthenticationFilter =
         JwtAuthenticationFilter(jwtTokenHandler)
@@ -28,7 +36,11 @@ class SecurityConfig(
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter::class.java)
             .authorizeHttpRequests {
-                it.requestMatchers("/api/auth/**").permitAll()
+                it.requestMatchers(
+                    *SWAGGER_PATHS,
+                    "/api/auth/**",
+                    "/favicon.ico",
+                ).permitAll()
                     .anyRequest().authenticated()
             }
 
