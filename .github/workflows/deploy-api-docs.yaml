@@ -45,24 +45,30 @@ jobs:
         env:
           GEMINI_API_KEY: dummy-key-for-docs-generation
         run: |
-          java -jar build/libs/*.jar &
+          java -jar build/libs/*.jar > app.log 2>&1 &
           APP_PID=$!
 
           echo "Waiting for app to start..."
           for i in $(seq 1 60); do
+            if ! kill -0 $APP_PID 2>/dev/null; then
+              echo "App process died unexpectedly"
+              tail -n 200 app.log
+              exit 1
+            fi
             if curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/v3/api-docs | grep -q "200"; then
               echo "App is ready!"
               break
             fi
             if [ $i -eq 60 ]; then
               echo "App failed to start within 60 seconds"
+              tail -n 200 app.log
               kill $APP_PID 2>/dev/null
               exit 1
             fi
             sleep 1
           done
 
-          curl -s http://localhost:8080/v3/api-docs -o openapi.json
+          curl -s -f http://localhost:8080/v3/api-docs -o openapi.json
           echo "OpenAPI spec generated successfully"
 
           kill $APP_PID 2>/dev/null
