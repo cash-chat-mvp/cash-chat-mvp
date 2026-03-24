@@ -1,0 +1,118 @@
+name: PR Description Auto Fill
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+jobs:
+  update-description:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get Commit List
+        id: commits
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}  # ← HEAD_REF 대신 PR 번호
+        run: |
+          # 포크 PR도 안전하게 head를 직접 fetch
+          git fetch --no-tags origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}-head"
+
+          COMMITS=$(git log "origin/${BASE_REF}..pr-${PR_NUMBER}-head" \
+            --no-merges \
+            --first-parent \
+            --pretty=format:"- %s (%h)" 2>/dev/null || \
+            git log --no-merges --first-parent --pretty=format:"- %s (%h)" -10)
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- 커밋 내역 없음"
+          fi
+
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "commits<<$EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+
+      - name: Extract Jira Issue Key
+        id: extract
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # CC- 로 한정 (프로젝트 prefix 고정)
+          ISSUE_KEY=$(echo "${HEAD_REF} ${PR_TITLE}" \
+            | grep -oE 'CC-[0-9]+' | head -1)
+          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+
+      - name: Update PR Title
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueKey = ${{ toJSON(steps.extract.outputs.issue_key) }};
+            const currentTitle = context.payload.pull_request.title;
+
+            // 이미 [CC-XXX] 형식이면 스킵
+            if (/^\[CC-\d+\]\s+\S.*/.test(currentTitle)) {
+              console.log('✅ 제목 이미 올바른 형식:', currentTitle);
+              return;
+            }
+
+            // 티켓 번호가 없으면 스킵 (제목 없이 붙이면 이상해짐)
+            if (!issueKey) {
+              console.log('⚠️ Jira 티켓 번호를 찾을 수 없어 제목을 수정하지 않습니다.');
+              return;
+            }
+
+            // 제목 중간에 CC-XXX 가 있으면 제거 후 앞으로 이동
+            const cleanTitle = currentTitle.replace(/CC-\d+\s*/g, '').trim();
+            const newTitle = `[${issueKey}] ${cleanTitle}`;
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              title: newTitle
+            });
+            console.log(`✅ 제목 변경: "${currentTitle}" → "${newTitle}"`);
+
+      - name: Update PR Description
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // toJSON()으로 안전하게 직렬화 → 특수문자 파괴 방지
+            const issueKey = ${{ toJSON(steps.extract.outputs.issue_key) }};
+            const commits = ${{ toJSON(steps.commits.outputs.commits) }};
+
+            const jiraUrl = issueKey
+              ? `https://moneyfactoryslave.atlassian.net/browse/${issueKey}`
+              : '없음';
+
+            const checklist = [
+              '- [ ] 코드 리뷰 요청 전 셀프 리뷰 완료',
+              '- [ ] 테스트 확인',
+              '- [ ] 불필요한 코드/주석 제거',
+            ].join('\n');
+
+            const body = [
+              '## 📋 연관 Jira 티켓',
+              issueKey ? `[${issueKey}](${jiraUrl})` : '없음',
+              '',
+              '## 📝 커밋 내역',
+              commits,
+              '',
+              '## ✅ 체크리스트',
+              checklist,
+            ].join('\n');
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: body.trim()
+            });
