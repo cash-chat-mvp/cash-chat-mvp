@@ -133,5 +133,5 @@ jobs:
 
             docker compose --env-file .deploy.env -f docker-compose.yml pull
             docker compose --env-file .deploy.env -f docker-compose.yml up -d --remove-orphans
-            docker compose -f docker-compose.yml ps
+            docker compose --env-file .deploy.env -f docker-compose.yml ps
 
