@@ -118,8 +118,10 @@ jobs:
               docker compose exec -T nginx nginx -t
               docker compose exec -T nginx nginx -s reload
 
-              docker compose up -d certbot
+              # Avoid certbot lock contention: run dry-run first, then start renewal daemon.
+              docker compose stop certbot >/dev/null 2>&1 || true
               docker compose run --rm --entrypoint certbot certbot renew --dry-run
+              docker compose up -d certbot
             fi
 
             docker compose ps
