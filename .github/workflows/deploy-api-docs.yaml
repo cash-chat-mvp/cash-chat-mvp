@@ -38,7 +38,9 @@ jobs:
 
       - name: Build backend
         working-directory: apps/backend
-        run: ./gradlew bootJar
+        run: |
+          chmod +x gradlew
+          ./gradlew bootJar
 
       - name: Start app and extract OpenAPI spec
         working-directory: apps/backend
