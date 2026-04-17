@@ -226,6 +226,12 @@ try:
         if resp.status < 200 or resp.status >= 300:
             raise RuntimeError(f'Discord webhook 실패: HTTP {resp.status}')
     print(f'Discord 알림 전송 완료 — 전체 {total}건, 마감 이슈 {len(due_issues)}건')
+except urllib.error.HTTPError as e:
+    body = e.read().decode('utf-8', errors='replace')
+    print(f'::error::Discord 전송 실패: HTTP {e.code} {e.reason}')
+    print(f'::error::Discord 응답 본문: {body}')
+    print(f'::debug::전송한 페이로드: {payload}')
+    exit(1)
 except urllib.error.URLError as e:
-    print(f'::error::Discord 전송 실패: {e}')
+    print(f'::error::Discord 전송 실패 (네트워크): {e}')
     exit(1)
