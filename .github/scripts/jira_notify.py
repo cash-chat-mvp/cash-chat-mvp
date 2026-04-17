@@ -193,45 +193,57 @@ else:
     all_embeds = [summary_embed]
 
 # ────────────────────────────────────────────
-# 3. content 메시지
+# 3. 메시지 분리 구성
 # ────────────────────────────────────────────
 overdue_count = total_by_slot['overdue']
 upcoming      = len(due_issues) - overdue_count
 
-parts = []
+due_parts = []
 if overdue_count:
-    parts.append(f'🚨 **마감 지난 이슈 {overdue_count}건**')
+    due_parts.append(f'🚨 **마감 지난 이슈 {overdue_count}건**')
 if upcoming:
-    parts.append(f'⏰ **마감 임박 {upcoming}건**')
-content = '> ' + '  |  '.join(parts) if parts else '> ✅ 마감 이슈 없음'
+    due_parts.append(f'⏰ **마감 임박 {upcoming}건**')
+due_summary = '  |  '.join(due_parts) if due_parts else '✅ 마감 이슈 없음'
+
+# 메시지 1: 프로젝트 현황 대시보드
+msg1 = {'embeds': [summary_embed]}
+
+# 메시지 2: 마감 현황 (마감 이슈 있을 때만)
+msg2 = {'content': f'> {due_summary}', 'embeds': [due_embed]} if due_by_user else None
 
 # ────────────────────────────────────────────
-# 4. Discord 전송
+# 4. Discord 전송 (헬퍼 함수)
 # ────────────────────────────────────────────
-payload = json.dumps({'content': content, 'embeds': all_embeds})
-
 webhook_url = os.environ.get('DISCORD_WEBHOOK', '')
 if not webhook_url:
     print('DISCORD_WEBHOOK 없음 — 알림 건너뜀')
     exit(0)
 
-req = urllib.request.Request(
-    webhook_url,
-    data=payload.encode(),
-    headers={'Content-Type': 'application/json'},
-    method='POST',
-)
-try:
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        if resp.status < 200 or resp.status >= 300:
-            raise RuntimeError(f'Discord webhook 실패: HTTP {resp.status}')
-    print(f'Discord 알림 전송 완료 — 전체 {total}건, 마감 이슈 {len(due_issues)}건')
-except urllib.error.HTTPError as e:
-    body = e.read().decode('utf-8', errors='replace')
-    print(f'::error::Discord 전송 실패: HTTP {e.code} {e.reason}')
-    print(f'::error::Discord 응답 본문: {body}')
-    print(f'::debug::전송한 페이로드: {payload}')
-    exit(1)
-except urllib.error.URLError as e:
-    print(f'::error::Discord 전송 실패 (네트워크): {e}')
-    exit(1)
+def send_discord(payload_dict: dict, label: str) -> None:
+    payload = json.dumps(payload_dict)
+    req = urllib.request.Request(
+        webhook_url,
+        data=payload.encode(),
+        headers={
+            'Content-Type': 'application/json',
+            'User-Agent': 'DiscordBot (https://github.com/cash-chat-mvp/cash-chat-mvp, 1.0)',
+        },
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status < 200 or resp.status >= 300:
+                raise RuntimeError(f'HTTP {resp.status}')
+        print(f'Discord 전송 완료: {label}')
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', errors='replace')
+        print(f'::error::Discord 전송 실패 [{label}]: HTTP {e.code} {e.reason}')
+        print(f'::error::Discord 응답 본문: {body}')
+        exit(1)
+    except urllib.error.URLError as e:
+        print(f'::error::Discord 전송 실패 [{label}] (네트워크): {e}')
+        exit(1)
+
+send_discord(msg1, '프로젝트 현황')
+if msg2:
+    send_discord(msg2, '마감 현황')
