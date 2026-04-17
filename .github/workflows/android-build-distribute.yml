@@ -74,7 +74,7 @@ jobs:
       - name: Discord 배포 성공 알림
         if: success()
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
@@ -115,7 +115,7 @@ jobs:
       - name: Discord 배포 실패 알림
         if: failure()
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
