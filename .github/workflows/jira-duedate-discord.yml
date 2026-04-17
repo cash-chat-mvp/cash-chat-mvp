@@ -1,16 +1,16 @@
-name: Jira Due Date 알림
+name: Jira 프로젝트 현황 & 마감 알림
 
 on:
   schedule:
-    # 매일 한국시간 오전 9시 (UTC 0시), 평일만
-    - cron: '0 0 * * 1-5'
+    # 매일 한국시간 오전 9시 (UTC 0시)
+    - cron: '0 0 * * *'
   workflow_dispatch:
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: D-day/D-1/D-3 마감 이슈 조회 후 Discord 전송
+      - name: Jira 현황 조회 후 Discord 전송
         id: jira-check
         env:
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
@@ -23,150 +23,303 @@ jobs:
           export TODAY D1 D3
           echo "오늘: $TODAY / D-1: $D1 / D-3: $D3"
 
-          # ── Jira API 호출 (신규 엔드포인트: /search/jql) ──
-          JQL="project=CC AND duedate in ($TODAY, $D1, $D3) AND statusCategory != Done ORDER BY duedate ASC"
-
-          RESPONSE=$(curl -sS --fail-with-body \
+          # ── API 호출 1: 전체 이슈 (통계용) ──
+          ALL_RESPONSE=$(curl -sS --fail-with-body \
             -H "Authorization: Basic $JIRA_AUTH" \
             -H "Content-Type: application/json" \
-            --connect-timeout 10 \
-            --max-time 30 \
+            --connect-timeout 10 --max-time 30 \
             --get \
-            --data-urlencode "jql=$JQL" \
-            --data-urlencode "fields=summary,assignee,duedate,status,priority" \
+            --data-urlencode "jql=project=CC ORDER BY created ASC" \
+            --data-urlencode "fields=status,labels,assignee" \
+            --data-urlencode "maxResults=200" \
             "$JIRA_BASE_URL/rest/api/3/search/jql") || {
-              echo "::error::Jira API 호출 실패"
+              echo "::error::Jira 전체 조회 실패"
               exit 1
             }
 
-          echo "Jira 응답 수신 완료"
+          # ── API 호출 2: 마감 지난 이슈 + D-3 이내 이슈 (미완료만) ──
+          DUE_JQL="project=CC AND (duedate < \"$TODAY\" OR duedate in (\"$TODAY\",\"$D1\",\"$D3\")) AND statusCategory != Done ORDER BY duedate ASC"
+          DUE_RESPONSE=$(curl -sS --fail-with-body \
+            -H "Authorization: Basic $JIRA_AUTH" \
+            -H "Content-Type: application/json" \
+            --connect-timeout 10 --max-time 30 \
+            --get \
+            --data-urlencode "jql=$DUE_JQL" \
+            --data-urlencode "fields=summary,assignee,duedate,status,priority,labels" \
+            --data-urlencode "maxResults=50" \
+            "$JIRA_BASE_URL/rest/api/3/search/jql") || {
+              echo "::error::Jira 마감 조회 실패"
+              exit 1
+            }
 
-          echo "$RESPONSE" | python3 -c "
-          import sys, json, urllib.request, urllib.error, os
-          from datetime import datetime
+          printf '%s' "$ALL_RESPONSE" > /tmp/all_issues.json
+          printf '%s' "$DUE_RESPONSE" > /tmp/due_issues.json
+          echo "Jira 조회 완료"
 
-          raw = sys.stdin.read()
-          d = json.loads(raw)
+          # ── Python: 통계 집계 + Discord 페이로드 생성 ──
+          cat > /tmp/jira_notify.py << 'PYEOF'
+import json, os, urllib.request, urllib.error
 
-          if 'errorMessages' in d or 'errors' in d:
-              print('::error::Jira API 에러:', d)
-              exit(1)
+JIRA_BASE_URL = os.environ['JIRA_BASE_URL']
+TODAY         = os.environ['TODAY']
+D1            = os.environ['D1']
+D3            = os.environ['D3']
 
-          if d.get('total', 0) == 0:
-              print('마감 임박 이슈 없음 — 알림 생략')
-              exit(0)
+with open('/tmp/all_issues.json') as f:
+    all_data = json.load(f)
+with open('/tmp/due_issues.json') as f:
+    due_data = json.load(f)
 
-          TODAY = os.environ.get('TODAY', '')
-          D1 = os.environ.get('D1', '')
-          D3 = os.environ.get('D3', '')
-          JIRA_BASE_URL = os.environ.get('JIRA_BASE_URL', '')
+if 'errorMessages' in all_data or 'errorMessages' in due_data:
+    print('::error::Jira API 에러:', all_data.get('errorMessages') or due_data.get('errorMessages'))
+    exit(1)
 
-          # D-day별 색상 및 라벨
-          def get_label_and_color(duedate):
-              if duedate == TODAY:
-                  return '🔴 오늘 마감!', 15158332   # 빨간색
-              elif duedate == D1:
-                  return '🟠 내일 마감 (D-1)', 15105570  # 주황색
-              elif duedate == D3:
-                  return '🟡 3일 후 마감 (D-3)', 16776960  # 노란색
-              else:
-                  return '⏰ 마감 임박', 15548997
+# ────────────────────────────────────────────
+# 1. 전체 현황 통계
+# ────────────────────────────────────────────
+TARGET_LABELS  = ['FE', 'BE', '기획', 'infra']
+STATUS_KEYS    = ['todo', 'in_progress', 'in_review', 'done']
+STATUS_DISPLAY = {'todo': '📋 대기', 'in_progress': '🔄 진행', 'in_review': '👀 리뷰', 'done': '✅ 완료'}
 
-          # 우선순위 이모지
-          priority_emoji = {
-              'Highest': '🔴', 'High': '🟠', 'Medium': '🟡',
-              'Low': '🟢', 'Lowest': '⚪'
-          }
+status_counts = {k: 0 for k in STATUS_KEYS}
+label_stats   = {lbl: {k: 0 for k in STATUS_KEYS} for lbl in TARGET_LABELS}
+user_stats    = {}  # {'displayName': {'todo': 0, ...}}
 
-          embeds = []
-          for issue in d['issues']:
-              f = issue['fields']
-              assignee = f['assignee']['displayName'] if f.get('assignee') else '미배정'
-              status = f['status']['name'] if f.get('status') else '알 수 없음'
-              duedate = f.get('duedate', '알 수 없음')
-              priority_name = f.get('priority', {}).get('name', '') if f.get('priority') else ''
-              p_emoji = priority_emoji.get(priority_name, '⚪')
+def classify_status(fields):
+    cat_key     = fields['status']['statusCategory']['key']
+    status_name = fields['status']['name']
+    if cat_key == 'done':
+        return 'done'
+    if status_name in ('검토 중', 'In Review', 'In review'):
+        return 'in_review'
+    if cat_key == 'indeterminate':
+        return 'in_progress'
+    return 'todo'
 
-              key = issue['key']
-              url = f'{JIRA_BASE_URL}/browse/{key}'
-              label, color = get_label_and_color(duedate)
+for issue in all_data.get('issues', []):
+    skey = classify_status(issue['fields'])
+    status_counts[skey] += 1
+    for lbl in issue['fields'].get('labels', []):
+        if lbl in label_stats:
+            label_stats[lbl][skey] += 1
+    assignee = (issue['fields'].get('assignee') or {}).get('displayName', '미배정')
+    if assignee not in user_stats:
+        user_stats[assignee] = {k: 0 for k in STATUS_KEYS}
+    user_stats[assignee][skey] += 1
 
-              embeds.append({
-                  'color': color,
-                  'title': label,
-                  'url': url,
-                  'description': f'**[{key}] {f[\"summary\"]}**',
-                  'fields': [
-                      {'name': '담당자',   'value': f'\`{assignee}\`',    'inline': True},
-                      {'name': '마감일',   'value': f'\`{duedate}\`',     'inline': True},
-                      {'name': '상태',     'value': f'\`{status}\`',      'inline': True},
-                      {'name': '우선순위', 'value': f'{p_emoji} {priority_name}', 'inline': True},
-                  ],
-                  'footer': {'text': 'Cash Chat · Jira 자동 알림'},
-              })
+total      = sum(status_counts.values())
+done_count = status_counts['done']
+active     = total - done_count
+progress   = int(done_count / total * 100) if total > 0 else 0
+bar_filled = progress // 10
+prog_bar   = '█' * bar_filled + '░' * (10 - bar_filled)
 
-          # Discord embed 제한: 최대 10개
-          if len(embeds) > 10:
-              overflow = len(embeds) - 9
-              embeds = embeds[:9]
-              embeds.append({
-                  'color': 5814783,
-                  'description': f'...외 **{overflow}개** 이슈가 더 있어요. Jira에서 확인해 주세요!',
-              })
+# ── 상태별 텍스트 ──
+status_text = '  |  '.join(
+    f"{STATUS_DISPLAY[k]} **{status_counts[k]}**개"
+    for k in STATUS_KEYS
+)
 
-          # D-day별 카운트 요약
-          counts = {}
-          for issue in d['issues']:
-              dd = issue['fields'].get('duedate', '')
-              lbl, _ = get_label_and_color(dd)
-              counts[lbl] = counts.get(lbl, 0) + 1
-          summary_parts = [f'{lbl}: {cnt}개' for lbl, cnt in counts.items()]
-          summary = ' / '.join(summary_parts)
+# ── 레이블별 텍스트 ──
+label_lines = []
+for lbl in TARGET_LABELS:
+    s = label_stats[lbl]
+    if sum(s.values()) == 0:
+        continue
+    done_lbl  = s['done']
+    total_lbl = sum(s.values())
+    prog_lbl  = int(done_lbl / total_lbl * 100) if total_lbl > 0 else 0
+    parts = [f"{STATUS_DISPLAY[k]} {s[k]}" for k in STATUS_KEYS if s[k] > 0]
+    label_lines.append(f"`{lbl}` ({prog_lbl}%)  {' / '.join(parts)}")
 
-          payload = json.dumps({
-              'content': f'> 📋  **마감 임박 이슈 {d[\"total\"]}건**  ({summary})',
-              'embeds': embeds
-          })
+label_text = '\n'.join(label_lines) if label_lines else '레이블 없음'
 
-          webhook_url = os.environ.get('DISCORD_WEBHOOK', '')
-          req = urllib.request.Request(
-              webhook_url,
-              data=payload.encode(),
-              headers={'Content-Type': 'application/json'},
-              method='POST'
-          )
-          try:
-              with urllib.request.urlopen(req, timeout=10) as resp:
-                  if resp.status < 200 or resp.status >= 300:
-                      raise RuntimeError(f'Discord webhook 실패: HTTP {resp.status}')
-              print(f'Discord 알림 전송 완료 (이슈 {d[\"total\"]}건)')
-          except urllib.error.URLError as e:
-              print(f'::error::Discord 전송 실패: {e}')
-              exit(1)
-          "
+# ── 담당자별 텍스트 ──
+user_lines = []
+for name, s in sorted(user_stats.items(), key=lambda x: -sum(x[1].values())):
+    if name == '미배정' and sum(s.values()) == 0:
+        continue
+    total_usr = sum(s.values())
+    done_usr  = s['done']
+    prog_usr  = int(done_usr / total_usr * 100) if total_usr > 0 else 0
+    active_parts = [f"{STATUS_DISPLAY[k]} {s[k]}" for k in STATUS_KEYS if s[k] > 0]
+    user_lines.append(f"`{name}` ({prog_usr}%)  {' / '.join(active_parts)}")
 
-      # 위 step이 실패하면 실행됨
+user_text = '\n'.join(user_lines) if user_lines else '담당자 없음'
+
+# ── 요약 embed ──
+summary_embed = {
+    'color': 5793266,
+    'title': '📊 Cash Chat 프로젝트 현황',
+    'fields': [
+        {
+            'name': f'진척률  {progress}%  ({done_count} / {total})',
+            'value': f'`{prog_bar}`',
+            'inline': False,
+        },
+        {
+            'name': '전체 상태',
+            'value': status_text,
+            'inline': False,
+        },
+        {
+            'name': '레이블별 현황',
+            'value': label_text,
+            'inline': False,
+        },
+        {
+            'name': '담당자별 현황',
+            'value': user_text,
+            'inline': False,
+        },
+    ],
+    'footer': {'text': 'Cash Chat · Jira 자동 알림'},
+    'timestamp': f'{TODAY}T00:00:00Z',
+}
+
+# ────────────────────────────────────────────
+# 2. 마감 현황 대시보드 (담당자별 집계)
+# ────────────────────────────────────────────
+DUE_SLOTS = ['overdue', 'today', 'd1', 'd3']
+DUE_DISPLAY = {
+    'overdue': '🚨 초과',
+    'today':   '🔴 오늘',
+    'd1':      '🟠 D-1',
+    'd3':      '🟡 D-3',
+}
+
+due_issues   = due_data.get('issues', [])
+due_by_user  = {}   # {'name': {'overdue': 0, 'today': 0, 'd1': 0, 'd3': 0}}
+total_by_slot = {s: 0 for s in DUE_SLOTS}
+
+for issue in due_issues:
+    f        = issue['fields']
+    assignee = (f.get('assignee') or {}).get('displayName', '미배정')
+    duedate  = f.get('duedate', '')
+
+    if duedate < TODAY:
+        slot = 'overdue'
+    elif duedate == TODAY:
+        slot = 'today'
+    elif duedate == D1:
+        slot = 'd1'
+    else:
+        slot = 'd3'
+
+    total_by_slot[slot] += 1
+    if assignee not in due_by_user:
+        due_by_user[assignee] = {s: 0 for s in DUE_SLOTS}
+    due_by_user[assignee][slot] += 1
+
+# ── 마감 현황 embed ──
+if due_by_user:
+    # 헤더: 전체 집계 한 줄
+    header_parts = [
+        f"{DUE_DISPLAY[s]} **{total_by_slot[s]}**건"
+        for s in DUE_SLOTS if total_by_slot[s] > 0
+    ]
+    header_line = '  |  '.join(header_parts)
+
+    # 담당자별 행 (초과 많은 순 → 오늘 순으로 정렬)
+    def sort_key(item):
+        s = item[1]
+        return -(s['overdue'] * 1000 + s['today'] * 100 + s['d1'] * 10 + s['d3'])
+
+    user_due_lines = []
+    for name, s in sorted(due_by_user.items(), key=sort_key):
+        parts = [
+            f"{DUE_DISPLAY[slot]} {s[slot]}건"
+            for slot in DUE_SLOTS if s[slot] > 0
+        ]
+        user_due_lines.append(f"`{name}`  {'  |  '.join(parts)}")
+
+    due_embed = {
+        'color': 15158332 if total_by_slot['overdue'] > 0 else 15105570,
+        'title': '⏰ 마감 현황',
+        'fields': [
+            {
+                'name': '전체',
+                'value': header_line,
+                'inline': False,
+            },
+            {
+                'name': '담당자별',
+                'value': '\n'.join(user_due_lines),
+                'inline': False,
+            },
+        ],
+        'footer': {'text': 'Cash Chat · Jira 자동 알림'},
+    }
+    all_embeds = [summary_embed, due_embed]
+else:
+    all_embeds = [summary_embed]
+
+# ────────────────────────────────────────────
+# 3. content 메시지
+# ────────────────────────────────────────────
+overdue_count = total_by_slot['overdue']
+upcoming      = len(due_issues) - overdue_count
+
+parts = []
+if overdue_count:
+    parts.append(f'🚨 **마감 지난 이슈 {overdue_count}건**')
+if upcoming:
+    parts.append(f'⏰ **마감 임박 {upcoming}건**')
+content = '> ' + '  |  '.join(parts) if parts else '> ✅ 마감 이슈 없음'
+
+# ────────────────────────────────────────────
+# 4. Discord 전송
+# ────────────────────────────────────────────
+payload    = json.dumps({'content': content, 'embeds': all_embeds})
+
+webhook_url = os.environ.get('DISCORD_WEBHOOK', '')
+if not webhook_url:
+    print('DISCORD_WEBHOOK 없음 — 알림 건너뜀')
+    exit(0)
+
+req = urllib.request.Request(
+    webhook_url,
+    data=payload.encode(),
+    headers={'Content-Type': 'application/json'},
+    method='POST',
+)
+try:
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        if resp.status < 200 or resp.status >= 300:
+            raise RuntimeError(f'Discord webhook 실패: HTTP {resp.status}')
+    print(f'Discord 알림 전송 완료 — 전체 {total}건, 마감 이슈 {len(due_issues)}건')
+except urllib.error.URLError as e:
+    print(f'::error::Discord 전송 실패: {e}')
+    exit(1)
+PYEOF
+
+          python3 /tmp/jira_notify.py
+
       - name: 워크플로우 실패 알림
         if: failure()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ACTOR: ${{ github.actor }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
             echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
             exit 0
           fi
+          PAYLOAD=$(jq -n \
+            --arg actor "$ACTOR" \
+            --arg run_url "$RUN_URL" \
+            '{embeds: [{
+              color: 15158332,
+              title: "🚨  워크플로우 실패",
+              description: "**Jira 프로젝트 현황 알림 워크플로우가 실패했어요**",
+              fields: [
+                {name: "워크플로우", value: "`jira-duedate-discord.yml`", inline: true},
+                {name: "실행자",     value: ("`" + $actor + "`"),         inline: true},
+                {name: "로그 확인",  value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat · GitHub Actions"}
+            }]}')
           curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d '{
-              "embeds": [{
-                "color": 15158332,
-                "title": "🚨  워크플로우 실패",
-                "description": "**Jira Due Date 알림 워크플로우가 실패했어요**",
-                "fields": [
-                  {"name": "워크플로우", "value": "`jira-duedate-discord.yml`", "inline": true},
-                  {"name": "실행자", "value": "`${{ github.actor }}`", "inline": true},
-                  {"name": "로그 확인", "value": "[Actions 로그 바로가기](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
-                ],
-                "footer": {"text": "Cash Chat · GitHub Actions"}
-              }]
-            }'
+            -d "$PAYLOAD"
