@@ -26,3 +26,25 @@ mkdir -p /home/ubuntu/cash-chat
 ```
 
 Docker and Docker Compose must already be installed.
+
+## Local Frontend Test Compose (Backend + H2)
+
+For local frontend integration testing, use:
+
+- `infra/deploy/backend/docker-compose.frontend-local.yml`
+
+Run:
+
+```bash
+cd infra/deploy/backend
+cp .env.example .env
+docker compose -f docker-compose.frontend-local.yml up -d
+```
+
+Notes:
+
+- This compose builds backend image locally from `apps/backend/Dockerfile`.
+- This compose runs backend with `SPRING_PROFILES_ACTIVE=dev`.
+- H2 is embedded in the backend process (`jdbc:h2:mem:...`), so there is no separate DB container.
+- API base URL for frontend test is `http://localhost:8080`.
+- H2 console is available at `http://localhost:8080/h2-console`.

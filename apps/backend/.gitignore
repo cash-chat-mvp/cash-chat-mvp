@@ -43,4 +43,4 @@ out/
 .env
 
 ### Claude ###
-.claude/worktrees
+.claude

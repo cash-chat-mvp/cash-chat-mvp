@@ -41,6 +41,7 @@ dependencies {
 
     implementation("org.springframework.ai:spring-ai-starter-model-openai")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.16")
 
     // test's implementation
     testImplementation("org.springframework.boot:spring-boot-starter-test")

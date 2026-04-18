@@ -10,7 +10,6 @@ on:
 
 jobs:
   build-and-distribute:
-    if: github.repository == 'cash-chat-mvp/cash-chat-mvp'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -54,7 +53,7 @@ jobs:
       - name: Write Firebase Service Account
         env:
           FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-        run: printenv FIREBASE_SA > service-account.json
+        run: printf '%s' "$FIREBASE_SA" > service-account.json
 
       - name: Make gradlew executable
         run: chmod +x gradlew
@@ -75,21 +74,27 @@ jobs:
       - name: Discord 배포 성공 알림
         if: success()
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
           TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
             echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
             exit 0
           fi
+          SHORT_SHA="${SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
           PAYLOAD=$(jq -n \
             --arg msg "$COMMIT_MESSAGE" \
             --arg branch "$BRANCH" \
             --arg actor "$ACTOR" \
             --arg ts "$TIMESTAMP" \
+            --arg sha "$SHORT_SHA" \
+            --arg commit_url "$COMMIT_URL" \
             '{embeds: [{
               color: 5763719,
               title: "✅  Android 배포 완료",
@@ -97,6 +102,7 @@ jobs:
               fields: [
                 {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
                 {name: "배포자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
                 {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false}
               ],
               footer: {text: "Cash Chat · Android Build"},
@@ -109,21 +115,27 @@ jobs:
       - name: Discord 배포 실패 알림
         if: failure()
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           BRANCH: ${{ github.ref_name }}
           ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
             echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
             exit 0
           fi
+          SHORT_SHA="${SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
           PAYLOAD=$(jq -n \
             --arg msg "$COMMIT_MESSAGE" \
             --arg branch "$BRANCH" \
             --arg actor "$ACTOR" \
             --arg run_url "$RUN_URL" \
+            --arg sha "$SHORT_SHA" \
+            --arg commit_url "$COMMIT_URL" \
             '{embeds: [{
               color: 15548997,
               title: "🚨  Android 빌드/배포 실패",
@@ -131,6 +143,7 @@ jobs:
               fields: [
                 {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
                 {name: "실패자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
                 {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false},
                 {name: "로그 확인", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
               ],

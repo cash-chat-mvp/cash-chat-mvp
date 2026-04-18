@@ -62,6 +62,11 @@ Useful outputs:
 - `instance_private_ip`
 - `instance_id`
 
+Nginx reverse proxy + SSL:
+- For CC-146 (`Nginx + Let's Encrypt`), use deployment assets in
+  `infra/deploy/nginx/README.md`.
+- Ensure `open_tcp_ports` includes `80` and `443` before provisioning.
+
 References:
 - OCI Compute documentation
   https://docs.oracle.com/iaas/Content/Compute/home.htm
