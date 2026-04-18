@@ -1,0 +1,90 @@
+name: Deploy API Docs to GitHub Pages
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'apps/backend/src/**'
+      - 'apps/backend/build.gradle.kts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  generate-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build backend
+        working-directory: apps/backend
+        run: |
+          chmod +x gradlew
+          ./gradlew bootJar
+
+      - name: Start app and extract OpenAPI spec
+        working-directory: apps/backend
+        env:
+          GEMINI_API_KEY: dummy-key-for-docs-generation
+        run: |
+          java -jar build/libs/*.jar > app.log 2>&1 &
+          APP_PID=$!
+
+          echo "Waiting for app to start..."
+          for i in $(seq 1 60); do
+            if ! kill -0 $APP_PID 2>/dev/null; then
+              echo "App process died unexpectedly"
+              tail -n 200 app.log
+              exit 1
+            fi
+            if curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/v3/api-docs | grep -q "200"; then
+              echo "App is ready!"
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "App failed to start within 60 seconds"
+              tail -n 200 app.log
+              kill $APP_PID 2>/dev/null
+              exit 1
+            fi
+            sleep 1
+          done
+
+          curl -s -f http://localhost:8080/v3/api-docs -o openapi.json
+          echo "OpenAPI spec generated successfully"
+
+          kill $APP_PID 2>/dev/null
+          wait $APP_PID 2>/dev/null || true
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p _site
+          cp .github/pages/index.html _site/
+          cp apps/backend/openapi.json _site/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -3,8 +3,10 @@ name: Discord 알림
 on:
   pull_request_target:
     types: [opened, reopened, closed]
-  push:
-    branches: [main]
+  # Android Build Check 결과 알림 (workflow_run은 base repo 시크릿 접근 가능)
+  workflow_run:
+    workflows: ["Android Build Check"]
+    types: [completed]
 
 jobs:
   notify:
@@ -21,81 +23,154 @@ jobs:
         if: |
           github.event_name == 'pull_request_target' &&
           (github.event.action == 'opened' || github.event.action == 'reopened')
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_USER: ${{ github.event.pull_request.user.login }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          ADDITIONS: ${{ github.event.pull_request.additions }}
+          DELETIONS: ${{ github.event.pull_request.deletions }}
+          COMMITS: ${{ github.event.pull_request.commits }}
+          CREATED_AT: ${{ github.event.pull_request.created_at }}
+          ISSUE_KEY: ${{ steps.extract.outputs.issue_key }}
         run: |
-          JIRA_URL="https://moneyfactoryslave.atlassian.net/browse/${{ steps.extract.outputs.issue_key }}"
-          JIRA_FIELD="${{ steps.extract.outputs.issue_key != '' && format('[{0}]({1})', steps.extract.outputs.issue_key, 'https://moneyfactoryslave.atlassian.net/browse/' ) || '없음' }}"
-
-          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
+          JIRA_URL="https://moneyfactoryslave.atlassian.net/browse/${ISSUE_KEY}"
+          JIRA_VALUE=$([ -n "$ISSUE_KEY" ] && echo "[${ISSUE_KEY}](${JIRA_URL})" || echo "없음")
+          PAYLOAD=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg user "$PR_USER" \
+            --arg head "$HEAD_REF" \
+            --arg base "$BASE_REF" \
+            --arg adds "$ADDITIONS" \
+            --arg dels "$DELETIONS" \
+            --arg commits "$COMMITS" \
+            --arg ts "$CREATED_AT" \
+            --arg jira "$JIRA_VALUE" \
+            '{embeds: [{
+              color: 5793266,
+              author: {
+                name: "새 PR 오픈",
+                icon_url: ("https://github.com/" + $user + ".png?size=32")
+              },
+              title: $title,
+              url: $url,
+              fields: [
+                {name: "작성자", value: ("`" + $user + "`"), inline: true},
+                {name: "Jira 티켓", value: $jira, inline: true},
+                {name: "브랜치", value: ("`" + $head + "` → `" + $base + "`"), inline: false},
+                {name: "변경 파일", value: ("`+" + $adds + "` / `-" + $dels + "`"), inline: true},
+                {name: "커밋 수", value: ("`" + $commits + "` commits"), inline: true}
+              ],
+              footer: {text: "Cash Chat • GitHub"},
+              timestamp: $ts
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d '{
-              "embeds": [{
-                "color": 5793266,
-                "author": {
-                  "name": "새 PR 오픈",
-                  "icon_url": "https://github.com/${{ github.event.pull_request.user.login }}.png?size=32"
-                },
-                "title": "${{ github.event.pull_request.title }}",
-                "url": "${{ github.event.pull_request.html_url }}",
-                "fields": [
-                  {"name": "작성자", "value": "`${{ github.event.pull_request.user.login }}`", "inline": true},
-                  {"name": "Jira 티켓", "value": "[`${{ steps.extract.outputs.issue_key }}`](https://moneyfactoryslave.atlassian.net/browse/${{ steps.extract.outputs.issue_key }})", "inline": true},
-                  {"name": "브랜치", "value": "`${{ github.head_ref }}` → `${{ github.base_ref }}`", "inline": false},
-                  {"name": "변경 파일", "value": "`+${{ github.event.pull_request.additions }}` / `-${{ github.event.pull_request.deletions }}`", "inline": true},
-                  {"name": "커밋 수", "value": "`${{ github.event.pull_request.commits }}` commits", "inline": true}
-                ],
-                "footer": {"text": "Cash Chat • GitHub"},
-                "timestamp": "${{ github.event.pull_request.created_at }}"
-              }]
-            }'
+            -d "$PAYLOAD"
 
       - name: PR 머지 알림
         if: |
           github.event_name == 'pull_request_target' &&
           github.event.action == 'closed' &&
           github.event.pull_request.merged == true
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+          ADDITIONS: ${{ github.event.pull_request.additions }}
+          DELETIONS: ${{ github.event.pull_request.deletions }}
+          COMMITS: ${{ github.event.pull_request.commits }}
+          MERGED_AT: ${{ github.event.pull_request.merged_at }}
+          ISSUE_KEY: ${{ steps.extract.outputs.issue_key }}
         run: |
-          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
+          JIRA_URL="https://moneyfactoryslave.atlassian.net/browse/${ISSUE_KEY}"
+          JIRA_VALUE=$([ -n "$ISSUE_KEY" ] && echo "[${ISSUE_KEY}](${JIRA_URL})" || echo "없음")
+          PAYLOAD=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg merger "$MERGED_BY" \
+            --arg head "$HEAD_REF" \
+            --arg base "$BASE_REF" \
+            --arg adds "$ADDITIONS" \
+            --arg dels "$DELETIONS" \
+            --arg commits "$COMMITS" \
+            --arg ts "$MERGED_AT" \
+            --arg jira "$JIRA_VALUE" \
+            '{embeds: [{
+              color: 5763719,
+              author: {
+                name: "PR 머지 완료 ✅",
+                icon_url: ("https://github.com/" + $merger + ".png?size=32")
+              },
+              title: $title,
+              url: $url,
+              fields: [
+                {name: "머지한 사람", value: ("`" + $merger + "`"), inline: true},
+                {name: "Jira 티켓", value: $jira, inline: true},
+                {name: "브랜치", value: ("`" + $head + "` → `" + $base + "`"), inline: false},
+                {name: "총 변경", value: ("`+" + $adds + "` / `-" + $dels + "`"), inline: true},
+                {name: "커밋 수", value: ("`" + $commits + "` commits"), inline: true}
+              ],
+              footer: {text: "Cash Chat • GitHub"},
+              timestamp: $ts
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d '{
-              "embeds": [{
-                "color": 5763719,
-                "author": {
-                  "name": "PR 머지 완료 ✅",
-                  "icon_url": "https://github.com/${{ github.event.pull_request.merged_by.login }}.png?size=32"
-                },
-                "title": "${{ github.event.pull_request.title }}",
-                "url": "${{ github.event.pull_request.html_url }}",
-                "fields": [
-                  {"name": "머지한 사람", "value": "`${{ github.event.pull_request.merged_by.login }}`", "inline": true},
-                  {"name": "Jira 티켓", "value": "[`${{ steps.extract.outputs.issue_key }}`](https://moneyfactoryslave.atlassian.net/browse/${{ steps.extract.outputs.issue_key }})", "inline": true},
-                  {"name": "브랜치", "value": "`${{ github.head_ref }}` → `${{ github.base_ref }}`", "inline": false},
-                  {"name": "총 변경", "value": "`+${{ github.event.pull_request.additions }}` / `-${{ github.event.pull_request.deletions }}`", "inline": true},
-                  {"name": "커밋 수", "value": "`${{ github.event.pull_request.commits }}` commits", "inline": true}
-                ],
-                "footer": {"text": "Cash Chat • GitHub"},
-                "timestamp": "${{ github.event.pull_request.merged_at }}"
-              }]
-            }'
+            -d "$PAYLOAD"
 
-      - name: main 배포 알림
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Android 빌드 체크 결과 알림
+        if: github.event_name == 'workflow_run'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          COMMIT_MSG: ${{ github.event.workflow_run.head_commit.message }}
+          ACTOR: ${{ github.event.workflow_run.actor.login }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: |
-          curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
+          if [ "$CONCLUSION" = "success" ]; then
+            COLOR=5763719
+            TITLE="✅  Android 빌드 체크 통과"
+          else
+            COLOR=15548997
+            TITLE="🚨  Android 빌드 체크 실패"
+          fi
+          PAYLOAD=$(jq -n \
+            --arg title "$TITLE" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg run_url "$RUN_URL" \
+            --arg commit "$COMMIT_MSG" \
+            --argjson color "$COLOR" \
+            '{embeds: [{
+              color: $color,
+              title: $title,
+              fields: [
+                {name: "브랜치", value: ("`" + $branch + "` → `dev`"), inline: true},
+                {name: "작성자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋 메시지", value: ("`" + $commit + "`"), inline: false},
+                {name: "로그 확인", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat · Android Build Check"}
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d '{
-              "embeds": [{
-                "color": 16763904,
-                "author": {
-                  "name": "main 브랜치 업데이트 🚀",
-                  "icon_url": "https://github.com/${{ github.actor }}.png?size=32"
-                },
-                "title": "${{ github.event.head_commit.message }}",
-                "url": "https://github.com/${{ github.repository }}/commit/${{ github.sha }}",
-                "fields": [
-                  {"name": "푸시한 사람", "value": "`${{ github.actor }}`", "inline": true},
-                  {"name": "커밋", "value": "[`${{ github.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})", "inline": true}
-                ],
-                "footer": {"text": "Cash Chat • GitHub"},
-                "timestamp": "${{ github.event.head_commit.timestamp }}"
-              }]
-            }'
+            -d "$PAYLOAD"

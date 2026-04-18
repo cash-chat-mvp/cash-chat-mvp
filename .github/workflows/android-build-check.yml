@@ -8,7 +8,6 @@ on:
 
 jobs:
   build-check:
-    if: github.repository == 'cash-chat-mvp/cash-chat-mvp'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,8 +33,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # pull_request 이벤트에서는 시크릿 접근이 제한될 수 있음
-      # 비어있으면 더미 파일로 빌드 검증만 수행
+      # pull_request 이벤트에서는 Fork PR의 경우 시크릿 접근 불가
+      # 시크릿이 없으면 더미 파일로 빌드 검증만 수행
       - name: Write google-services.json
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -62,6 +61,17 @@ jobs:
                 "api_key": [
                   { "current_key": "DUMMY_KEY_FOR_BUILD_CHECK" }
                 ]
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000001",
+                  "android_client_info": {
+                    "package_name": "com.nomadclub.cashchat.dev"
+                  }
+                },
+                "api_key": [
+                  { "current_key": "DUMMY_KEY_FOR_BUILD_CHECK" }
+                ]
               }
             ],
             "configuration_version": "1"
@@ -74,71 +84,3 @@ jobs:
 
       - name: Build Debug APK (검증용)
         run: ./gradlew :app:assembleDebug
-
-      # Discord 알림 — 시크릿이 없으면 건너뜀
-      - name: 빌드 성공 Discord 알림
-        if: success()
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          HEAD_REF: ${{ github.head_ref }}
-          ACTOR: ${{ github.actor }}
-        run: |
-          if [ -z "$DISCORD_WEBHOOK" ]; then
-            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
-            exit 0
-          fi
-          PAYLOAD=$(jq -n \
-            --arg title "$PR_TITLE" \
-            --arg url "$PR_URL" \
-            --arg branch "$HEAD_REF" \
-            --arg actor "$ACTOR" \
-            '{embeds: [{
-              color: 5763719,
-              title: "✅  PR 빌드 검증 통과",
-              description: ("**[" + $title + "](" + $url + ")**"),
-              fields: [
-                {name: "브랜치", value: ("`" + $branch + "` → `dev`"), inline: true},
-                {name: "작성자", value: ("`" + $actor + "`"), inline: true}
-              ],
-              footer: {text: "Cash Chat · Android Build Check"}
-            }]}')
-          curl -sS -X POST "$DISCORD_WEBHOOK" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
-
-      - name: 빌드 실패 Discord 알림
-        if: failure()
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          HEAD_REF: ${{ github.head_ref }}
-          ACTOR: ${{ github.actor }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          if [ -z "$DISCORD_WEBHOOK" ]; then
-            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
-            exit 0
-          fi
-          PAYLOAD=$(jq -n \
-            --arg title "$PR_TITLE" \
-            --arg url "$PR_URL" \
-            --arg branch "$HEAD_REF" \
-            --arg actor "$ACTOR" \
-            --arg run_url "$RUN_URL" \
-            '{embeds: [{
-              color: 15548997,
-              title: "🚨  PR 빌드 검증 실패",
-              description: ("**[" + $title + "](" + $url + ")**"),
-              fields: [
-                {name: "브랜치", value: ("`" + $branch + "` → `dev`"), inline: true},
-                {name: "작성자", value: ("`" + $actor + "`"), inline: true},
-                {name: "로그 확인", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
-              ],
-              footer: {text: "Cash Chat · Android Build Check"}
-            }]}')
-          curl -sS -X POST "$DISCORD_WEBHOOK" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD"
