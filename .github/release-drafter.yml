@@ -1,0 +1,54 @@
+name-template: '$RESOLVED_VERSION'
+tag-template: '$RESOLVED_VERSION'
+
+categories:
+  - title: '🚀 새 기능'
+    labels:
+      - 'feature'
+      - 'feat'
+  - title: '🐛 버그 수정'
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+  - title: '♻️ 리팩토링'
+    labels:
+      - 'refactor'
+  - title: '🏗️ 인프라 / CI'
+    labels:
+      - 'infra'
+      - 'ci'
+      - 'chore'
+  - title: '📝 문서'
+    labels:
+      - 'docs'
+      - 'documentation'
+
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels:
+      - 'major'
+  minor:
+    labels:
+      - 'feature'
+      - 'feat'
+  patch:
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+      - 'refactor'
+      - 'chore'
+      - 'docs'
+  default: patch
+
+template: |
+  ## 변경 사항
+
+  $CHANGES
+
+  ---
+  **Full Changelog**: $PREVIOUS_TAG...`$RESOLVED_VERSION`
