@@ -466,20 +466,37 @@ fun ChatScreen(
                             onWatchAd = {
                                 if (activity != null && rewardedAdManager.isReady()) {
                                     // 실제 AdMob 보상형 광고 노출
+                                    // aiResponseAttached: onRewarded/onDismissed 둘 다 올 수 있으므로 중복 방지
+                                    var aiResponseAttached = false
                                     rewardedAdManager.show(
                                         activity = activity,
                                         onRewarded = { _ ->
                                             addPoints(30)
                                             rewardAdCount += 1
+                                            // onDismissed가 오지 않는 엣지케이스 대비
+                                            if (!aiResponseAttached) {
+                                                aiResponseAttached = true
+                                                scope.launch {
+                                                    delay(300)
+                                                    setMessages(messages + ChatMessage.Text(
+                                                        id = "${System.currentTimeMillis()}-ai",
+                                                        text = pendingAIResponse,
+                                                        isUser = false
+                                                    ))
+                                                }
+                                            }
                                         },
                                         onDismissed = {
-                                            scope.launch {
-                                                delay(300)
-                                                setMessages(messages + ChatMessage.Text(
-                                                    id = "${System.currentTimeMillis()}-ai",
-                                                    text = pendingAIResponse,
-                                                    isUser = false
-                                                ))
+                                            if (!aiResponseAttached) {
+                                                aiResponseAttached = true
+                                                scope.launch {
+                                                    delay(300)
+                                                    setMessages(messages + ChatMessage.Text(
+                                                        id = "${System.currentTimeMillis()}-ai",
+                                                        text = pendingAIResponse,
+                                                        isUser = false
+                                                    ))
+                                                }
                                             }
                                         }
                                     )
