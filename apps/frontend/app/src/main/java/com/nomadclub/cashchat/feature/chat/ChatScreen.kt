@@ -76,8 +76,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.viewinterop.AndroidView
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.nomadclub.cashchat.ads.RewardedAdManager
+import com.nomadclub.cashchat.config.AppConfig
+import org.koin.compose.koinInject
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -159,6 +167,15 @@ fun ChatScreen(
     onNavigateTab: (String) -> Unit,
     incrementMessageCount: () -> Unit
 ) {
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    val rewardedAdManager = koinInject<RewardedAdManager>()
+    val appConfig = koinInject<AppConfig>()
+
+    // 화면 진입 시 보상형 광고 사전 로드
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        rewardedAdManager.preload(context)
+    }
     val welcomeMessage = remember {
         ChatMessage.Text(
             id = "1",
@@ -447,8 +464,31 @@ fun ChatScreen(
                         is ChatMessage.InlineAd -> InlineAdCard(ad = message.ad)
                         is ChatMessage.RewardPrompt -> RewardPromptCard(
                             onWatchAd = {
-                                currentRewardAd = rewardAds[rewardAdCount % rewardAds.size]
-                                showRewardAdModal = true
+                                if (activity != null && rewardedAdManager.isReady()) {
+                                    // 실제 AdMob 보상형 광고 노출
+                                    rewardedAdManager.show(
+                                        activity = activity,
+                                        onRewarded = { _ ->
+                                            addPoints(30)
+                                            rewardAdCount += 1
+                                        },
+                                        onDismissed = {
+                                            scope.launch {
+                                                delay(300)
+                                                setMessages(messages + ChatMessage.Text(
+                                                    id = "${System.currentTimeMillis()}-ai",
+                                                    text = pendingAIResponse,
+                                                    isUser = false
+                                                ))
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    // 광고 미준비 시 mock 모달 폴백 + 백그라운드 사전 로드
+                                    rewardedAdManager.preload(context)
+                                    currentRewardAd = rewardAds[rewardAdCount % rewardAds.size]
+                                    showRewardAdModal = true
+                                }
                             }
                         )
                     }
@@ -457,6 +497,9 @@ fun ChatScreen(
                     item { LoadingBubble() }
                 }
             }
+
+            // CC-168: 배너 광고 슬롯 (메시지 목록과 입력창 사이 고정)
+            BannerAdView(adUnitId = appConfig.admobBannerAdUnitId)
 
             // 하단 입력 영역
             Row(
@@ -1221,6 +1264,26 @@ private fun RewardAdModal(
             }
         }
     }
+}
+
+/**
+ * CC-168: AdMob 배너 광고 슬롯.
+ * AndroidView로 AdView를 래핑하여 Compose 레이아웃에 삽입.
+ */
+@Composable
+private fun BannerAdView(adUnitId: String) {
+    AndroidView(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White),
+        factory = { context ->
+            AdView(context).apply {
+                setAdSize(AdSize.BANNER)
+                this.adUnitId = adUnitId
+                loadAd(AdRequest.Builder().build())
+            }
+        }
+    )
 }
 
 /** 사용자 메시지 키워드에 맞는 광고를 adDatabase에서 찾아 반환. 없으면 defaultAd */
