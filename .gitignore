@@ -43,3 +43,6 @@ infra/deploy/backend/.deploy.env
 
 # Local Gradle cache used in this workspace
 .gradle-local/
+
+# Local git worktrees
+.worktrees/
