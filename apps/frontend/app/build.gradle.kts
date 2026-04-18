@@ -39,8 +39,10 @@ android {
         applicationId = "com.nomadclub.cashchat"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // CI: VERSION_CODE=github.run_number, VERSION_NAME=브랜치에서 추출 (release-fe/1.2.0 → 1.2.0)
+        // 로컬: 환경변수 없으면 fallback 값 사용
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = System.getenv("VERSION_NAME") ?: "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
