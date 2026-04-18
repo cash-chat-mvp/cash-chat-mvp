@@ -15,6 +15,9 @@ spring:
     url: jdbc:h2:mem:test
     username: sa
 
+server:
+  forward-headers-strategy: framework
+
 # O-Auth (Open Authorization)
 oauth:
   registration:
