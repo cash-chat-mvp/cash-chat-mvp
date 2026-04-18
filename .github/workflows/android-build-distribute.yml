@@ -63,14 +63,20 @@ jobs:
           default_bump: patch
           tag_prefix: v
 
-      # versionName: 1.0.1 형태 (v 제거), versionCode: run_number
+      # versionName: 1.0.1 형태 (v 제거)
+      # versionCode: major*10000 + minor*100 + patch (단조 증가 보장, 리셋 위험 없음)
       - name: Set version outputs
         id: ver
         run: |
-          echo "name=${{ steps.version.outputs.new_version }}" >> $GITHUB_OUTPUT
-          echo "code=${{ github.run_number }}" >> $GITHUB_OUTPUT
+          VERSION="${{ steps.version.outputs.new_version }}"
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
+          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          VERSION_CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
+          echo "name=$VERSION" >> $GITHUB_OUTPUT
+          echo "code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "tag=${{ steps.version.outputs.new_tag }}" >> $GITHUB_OUTPUT
-          echo "✅ versionName=${{ steps.version.outputs.new_version }} / versionCode=${{ github.run_number }}"
+          echo "✅ versionName=$VERSION / versionCode=$VERSION_CODE"
 
       - name: Make gradlew executable
         run: chmod +x gradlew
@@ -94,9 +100,14 @@ jobs:
       - name: Find APK path
         id: apk
         run: |
-          APK=$(find app/build/outputs/apk/dev/release -name "*.apk" | head -1)
-          echo "path=$APK" >> $GITHUB_OUTPUT
-          echo "name=$(basename $APK)" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/dev/release -name "*.apk" -print -quit)
+          if [ -z "$APK" ] || [ ! -f "$APK" ]; then
+            echo "::error::APK를 찾지 못했습니다: app/build/outputs/apk/dev/release"
+            exit 1
+          fi
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$APK")" >> "$GITHUB_OUTPUT"
 
       - name: GitHub Release 생성 및 APK 업로드
         uses: softprops/action-gh-release@v2
