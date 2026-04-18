@@ -63,6 +63,7 @@ dependencies {
 
     // Mockito-Kotlin
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
+    testImplementation("io.projectreactor:reactor-test")
 
     // run-time only
     runtimeOnly("com.h2database:h2")
