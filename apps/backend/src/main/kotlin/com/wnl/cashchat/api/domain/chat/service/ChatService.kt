@@ -11,7 +11,11 @@ import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import reactor.core.publisher.Flux
+import reactor.core.publisher.SignalType
 
+/**
+ * Coordinates persistence and provider streaming for chat conversations.
+ */
 @Service
 class ChatService(
     private val conversationRepository: ConversationRepository,
@@ -19,58 +23,71 @@ class ChatService(
     private val llmProvider: LlmProvider,
 ) {
 
+    /**
+     * Streams an assistant response while persisting the user input and final assistant state.
+     */
     @Transactional
-    fun stream(userId: Long, conversationId: Long, content: String): Flux<String> {
-        val conversation = conversationRepository.findById(conversationId)
-            .orElseThrow { IllegalArgumentException("Conversation not found") }
+    fun stream(userId: Long, conversationId: Long, content: String): Flux<String> =
+        Flux.defer {
+            val conversation = conversationRepository.findById(conversationId)
+                .orElseThrow { IllegalArgumentException("Conversation not found") }
 
-        require(conversation.user.id == userId) { "Conversation does not belong to user" }
+            require(conversation.user.id == userId) { "Conversation does not belong to user" }
 
-        val userMessage = chatMessageRepository.save(
-            ChatMessage(
-                conversation = conversation,
-                role = MessageRole.USER,
-                content = content,
-                status = MessageStatus.COMPLETED
+            val userMessage = chatMessageRepository.save(
+                ChatMessage(
+                    conversation = conversation,
+                    role = MessageRole.USER,
+                    content = content,
+                    status = MessageStatus.COMPLETED
+                )
             )
-        )
 
-        val history = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
-            .ifEmpty { listOf(userMessage) }
+            val history = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
+            val providerMessages = history
+                .filter { it.status == MessageStatus.COMPLETED && it.id != userMessage.id }
+                .map { it.toProviderMessage() } + userMessage.toProviderMessage()
 
-        val providerMessages = history.map {
-            LlmMessage(
-                role = when (it.role) {
-                    MessageRole.SYSTEM -> LlmMessageRole.SYSTEM
-                    MessageRole.USER -> LlmMessageRole.USER
-                    MessageRole.ASSISTANT -> LlmMessageRole.ASSISTANT
-                },
-                content = it.content
+            val assistantMessage = chatMessageRepository.save(
+                ChatMessage(
+                    conversation = conversation,
+                    role = MessageRole.ASSISTANT,
+                    content = "",
+                    status = MessageStatus.STREAMING
+                )
             )
+
+            val buffer = StringBuilder()
+
+            llmProvider.stream(providerMessages)
+                .doOnNext { chunk -> buffer.append(chunk) }
+                .doFinally { signalType -> finalizeAssistantMessage(signalType, assistantMessage, buffer) }
         }
 
-        val assistantMessage = chatMessageRepository.save(
-            ChatMessage(
-                conversation = conversation,
-                role = MessageRole.ASSISTANT,
-                content = "",
-                status = MessageStatus.STREAMING
-            )
-        )
+    private fun finalizeAssistantMessage(
+        signalType: SignalType,
+        assistantMessage: ChatMessage,
+        buffer: StringBuilder,
+    ) {
+        val status = when (signalType) {
+            SignalType.ON_COMPLETE -> MessageStatus.COMPLETED
+            SignalType.ON_ERROR -> MessageStatus.FAILED
+            SignalType.CANCEL -> if (buffer.isNotEmpty()) MessageStatus.COMPLETED else MessageStatus.FAILED
+            else -> return
+        }
 
-        val buffer = StringBuilder()
-
-        return llmProvider.stream(providerMessages)
-            .doOnNext { chunk -> buffer.append(chunk) }
-            .doOnComplete {
-                assistantMessage.content = buffer.toString()
-                assistantMessage.status = MessageStatus.COMPLETED
-                chatMessageRepository.save(assistantMessage)
-            }
-            .doOnError {
-                assistantMessage.content = buffer.toString()
-                assistantMessage.status = MessageStatus.FAILED
-                chatMessageRepository.save(assistantMessage)
-            }
+        assistantMessage.content = buffer.toString()
+        assistantMessage.status = status
+        chatMessageRepository.save(assistantMessage)
     }
+
+    private fun ChatMessage.toProviderMessage(): LlmMessage =
+        LlmMessage(
+            role = when (role) {
+                MessageRole.SYSTEM -> LlmMessageRole.SYSTEM
+                MessageRole.USER -> LlmMessageRole.USER
+                MessageRole.ASSISTANT -> LlmMessageRole.ASSISTANT
+            },
+            content = content
+        )
 }

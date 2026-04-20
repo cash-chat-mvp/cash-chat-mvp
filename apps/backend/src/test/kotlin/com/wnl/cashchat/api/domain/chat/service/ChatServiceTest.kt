@@ -12,68 +12,184 @@ import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
-import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
-import org.junit.jupiter.api.extension.ExtendWith
-import org.mockito.InjectMocks
-import org.mockito.Mock
-import org.mockito.junit.jupiter.MockitoExtension
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import reactor.core.publisher.Flux
 import reactor.test.StepVerifier
 import java.util.Optional
 
-@ExtendWith(MockitoExtension::class)
-class ChatServiceTest {
+class ChatServiceTest : FunSpec() {
+    private lateinit var conversationRepository: ConversationRepository
+    private lateinit var chatMessageRepository: ChatMessageRepository
+    private lateinit var llmProvider: LlmProvider
+    private lateinit var chatService: ChatService
 
-    @Mock
-    lateinit var conversationRepository: ConversationRepository
+    init {
+        beforeTest {
+            conversationRepository = mock()
+            chatMessageRepository = mock()
+            llmProvider = mock()
+            chatService = ChatService(conversationRepository, chatMessageRepository, llmProvider)
+        }
 
-    @Mock
-    lateinit var chatMessageRepository: ChatMessageRepository
+        test("stream rejects conversations owned by another user") {
+            val owner = User(id = 2L, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
+            val conversation = Conversation(id = 1L, user = owner, title = null)
 
-    @Mock
-    lateinit var llmProvider: LlmProvider
+            whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
 
-    @InjectMocks
-    lateinit var chatService: ChatService
+            val error = shouldThrow<IllegalArgumentException> {
+                chatService.stream(userId = 99L, conversationId = 1L, content = "hello").blockLast()
+            }
 
-    @Test
-    fun `stream rejects conversations owned by another user`() {
-        val owner = User(id = 2L, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
-        val conversation = Conversation(id = 1L, user = owner, title = null)
+            error.message shouldBe "Conversation does not belong to user"
+        }
 
-        whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
+        test("stream sends only completed history plus the current user message to the provider") {
+            val conversation = conversation(ownerId = 1L)
+            val currentUserMessage = ChatMessage(
+                id = 99L,
+                conversation = conversation,
+                role = MessageRole.USER,
+                content = "hello",
+                status = MessageStatus.COMPLETED
+            )
+            val history = listOf(
+                ChatMessage(
+                    id = 10L,
+                    conversation = conversation,
+                    role = MessageRole.SYSTEM,
+                    content = "system prompt",
+                    status = MessageStatus.COMPLETED
+                ),
+                ChatMessage(
+                    id = 11L,
+                    conversation = conversation,
+                    role = MessageRole.USER,
+                    content = "previous question",
+                    status = MessageStatus.COMPLETED
+                ),
+                ChatMessage(
+                    id = 12L,
+                    conversation = conversation,
+                    role = MessageRole.ASSISTANT,
+                    content = "failed answer",
+                    status = MessageStatus.FAILED
+                ),
+                ChatMessage(
+                    id = 13L,
+                    conversation = conversation,
+                    role = MessageRole.ASSISTANT,
+                    content = "partial answer",
+                    status = MessageStatus.STREAMING
+                ),
+                currentUserMessage,
+            )
 
-        assertThrows<IllegalArgumentException> {
-            chatService.stream(userId = 99L, conversationId = 1L, content = "hello")
+            whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
+            whenever(chatMessageRepository.save(any<ChatMessage>())).thenAnswer { invocation ->
+                val message = invocation.getArgument<ChatMessage>(0)
+                if (message.role == MessageRole.USER && message.content == "hello") {
+                    currentUserMessage
+                } else {
+                    message
+                }
+            }
+            whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(history)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi there"))
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .expectNext("hi there")
+                .verifyComplete()
+
+            verify(llmProvider).stream(
+                argThat<List<LlmMessage>> {
+                    this == listOf(
+                        LlmMessage(LlmMessageRole.SYSTEM, "system prompt"),
+                        LlmMessage(LlmMessageRole.USER, "previous question"),
+                        LlmMessage(LlmMessageRole.USER, "hello"),
+                    )
+                }
+            )
+        }
+
+        test("stream marks the assistant message completed when streaming finishes") {
+            val conversation = conversation(ownerId = 1L)
+
+            stubConversation(conversation)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi", " there"))
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .expectNext("hi", " there")
+                .verifyComplete()
+
+            verify(chatMessageRepository, atLeastOnce()).save(
+                argThat { role == MessageRole.ASSISTANT && status == MessageStatus.COMPLETED && content == "hi there" }
+            )
+        }
+
+        test("stream marks the assistant message failed when the provider errors") {
+            val conversation = conversation(ownerId = 1L)
+
+            stubConversation(conversation)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.error(IllegalStateException("boom")))
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .expectErrorMessage("boom")
+                .verify()
+
+            verify(chatMessageRepository, atLeastOnce()).save(
+                argThat { role == MessageRole.ASSISTANT && status == MessageStatus.FAILED && content == "" }
+            )
+        }
+
+        test("stream marks the assistant message failed when cancelled before any chunk arrives") {
+            val conversation = conversation(ownerId = 1L)
+
+            stubConversation(conversation)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.never())
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .thenCancel()
+                .verify()
+
+            verify(chatMessageRepository, atLeastOnce()).save(
+                argThat { role == MessageRole.ASSISTANT && status == MessageStatus.FAILED && content == "" }
+            )
+        }
+
+        test("stream keeps partial assistant content when cancelled after a chunk arrives") {
+            val conversation = conversation(ownerId = 1L)
+
+            stubConversation(conversation)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi").concatWith(Flux.never()))
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .expectNext("hi")
+                .thenCancel()
+                .verify()
+
+            verify(chatMessageRepository, atLeastOnce()).save(
+                argThat { role == MessageRole.ASSISTANT && status == MessageStatus.COMPLETED && content == "hi" }
+            )
         }
     }
 
-    @Test
-    fun `stream saves user message and completes assistant message`() {
-        val user = User(id = 1L, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
-        val conversation = Conversation(id = 1L, user = user, title = null)
+    private fun stubConversation(conversation: Conversation) {
+        whenever(conversationRepository.findById(conversation.id)).thenReturn(Optional.of(conversation))
+        whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.id)).thenReturn(emptyList())
+        whenever(chatMessageRepository.save(any<ChatMessage>())).thenAnswer { invocation -> invocation.getArgument(0) }
+    }
 
-        whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
-        whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(emptyList())
-        whenever(chatMessageRepository.save(any<ChatMessage>())).thenAnswer { it.arguments[0] as ChatMessage }
-        whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi", " there"))
-
-        StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
-            .expectNext("hi", " there")
-            .verifyComplete()
-
-        verify(llmProvider).stream(
-            argThat<List<LlmMessage>> { this == listOf(LlmMessage(LlmMessageRole.USER, "hello")) }
-        )
-        verify(chatMessageRepository, atLeastOnce()).save(
-            argThat { role == MessageRole.ASSISTANT && status == MessageStatus.COMPLETED }
-        )
+    private fun conversation(ownerId: Long): Conversation {
+        val owner = User(id = ownerId, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
+        return Conversation(id = 1L, user = owner, title = null)
     }
 }
