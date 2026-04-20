@@ -8,3 +8,10 @@ spring:
           model: gemini-2.0-flash
           max-tokens: 1024
           temperature: 0.7
+
+oauth:
+  registration:
+    google-app:
+      client-id: ${GOOGLE_CLIENT_ID:google-client-id}
+      client-secret: ${GOOGLE_CLIENT_SECRET:google-client-secret}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/auth/callback/google}
