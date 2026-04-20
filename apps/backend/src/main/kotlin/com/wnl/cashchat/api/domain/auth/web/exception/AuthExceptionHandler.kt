@@ -17,7 +17,7 @@ class AuthExceptionHandler {
 
     @ExceptionHandler(OAuthException::class)
     fun handleOAuthException(e: OAuthException): ResponseEntity<ErrorResponse> {
-        log.error("OAuth external API error: {}", e.message, e.cause)
+        log.error("OAuth external API error: {}", e.message, e)
         return ResponseEntity
             .status(HttpStatus.BAD_GATEWAY)
             .body(ErrorResponse("OAUTH_EXTERNAL_ERROR", "OAuth 외부 서비스 오류가 발생했습니다."))
@@ -33,9 +33,9 @@ class AuthExceptionHandler {
 
     @ExceptionHandler(InvalidTokenException::class)
     fun handleInvalidTokenException(e: InvalidTokenException): ResponseEntity<ErrorResponse> {
-        log.warn("Invalid token: {}", e.message)
+        log.warn("Invalid token: {}", e.message, e)
         return ResponseEntity
             .status(HttpStatus.UNAUTHORIZED)
-            .body(ErrorResponse("INVALID_TOKEN", e.message ?: "유효하지 않은 토큰입니다."))
+            .body(ErrorResponse("INVALID_TOKEN", "유효하지 않은 토큰입니다."))
     }
 }

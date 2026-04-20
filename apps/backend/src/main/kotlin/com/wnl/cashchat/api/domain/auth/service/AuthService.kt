@@ -108,9 +108,9 @@ class AuthService(
                 .retrieve()
                 .body(Map::class.java) as Map<String, Any>
         } catch (e: RestClientResponseException) {
-            throw OAuthException("Google token exchange failed: ${e.statusCode}", e)
+            throw OAuthException("Token exchange failed for $registrationName: ${e.statusCode}", e)
         } catch (e: RestClientException) {
-            throw OAuthException("Google token exchange failed: network error", e)
+            throw OAuthException("Token exchange failed for $registrationName: network error", e)
         }
 
     }
@@ -128,9 +128,9 @@ class AuthService(
                 .retrieve()
                 .body(Map::class.java) as Map<String, Any>
         } catch (e: RestClientResponseException) {
-            throw OAuthException("Google user info fetch failed: ${e.statusCode}", e)
+            throw OAuthException("User info fetch failed for $registrationName: ${e.statusCode}", e)
         } catch (e: RestClientException) {
-            throw OAuthException("Google user info fetch failed: network error", e)
+            throw OAuthException("User info fetch failed for $registrationName: network error", e)
         }
 
     }
