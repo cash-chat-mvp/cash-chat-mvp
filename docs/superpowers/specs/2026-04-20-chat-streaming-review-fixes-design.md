@@ -83,7 +83,7 @@ The documentation scope is intentionally limited to the new chat streaming surfa
 
 ### 6. Configuration Alignment
 
-`application-dev.yaml` will switch the Gemini model back to `gemini-2.0-flash` to match the repository guidance. Tests and fixtures that assert or embed the development model string will be updated to the same value.
+`application-dev.yaml` uses `gemini-3.1-flash-lite-preview`, and tests plus fixtures that assert or embed the development model string should stay aligned with that value.
 
 ## Testing Strategy
 

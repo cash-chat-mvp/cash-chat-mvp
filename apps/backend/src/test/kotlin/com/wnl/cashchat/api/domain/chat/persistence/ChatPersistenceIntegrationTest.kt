@@ -73,7 +73,7 @@ class ChatPersistenceIntegrationTest : FunSpec() {
                     role = MessageRole.ASSISTANT,
                     content = "hi there",
                     status = MessageStatus.COMPLETED,
-                    model = "gemini-2.0-flash"
+                    model = "gemini-3.1-flash-lite-preview"
                 )
             )
 
@@ -82,7 +82,7 @@ class ChatPersistenceIntegrationTest : FunSpec() {
             messages shouldHaveSize 2
             messages[0].role shouldBe MessageRole.USER
             messages[1].role shouldBe MessageRole.ASSISTANT
-            messages[1].model shouldBe "gemini-2.0-flash"
+            messages[1].model shouldBe "gemini-3.1-flash-lite-preview"
             conversation.user.id shouldBe user.id
 
             val indexes = JdbcTemplate(dataSource).queryForList("SHOW INDEX FROM chat_messages")

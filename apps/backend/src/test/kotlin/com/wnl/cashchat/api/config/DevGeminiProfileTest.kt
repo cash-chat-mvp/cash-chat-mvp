@@ -18,7 +18,7 @@ class DevGeminiProfileTest : FunSpec() {
         test("dev profile uses the gemini openai compatible endpoint and target model") {
             environment.getProperty("spring.ai.openai.base-url") shouldBe
                 "https://generativelanguage.googleapis.com/v1beta/openai"
-            environment.getProperty("spring.ai.openai.chat.options.model") shouldBe "gemini-2.0-flash"
+            environment.getProperty("spring.ai.openai.chat.options.model") shouldBe "gemini-3.1-flash-lite-preview"
         }
     }
 }
