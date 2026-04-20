@@ -106,7 +106,8 @@ class AuthService(
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(formData)
                 .retrieve()
-                .body(Map::class.java) as Map<String, Any>
+                .body(Map::class.java) as? Map<String, Any>
+                ?: throw OAuthException("Empty or malformed token response from $registrationName (${provider.tokenUri})")
         } catch (e: RestClientResponseException) {
             throw OAuthException("Token exchange failed for $registrationName: ${e.statusCode}", e)
         } catch (e: RestClientException) {
@@ -126,7 +127,8 @@ class AuthService(
                 .uri(provider.userInfoUri)
                 .header("Authorization", "Bearer $accessToken")
                 .retrieve()
-                .body(Map::class.java) as Map<String, Any>
+                .body(Map::class.java) as? Map<String, Any>
+                ?: throw OAuthException("Empty or malformed user info response from $registrationName (${provider.userInfoUri})")
         } catch (e: RestClientResponseException) {
             throw OAuthException("User info fetch failed for $registrationName: ${e.statusCode}", e)
         } catch (e: RestClientException) {
