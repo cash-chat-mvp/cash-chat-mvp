@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
+import org.springframework.web.client.RestClientException
 import org.springframework.web.client.RestClientResponseException
 import java.time.LocalDateTime
 import java.util.*
@@ -108,6 +109,8 @@ class AuthService(
                 .body(Map::class.java) as Map<String, Any>
         } catch (e: RestClientResponseException) {
             throw OAuthException("Google token exchange failed: ${e.statusCode}", e)
+        } catch (e: RestClientException) {
+            throw OAuthException("Google token exchange failed: network error", e)
         }
 
     }
@@ -126,6 +129,8 @@ class AuthService(
                 .body(Map::class.java) as Map<String, Any>
         } catch (e: RestClientResponseException) {
             throw OAuthException("Google user info fetch failed: ${e.statusCode}", e)
+        } catch (e: RestClientException) {
+            throw OAuthException("Google user info fetch failed: network error", e)
         }
 
     }
