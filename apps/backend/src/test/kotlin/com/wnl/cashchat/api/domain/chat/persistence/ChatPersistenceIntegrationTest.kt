@@ -21,6 +21,7 @@ import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.containers.MySQLContainer
+import jakarta.persistence.EntityManager
 import javax.sql.DataSource
 
 @SpringBootTest(properties = ["spring.jpa.hibernate.ddl-auto=create-drop"])
@@ -38,6 +39,9 @@ class ChatPersistenceIntegrationTest : FunSpec() {
 
     @Autowired
     lateinit var dataSource: DataSource
+
+    @Autowired
+    lateinit var entityManager: EntityManager
 
     init {
         beforeTest {
@@ -58,6 +62,8 @@ class ChatPersistenceIntegrationTest : FunSpec() {
             val conversation = conversationRepository.save(
                 Conversation(user = user, title = "first chat")
             )
+            val conversationId = conversation.id
+            val userId = user.id
 
             chatMessageRepository.save(
                 ChatMessage(
@@ -77,13 +83,17 @@ class ChatPersistenceIntegrationTest : FunSpec() {
                 )
             )
 
-            val messages = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.id)
+            entityManager.clear()
+
+            val persistedConversation = conversationRepository.findById(conversationId)
+                .orElseThrow { IllegalStateException("Conversation should be persisted") }
+            val messages = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
 
             messages shouldHaveSize 2
             messages[0].role shouldBe MessageRole.USER
             messages[1].role shouldBe MessageRole.ASSISTANT
             messages[1].model shouldBe "gemini-3.1-flash-lite-preview"
-            conversation.user.id shouldBe user.id
+            persistedConversation.user.id shouldBe userId
 
             val indexes = JdbcTemplate(dataSource).queryForList("SHOW INDEX FROM chat_messages")
             val indexedColumns = indexes

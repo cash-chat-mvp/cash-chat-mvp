@@ -14,13 +14,17 @@ import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
-import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.TransactionStatus
+import org.springframework.transaction.support.SimpleTransactionStatus
 import reactor.core.publisher.Flux
 import reactor.test.StepVerifier
 import java.util.Optional
@@ -30,13 +34,24 @@ class ChatServiceTest : FunSpec() {
     private lateinit var chatMessageRepository: ChatMessageRepository
     private lateinit var llmProvider: LlmProvider
     private lateinit var chatService: ChatService
+    private lateinit var savedMessages: MutableList<SavedMessageSnapshot>
+    private lateinit var savedMessageEntities: MutableMap<Long, ChatMessage>
+    private var nextMessageId = 100L
 
     init {
         beforeTest {
             conversationRepository = mock()
             chatMessageRepository = mock()
             llmProvider = mock()
-            chatService = ChatService(conversationRepository, chatMessageRepository, llmProvider)
+            savedMessages = mutableListOf()
+            savedMessageEntities = mutableMapOf()
+            nextMessageId = 100L
+            chatService = ChatService(
+                conversationRepository = conversationRepository,
+                chatMessageRepository = chatMessageRepository,
+                llmProvider = llmProvider,
+                transactionManager = NoOpTransactionManager(),
+            )
         }
 
         test("stream rejects conversations owned by another user") {
@@ -54,13 +69,6 @@ class ChatServiceTest : FunSpec() {
 
         test("stream sends only completed history plus the current user message to the provider") {
             val conversation = conversation(ownerId = 1L)
-            val currentUserMessage = ChatMessage(
-                id = 99L,
-                conversation = conversation,
-                role = MessageRole.USER,
-                content = "hello",
-                status = MessageStatus.COMPLETED
-            )
             val history = listOf(
                 ChatMessage(
                     id = 10L,
@@ -90,19 +98,11 @@ class ChatServiceTest : FunSpec() {
                     content = "partial answer",
                     status = MessageStatus.STREAMING
                 ),
-                currentUserMessage,
             )
 
             whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
-            whenever(chatMessageRepository.save(any<ChatMessage>())).thenAnswer { invocation ->
-                val message = invocation.getArgument<ChatMessage>(0)
-                if (message.role == MessageRole.USER && message.content == "hello") {
-                    currentUserMessage
-                } else {
-                    message
-                }
-            }
             whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(history)
+            stubMessagePersistence()
             whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi there"))
 
             StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
@@ -130,8 +130,10 @@ class ChatServiceTest : FunSpec() {
                 .expectNext("hi", " there")
                 .verifyComplete()
 
-            verify(chatMessageRepository, atLeastOnce()).save(
-                argThat { role == MessageRole.ASSISTANT && status == MessageStatus.COMPLETED && content == "hi there" }
+            savedMessages shouldContain SavedMessageSnapshot(
+                role = MessageRole.ASSISTANT,
+                status = MessageStatus.COMPLETED,
+                content = "hi there",
             )
         }
 
@@ -145,8 +147,10 @@ class ChatServiceTest : FunSpec() {
                 .expectErrorMessage("boom")
                 .verify()
 
-            verify(chatMessageRepository, atLeastOnce()).save(
-                argThat { role == MessageRole.ASSISTANT && status == MessageStatus.FAILED && content == "" }
+            savedMessages shouldContain SavedMessageSnapshot(
+                role = MessageRole.ASSISTANT,
+                status = MessageStatus.FAILED,
+                content = "",
             )
         }
 
@@ -160,8 +164,10 @@ class ChatServiceTest : FunSpec() {
                 .thenCancel()
                 .verify()
 
-            verify(chatMessageRepository, atLeastOnce()).save(
-                argThat { role == MessageRole.ASSISTANT && status == MessageStatus.FAILED && content == "" }
+            savedMessages shouldContain SavedMessageSnapshot(
+                role = MessageRole.ASSISTANT,
+                status = MessageStatus.FAILED,
+                content = "",
             )
         }
 
@@ -176,8 +182,10 @@ class ChatServiceTest : FunSpec() {
                 .thenCancel()
                 .verify()
 
-            verify(chatMessageRepository, atLeastOnce()).save(
-                argThat { role == MessageRole.ASSISTANT && status == MessageStatus.COMPLETED && content == "hi" }
+            savedMessages shouldContain SavedMessageSnapshot(
+                role = MessageRole.ASSISTANT,
+                status = MessageStatus.COMPLETED,
+                content = "hi",
             )
         }
     }
@@ -185,11 +193,60 @@ class ChatServiceTest : FunSpec() {
     private fun stubConversation(conversation: Conversation) {
         whenever(conversationRepository.findById(conversation.id)).thenReturn(Optional.of(conversation))
         whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.id)).thenReturn(emptyList())
-        whenever(chatMessageRepository.save(any<ChatMessage>())).thenAnswer { invocation -> invocation.getArgument(0) }
+        stubMessagePersistence()
     }
 
     private fun conversation(ownerId: Long): Conversation {
         val owner = User(id = ownerId, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
         return Conversation(id = 1L, user = owner, title = null)
+    }
+
+    private fun stubMessagePersistence() {
+        whenever(chatMessageRepository.save(any<ChatMessage>())).thenAnswer { invocation ->
+            val message = invocation.getArgument<ChatMessage>(0)
+            savedMessages += SavedMessageSnapshot(
+                role = message.role,
+                status = message.status,
+                content = message.content,
+            )
+
+            if (message.id > 0) {
+                savedMessageEntities[message.id] = message
+                message
+            } else {
+                persistNewMessage(message)
+            }
+        }
+
+        whenever(chatMessageRepository.findById(any())).thenAnswer { invocation ->
+            Optional.ofNullable(savedMessageEntities[invocation.getArgument<Long>(0)])
+        }
+    }
+
+    private fun persistNewMessage(message: ChatMessage): ChatMessage {
+        val persisted = ChatMessage(
+            id = nextMessageId++,
+            conversation = message.conversation,
+            role = message.role,
+            content = message.content,
+            status = message.status,
+            model = message.model,
+        )
+        savedMessageEntities[persisted.id] = persisted
+        return persisted
+    }
+
+    private data class SavedMessageSnapshot(
+        val role: MessageRole,
+        val status: MessageStatus,
+        val content: String,
+    )
+
+    private class NoOpTransactionManager : PlatformTransactionManager {
+        override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
+
+        override fun commit(status: TransactionStatus) = Unit
+
+        override fun rollback(status: TransactionStatus) = Unit
     }
 }

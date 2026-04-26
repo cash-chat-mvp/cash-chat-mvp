@@ -9,7 +9,8 @@ import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessage
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
 import org.springframework.stereotype.Service
-import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.support.TransactionTemplate
 import reactor.core.publisher.Flux
 import reactor.core.publisher.SignalType
 
@@ -21,52 +22,62 @@ class ChatService(
     private val conversationRepository: ConversationRepository,
     private val chatMessageRepository: ChatMessageRepository,
     private val llmProvider: LlmProvider,
+    transactionManager: PlatformTransactionManager,
 ) {
+    private val transactionTemplate = TransactionTemplate(transactionManager)
 
     /**
      * Streams an assistant response while persisting the user input and final assistant state.
      */
-    @Transactional
     fun stream(userId: Long, conversationId: Long, content: String): Flux<String> =
         Flux.defer {
-            val conversation = conversationRepository.findById(conversationId)
-                .orElseThrow { IllegalArgumentException("Conversation not found") }
+            val streamContext = transactionTemplate.execute {
+                val conversation = conversationRepository.findById(conversationId)
+                    .orElseThrow { IllegalArgumentException("Conversation not found") }
 
-            require(conversation.user.id == userId) { "Conversation does not belong to user" }
+                require(conversation.user.id == userId) { "Conversation does not belong to user" }
 
-            val userMessage = chatMessageRepository.save(
-                ChatMessage(
-                    conversation = conversation,
-                    role = MessageRole.USER,
-                    content = content,
-                    status = MessageStatus.COMPLETED
+                val userMessage = chatMessageRepository.save(
+                    ChatMessage(
+                        conversation = conversation,
+                        role = MessageRole.USER,
+                        content = content,
+                        status = MessageStatus.COMPLETED
+                    )
                 )
-            )
 
-            val history = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
-            val providerMessages = history
-                .filter { it.status == MessageStatus.COMPLETED && it.id != userMessage.id }
-                .map { it.toProviderMessage() } + userMessage.toProviderMessage()
+                val history = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
+                val providerMessages = history
+                    .filter { it.status == MessageStatus.COMPLETED && it.id != userMessage.id }
+                    .map { it.toProviderMessage() } + userMessage.toProviderMessage()
 
-            val assistantMessage = chatMessageRepository.save(
-                ChatMessage(
-                    conversation = conversation,
-                    role = MessageRole.ASSISTANT,
-                    content = "",
-                    status = MessageStatus.STREAMING
+                val assistantMessage = chatMessageRepository.save(
+                    ChatMessage(
+                        conversation = conversation,
+                        role = MessageRole.ASSISTANT,
+                        content = "",
+                        status = MessageStatus.STREAMING
+                    )
                 )
-            )
+
+                require(assistantMessage.id > 0) { "Assistant message id must be assigned" }
+
+                StreamContext(
+                    assistantMessageId = assistantMessage.id,
+                    providerMessages = providerMessages,
+                )
+            } ?: error("Failed to initialize chat stream")
 
             val buffer = StringBuilder()
 
-            llmProvider.stream(providerMessages)
+            llmProvider.stream(streamContext.providerMessages)
                 .doOnNext { chunk -> buffer.append(chunk) }
-                .doFinally { signalType -> finalizeAssistantMessage(signalType, assistantMessage, buffer) }
+                .doFinally { signalType -> finalizeAssistantMessage(signalType, streamContext.assistantMessageId, buffer) }
         }
 
     private fun finalizeAssistantMessage(
         signalType: SignalType,
-        assistantMessage: ChatMessage,
+        assistantMessageId: Long,
         buffer: StringBuilder,
     ) {
         val status = when (signalType) {
@@ -76,9 +87,13 @@ class ChatService(
             else -> return
         }
 
-        assistantMessage.content = buffer.toString()
-        assistantMessage.status = status
-        chatMessageRepository.save(assistantMessage)
+        transactionTemplate.executeWithoutResult {
+            val assistantMessage = chatMessageRepository.findById(assistantMessageId)
+                .orElseThrow { IllegalArgumentException("Assistant message not found") }
+            assistantMessage.content = buffer.toString()
+            assistantMessage.status = status
+            chatMessageRepository.save(assistantMessage)
+        }
     }
 
     private fun ChatMessage.toProviderMessage(): LlmMessage =
@@ -90,4 +105,9 @@ class ChatService(
             },
             content = content
         )
+
+    private data class StreamContext(
+        val assistantMessageId: Long,
+        val providerMessages: List<LlmMessage>,
+    )
 }
