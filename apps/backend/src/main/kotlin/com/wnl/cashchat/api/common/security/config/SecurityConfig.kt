@@ -15,10 +15,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 class SecurityConfig(
     private val jwtTokenHandler: JwtTokenHandler,
-    private val environment: Environment,
+    private val environment: Environment
 ) {
 
     companion object {
+        private const val PROD_PROFILE = "prod"
+
         private val SWAGGER_PATHS = arrayOf(
             "/v3/api-docs/**",
             "/swagger-ui.html",
@@ -33,7 +35,7 @@ class SecurityConfig(
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         val isSwaggerEnabled =
-            !environment.activeProfiles.contains("prod") ||
+            !environment.activeProfiles.contains(PROD_PROFILE) ||
                 environment.getProperty("app.swagger.enabled", Boolean::class.java, false)
 
         http

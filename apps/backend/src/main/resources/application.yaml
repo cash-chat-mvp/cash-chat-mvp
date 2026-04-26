@@ -3,6 +3,11 @@ spring:
   config:
     import: optional:file:.env[.properties]
 
+  jackson:
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+
   profiles:
     active: dev
 
@@ -34,4 +39,3 @@ jwt:
   access-token-expiry: 1800000
   # 14 (d) = 336 (h) = 20,160 (m) = 1,209,600 (s) = 1,209,600,000 (ms)
   refresh-token-expiry: 1209600000
-

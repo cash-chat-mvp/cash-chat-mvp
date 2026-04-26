@@ -25,7 +25,7 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 ## Optional GitHub Secrets
 
 - `BACKEND_SPRING_PROFILES_ACTIVE`: backend Spring profile, defaults to `prod`
-- `APP_SWAGGER_ENABLED`: set to `true` to expose Swagger in `prod`; missing or any other value keeps Swagger blocked
+- `APP_SWAGGER_ENABLED`: set to a Spring boolean true value, for example `true`, to expose Swagger in `prod`; missing or non-true values keep Swagger blocked
 
 Keep production deployments on `BACKEND_SPRING_PROFILES_ACTIVE=prod`. Use `APP_SWAGGER_ENABLED=true` only when production Swagger access is intentionally needed.
 
