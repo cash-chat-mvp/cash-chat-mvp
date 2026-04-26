@@ -31,7 +31,7 @@ cd apps/backend
 - `common/entity/` — 공통 BaseEntity
 
 개발 환경은 H2 인메모리 DB, 프로덕션은 MySQL 8 사용.
-Spring AI를 통해 Gemini(dev: `gemini-2.0-flash`) 또는 OpenAI 연동.
+Spring AI를 통해 Gemini(dev: `gemini-3.1-flash-lite-preview`) 또는 OpenAI 연동.
 테스트는 Kotest + TestContainers (MySQL) 조합 사용.
 
 ## Frontend (`apps/frontend/`)
