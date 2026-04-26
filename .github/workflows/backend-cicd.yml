@@ -70,6 +70,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Prepare backend image name
+        id: backend-image
+        shell: bash
+        run: |
+          owner_lc="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "name=ghcr.io/${owner_lc}/cash-chat-backend" >> "$GITHUB_OUTPUT"
+
       - name: Build and push backend image
         uses: docker/build-push-action@v7
         with:
@@ -78,8 +85,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/cash-chat-backend:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/cash-chat-backend:latest
+            ${{ steps.backend-image.outputs.name }}:${{ github.sha }}
+            ${{ steps.backend-image.outputs.name }}:latest
 
       - name: Create deploy env file
         shell: bash
@@ -123,7 +130,7 @@ jobs:
           }
 
           {
-            write_env "BACKEND_IMAGE" "ghcr.io/${{ github.repository_owner }}/cash-chat-backend:latest"
+            write_env "BACKEND_IMAGE" "${{ steps.backend-image.outputs.name }}:latest"
             write_env "SPRING_PROFILES_ACTIVE" "${SPRING_PROFILE}"
             write_env "OPENAI_API_KEY" "${OPENAI_API_KEY}"
             write_env "GOOGLE_CLIENT_ID" "${GOOGLE_CLIENT_ID}"

@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   generate-and-deploy:
+    if: github.repository == 'cash-chat-mvp/cash-chat-mvp'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
