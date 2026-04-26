@@ -86,21 +86,35 @@ jobs:
         env:
           BACKEND_SPRING_PROFILES_ACTIVE: ${{ secrets.BACKEND_SPRING_PROFILES_ACTIVE }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
         run: |
           SPRING_PROFILE="${BACKEND_SPRING_PROFILES_ACTIVE}"
           if [ -z "${SPRING_PROFILE}" ]; then
             SPRING_PROFILE="prod"
           fi
 
-          if [ "${SPRING_PROFILE}" = "prod" ] && [ -z "${OPENAI_API_KEY}" ]; then
-            echo "OPENAI_API_KEY must be set when SPRING_PROFILES_ACTIVE=prod" >&2
-            exit 1
+          if [ "${SPRING_PROFILE}" = "prod" ]; then
+            missing_vars=()
+            if [ -z "${OPENAI_API_KEY}" ]; then missing_vars+=("OPENAI_API_KEY"); fi
+            if [ -z "${GOOGLE_CLIENT_ID}" ]; then missing_vars+=("GOOGLE_CLIENT_ID"); fi
+            if [ -z "${GOOGLE_CLIENT_SECRET}" ]; then missing_vars+=("GOOGLE_CLIENT_SECRET"); fi
+            if [ -z "${GOOGLE_REDIRECT_URI}" ]; then missing_vars+=("GOOGLE_REDIRECT_URI"); fi
+
+            if [ "${#missing_vars[@]}" -gt 0 ]; then
+              echo "Missing required prod secrets: ${missing_vars[*]}" >&2
+              exit 1
+            fi
           fi
 
           {
             echo "BACKEND_IMAGE=ghcr.io/${{ github.repository_owner }}/cash-chat-backend:latest"
             echo "SPRING_PROFILES_ACTIVE=${SPRING_PROFILE}"
             echo "OPENAI_API_KEY=${OPENAI_API_KEY}"
+            echo "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}"
+            echo "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}"
+            echo "GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}"
           } > infra/deploy/backend/.deploy.env
 
       - name: Upload compose files to server
