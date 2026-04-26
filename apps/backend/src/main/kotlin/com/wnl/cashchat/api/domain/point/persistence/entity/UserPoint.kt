@@ -27,10 +27,24 @@ class UserPoint(
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     val user: User,
 
-    @Column(nullable = false)
-    var balance: Long = 0,
+    balance: Long = 0,
 ) : BaseEntity() {
+    @Column(nullable = false)
+    var balance: Long = balance
+        private set
+
     init {
         require(balance >= 0) { "Point balance must be non-negative" }
+    }
+
+    fun charge(amount: Long) {
+        require(amount >= 0) { "Point amount must be non-negative" }
+        balance = Math.addExact(balance, amount)
+    }
+
+    fun deduct(cost: Long) {
+        require(cost >= 0) { "Point cost must be non-negative" }
+        require(balance >= cost) { "Point balance must be non-negative" }
+        balance -= cost
     }
 }

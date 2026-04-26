@@ -6,13 +6,16 @@ import com.wnl.cashchat.api.domain.point.persistence.repository.UserPointReposit
 import com.wnl.cashchat.api.domain.point.properties.PointProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
+import jakarta.validation.Validation
 import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.dao.DataIntegrityViolationException
 
 class UserPointServiceTest : FunSpec({
     lateinit var userPointRepository: UserPointRepository
@@ -49,18 +52,37 @@ class UserPointServiceTest : FunSpec({
         val saved = UserPoint(user = user, balance = 3L)
 
         whenever(userPointRepository.findByUserId(1L)).thenReturn(null)
-        whenever(userPointRepository.save(any<UserPoint>())).thenReturn(saved)
+        whenever(userPointRepository.saveAndFlush(any<UserPoint>())).thenReturn(saved)
 
         userPointService.ensureInitialized(user) shouldBe saved
 
-        verify(userPointRepository).save(
+        verify(userPointRepository).saveAndFlush(
             argThat<UserPoint> {
                 this.user.id == 1L && this.balance == 3L
             }
         )
     }
 
+    test("ensureInitialized recovers when another request creates the point row concurrently") {
+        val user = User(id = 1L, role = Role.GUEST, provider = AuthProviderType.NONE, name = "Guest")
+        val savedByConcurrentRequest = UserPoint(user = user, balance = 3L)
+
+        whenever(userPointRepository.findByUserId(1L)).thenReturn(null, savedByConcurrentRequest)
+        whenever(userPointRepository.saveAndFlush(any<UserPoint>()))
+            .thenThrow(DataIntegrityViolationException("duplicate user point"))
+
+        userPointService.ensureInitialized(user) shouldBe savedByConcurrentRequest
+    }
+
     test("PointProperties defaults initial balance to one point") {
         PointProperties().initialBalance shouldBe 1L
+    }
+
+    test("PointProperties rejects zero initial balance") {
+        val validator = Validation.buildDefaultValidatorFactory().validator
+
+        val violations = validator.validate(PointProperties(initialBalance = 0L))
+
+        violations.map { it.propertyPath.toString() } shouldContain "initialBalance"
     }
 })
