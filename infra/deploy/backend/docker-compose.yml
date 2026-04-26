@@ -8,6 +8,9 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --spider --tries=1 --timeout=5 http://localhost:8080 >/dev/null 2>&1 || [ $? -eq 8 ]"]
       interval: 30s

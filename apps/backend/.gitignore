@@ -39,8 +39,11 @@ out/
 ### Kotlin ###
 .kotlin
 
-### Environment ###
-.env
 
-### Claude ###
+#
+
+# Claude
 .claude
+
+# Environment
+.env
