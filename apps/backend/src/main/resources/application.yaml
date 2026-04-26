@@ -19,13 +19,8 @@ server:
   forward-headers-strategy: framework
 
 # O-Auth (Open Authorization)
+# OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml
 oauth:
-  registration:
-    google-app:
-      provider: google
-      client-id: ${GOOGLE_CLIENT_ID}
-      client-secret: ${GOOGLE_CLIENT_SECRET}
-      redirect-uri: ${GOOGLE_REDIRECT_URI}
   provider:
     google:
       token-uri: https://oauth2.googleapis.com/token

@@ -7,3 +7,11 @@ spring:
           model: gpt-4o-mini
           max-tokens: 1024
           temperature: 0.7
+
+oauth:
+  registration:
+    google-app:
+      provider: google
+      client-id: ${GOOGLE_CLIENT_ID}
+      client-secret: ${GOOGLE_CLIENT_SECRET}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:https://cashchat.duckdns.org/api/auth/callback/google}
