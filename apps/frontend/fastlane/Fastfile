@@ -1,11 +1,18 @@
 default_platform(:android)
 
 platform :android do
-  desc "Build release APK and distribute to Firebase App Distribution"
+  desc "Build dev release APK and distribute to Firebase App Distribution"
   lane :distribute do
     gradle(
       task: "assemble",
-      build_type: "Release"
+      flavor: "dev",
+      build_type: "Release",
+      properties: {
+        "android.injected.signing.store.file"     => ENV.fetch("KEYSTORE_PATH"),
+        "android.injected.signing.store.password" => ENV.fetch("KEYSTORE_STORE_PASSWORD"),
+        "android.injected.signing.key.alias"      => ENV.fetch("KEYSTORE_KEY_ALIAS"),
+        "android.injected.signing.key.password"   => ENV.fetch("KEYSTORE_KEY_PASSWORD"),
+      }
     )
 
     firebase_app_distribution(
@@ -16,15 +23,3 @@ platform :android do
     )
   end
 end
-
-# TODO: iOS lanes
-# platform :ios do
-#   lane :distribute do
-#     build_app(scheme: "CashChat")
-#     pilot(groups: ["testers"])  # TestFlight
-#   end
-#
-#   lane :release do
-#     deliver                      # App Store
-#   end
-# end

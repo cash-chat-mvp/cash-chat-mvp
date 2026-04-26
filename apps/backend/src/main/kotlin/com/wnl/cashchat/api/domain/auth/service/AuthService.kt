@@ -1,6 +1,9 @@
 package com.wnl.cashchat.api.domain.auth.service
 
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
+import com.wnl.cashchat.api.domain.auth.exception.AlreadyOAuthUserException
+import com.wnl.cashchat.api.domain.auth.exception.InvalidTokenException
+import com.wnl.cashchat.api.domain.auth.exception.OAuthException
 import com.wnl.cashchat.api.domain.auth.oauth.model.OAuthUserInfo
 import com.wnl.cashchat.api.domain.auth.oauth.properties.OAuthProperties
 import com.wnl.cashchat.api.domain.auth.oauth.util.OAuthUserInfoExtractor
@@ -16,6 +19,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
+import org.springframework.web.client.RestClientException
+import org.springframework.web.client.RestClientResponseException
 import java.time.LocalDateTime
 import java.util.*
 
@@ -39,7 +44,7 @@ class AuthService(
             ?: userRepository.save(User(name = "Guest", deviceToken = deviceToken))
 
         if (user.provider != AuthProviderType.NONE) {
-            throw IllegalStateException("이미 OAuth로 가입된 사용자입니다. 소셜 로그인을 이용해주세요.")
+            throw AlreadyOAuthUserException("이미 OAuth로 가입된 사용자입니다. 소셜 로그인을 이용해주세요.")
         }
 
         val accessToken = jwtTokenHandler.createAccessToken(user.id, user.role)
@@ -64,12 +69,12 @@ class AuthService(
         val tokenResponse = exchangeAuthCodeForAccessToken(registrationName, code)
 
         val accessToken = tokenResponse["access_token"] as? String
-            ?: throw IllegalStateException("OAuth token response does not contain 'access_token'")
+            ?: throw OAuthException("OAuth token response does not contain 'access_token'")
 
         val rawUserInfo = fetchUserInfo(registrationName, accessToken)
 
         val extractor = extractorMap[providerType]
-            ?: throw IllegalStateException("No OAuthUserInfoExtractor registered for provider: $providerType")
+            ?: throw OAuthException("No OAuthUserInfoExtractor registered for provider: $providerType")
 
         val userInfo = extractor.extract(rawUserInfo)
 
@@ -95,12 +100,19 @@ class AuthService(
             add("grant_type", "authorization_code")
         }
 
-        return restClient.post()
-            .uri(provider.tokenUri)
-            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-            .body(formData)
-            .retrieve()
-            .body(Map::class.java) as Map<String, Any>
+        return try {
+            restClient.post()
+                .uri(provider.tokenUri)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(formData)
+                .retrieve()
+                .body(Map::class.java) as? Map<String, Any>
+                ?: throw OAuthException("Empty or malformed token response from $registrationName (${provider.tokenUri})")
+        } catch (e: RestClientResponseException) {
+            throw OAuthException("Token exchange failed for $registrationName: ${e.statusCode}", e)
+        } catch (e: RestClientException) {
+            throw OAuthException("Token exchange failed for $registrationName: network error", e)
+        }
 
     }
 
@@ -110,11 +122,18 @@ class AuthService(
         val registration = oAuthProperties.getRegistration(registrationName)
         val provider = oAuthProperties.getProvider(registration.provider)
 
-        return restClient.get()
-            .uri(provider.userInfoUri)
-            .header("Authorization", "Bearer $accessToken")
-            .retrieve()
-            .body(Map::class.java) as Map<String, Any>
+        return try {
+            restClient.get()
+                .uri(provider.userInfoUri)
+                .header("Authorization", "Bearer $accessToken")
+                .retrieve()
+                .body(Map::class.java) as? Map<String, Any>
+                ?: throw OAuthException("Empty or malformed user info response from $registrationName (${provider.userInfoUri})")
+        } catch (e: RestClientResponseException) {
+            throw OAuthException("User info fetch failed for $registrationName: ${e.statusCode}", e)
+        } catch (e: RestClientException) {
+            throw OAuthException("User info fetch failed for $registrationName: network error", e)
+        }
 
     }
 
@@ -194,11 +213,11 @@ class AuthService(
     fun reissueToken(refreshToken: String): AuthResponse {
 
         val storedToken = refreshTokenRepository.findByTokenForUpdate(refreshToken)
-            ?: throw IllegalArgumentException("Invalid refresh token")
+            ?: throw InvalidTokenException("Invalid refresh token")
 
         if (storedToken.expiresAt.isBefore(LocalDateTime.now())) {
             refreshTokenRepository.delete(storedToken)
-            throw IllegalArgumentException("Refresh token expired")
+            throw InvalidTokenException("Refresh token expired")
         }
 
         val user = storedToken.user

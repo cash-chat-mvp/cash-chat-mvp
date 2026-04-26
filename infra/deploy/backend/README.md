@@ -17,6 +17,11 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 - `GHCR_TOKEN`: GitHub PAT with `read:packages` scope
 - `BACKEND_SPRING_PROFILES_ACTIVE`: optional, defaults to `prod`
 - `OPENAI_API_KEY`: OpenAI API key (required for prod profile)
+- `GOOGLE_CLIENT_ID`: Google OAuth client ID (required for prod profile)
+- `GOOGLE_CLIENT_SECRET`: Google OAuth client secret (required for prod profile)
+- `GOOGLE_REDIRECT_URI`: Google OAuth redirect URI registered in Google Cloud Console
+
+Secret values are written into a Docker Compose `.env` file as single-quoted values. Newlines and single quotes are rejected during deployment.
 
 ## First-time Server Setup
 Run once on server:

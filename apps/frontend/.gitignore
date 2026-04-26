@@ -17,7 +17,10 @@ local.properties
 key.properties
 *.keystore
 *.jks
-app/google-services.json
+# Firebase 설정 (루트 및 flavor별 경로 모두 포함)
+**/google-services.json
+# iOS Firebase 설정 (dev/prod scheme 포함)
+**/GoogleService-Info.plist
 service-account.json
 
  #  - /.gradle, /.gradle-user-home: Gradle 캐시/다운로드 파일 (재생성 가능)
