@@ -96,10 +96,16 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+          APP_SWAGGER_ENABLED: ${{ secrets.APP_SWAGGER_ENABLED }}
         run: |
           SPRING_PROFILE="${BACKEND_SPRING_PROFILES_ACTIVE}"
           if [ -z "${SPRING_PROFILE}" ]; then
             SPRING_PROFILE="prod"
+          fi
+
+          SWAGGER_ENABLED="${APP_SWAGGER_ENABLED}"
+          if [ -z "${SWAGGER_ENABLED}" ]; then
+            SWAGGER_ENABLED="false"
           fi
 
           if [ "${SPRING_PROFILE}" = "prod" ]; then
@@ -136,6 +142,7 @@ jobs:
             write_env "GOOGLE_CLIENT_ID" "${GOOGLE_CLIENT_ID}"
             write_env "GOOGLE_CLIENT_SECRET" "${GOOGLE_CLIENT_SECRET}"
             write_env "GOOGLE_REDIRECT_URI" "${GOOGLE_REDIRECT_URI}"
+            write_env "APP_SWAGGER_ENABLED" "${SWAGGER_ENABLED}"
           } > infra/deploy/backend/.deploy.env
 
       - name: Upload compose files to server

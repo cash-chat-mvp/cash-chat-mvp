@@ -11,6 +11,7 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      APP_SWAGGER_ENABLED: ${APP_SWAGGER_ENABLED:-false}
     healthcheck:
       test: ["CMD-SHELL", "wget --quiet --spider --tries=1 --timeout=5 http://localhost:8080 >/dev/null 2>&1 || [ $? -eq 8 ]"]
       interval: 30s

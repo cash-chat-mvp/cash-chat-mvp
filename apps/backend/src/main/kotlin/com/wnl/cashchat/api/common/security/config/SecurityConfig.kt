@@ -19,6 +19,8 @@ class SecurityConfig(
 ) {
 
     companion object {
+        private const val PROD_PROFILE = "prod"
+
         private val SWAGGER_PATHS = arrayOf(
             "/v3/api-docs/**",
             "/swagger-ui.html",
@@ -32,7 +34,9 @@ class SecurityConfig(
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
-        val isSwaggerEnabled = !environment.activeProfiles.contains("prod")
+        val isSwaggerEnabled =
+            !environment.activeProfiles.contains(PROD_PROFILE) ||
+                environment.getProperty("app.swagger.enabled", Boolean::class.java, false)
 
         http
             .csrf { it.disable() }
@@ -50,5 +54,4 @@ class SecurityConfig(
 
         return http.build()
     }
-
 }
