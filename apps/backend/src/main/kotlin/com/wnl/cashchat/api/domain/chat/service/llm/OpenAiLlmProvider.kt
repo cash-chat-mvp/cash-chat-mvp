@@ -8,11 +8,11 @@ import org.springframework.stereotype.Component
 import reactor.core.publisher.Flux
 
 /**
- * Adapts Gemini's OpenAI-compatible Spring AI chat models to the application's LLM provider interface.
+ * Adapts Spring AI OpenAI chat models to the application's LLM provider interface.
  */
 @Component
-@Profile("dev")
-class GeminiLlmProvider(
+@Profile("prod")
+class OpenAiLlmProvider(
     private val chatModel: ChatModel,
     private val streamingChatModel: StreamingChatModel,
 ) : LlmProvider {
