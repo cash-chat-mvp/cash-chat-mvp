@@ -11,13 +11,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.MediaType
+import org.springframework.http.codec.ServerSentEvent
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
-import reactor.core.Disposable
+import reactor.core.publisher.Flux
 
 /**
  * Exposes server-sent event endpoints for chat responses.
@@ -53,7 +53,8 @@ class ChatController(
                 ]
             ),
             ApiResponse(responseCode = "400", description = "The request body is invalid."),
-            ApiResponse(responseCode = "401", description = "Authentication is required.")
+            ApiResponse(responseCode = "401", description = "Authentication is required."),
+            ApiResponse(responseCode = "402", description = "The user does not have enough points.")
         ]
     )
     fun stream(
@@ -64,47 +65,24 @@ class ChatController(
             content = [Content(schema = Schema(implementation = ChatStreamRequest::class))]
         )
         @Valid @RequestBody request: ChatStreamRequest,
-    ): SseEmitter {
+    ): Flux<ServerSentEvent<String>> {
         val userId = authentication.principal as? Long
             ?: throw IllegalArgumentException("Invalid authenticated principal")
 
-        val emitter = SseEmitter(SSE_TIMEOUT_MILLIS)
-
-        val subscription = chatService.stream(
+        return chatService.stream(
             userId = userId,
             conversationId = request.conversationId!!,
             content = request.message,
-        ).subscribe(
-            { chunk ->
-                emitter.send(SseEmitter.event().name("message").data(chunk))
-            },
-            {
-                runCatching {
-                    emitter.send(SseEmitter.event().name("error").data(STREAM_FAILED_MESSAGE))
-                }
-                emitter.complete()
-            },
-            emitter::complete
         )
-
-        emitter.onCompletion { dispose(subscription) }
-        emitter.onTimeout {
-            dispose(subscription)
-            emitter.complete()
-        }
-        emitter.onError { dispose(subscription) }
-
-        return emitter
-    }
-
-    private fun dispose(subscription: Disposable) {
-        if (!subscription.isDisposed) {
-            subscription.dispose()
-        }
+            .map { chunk -> ServerSentEvent.builder<String>(chunk).event(MESSAGE_EVENT).build() }
+            .onErrorResume {
+                Flux.just(ServerSentEvent.builder<String>(STREAM_FAILED_MESSAGE).event(ERROR_EVENT).build())
+            }
     }
 
     companion object {
-        private const val SSE_TIMEOUT_MILLIS = 300_000L
+        private const val MESSAGE_EVENT = "message"
+        private const val ERROR_EVENT = "error"
         private const val STREAM_FAILED_MESSAGE = "stream failed"
     }
 }

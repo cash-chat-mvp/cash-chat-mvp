@@ -11,6 +11,7 @@ import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.auth.persistence.entity.RefreshToken
 import com.wnl.cashchat.api.domain.auth.persistence.repository.RefreshTokenRepository
 import com.wnl.cashchat.api.domain.auth.web.response.AuthResponse
+import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
@@ -32,6 +33,7 @@ class AuthService(
     private val jwtTokenHandler: JwtTokenHandler,
     private val oAuthProperties: OAuthProperties,
     private val restClient: RestClient,
+    private val userPointService: UserPointService,
     oAuthUserInfoExtractors: List<OAuthUserInfoExtractor>
 ) {
 
@@ -46,6 +48,8 @@ class AuthService(
         if (user.provider != AuthProviderType.NONE) {
             throw AlreadyOAuthUserException("이미 OAuth로 가입된 사용자입니다. 소셜 로그인을 이용해주세요.")
         }
+
+        userPointService.ensureInitialized(user)
 
         val accessToken = jwtTokenHandler.createAccessToken(user.id, user.role)
 
@@ -177,6 +181,8 @@ class AuthService(
     // -- Build Authorization Response --
 
     private fun buildAuthResponse(user: User): AuthResponse {
+
+        userPointService.ensureInitialized(user)
 
         val accessToken = jwtTokenHandler.createAccessToken(user.id, user.role)
         val refreshToken = generateRefreshToken(user)
