@@ -86,21 +86,56 @@ jobs:
         env:
           BACKEND_SPRING_PROFILES_ACTIVE: ${{ secrets.BACKEND_SPRING_PROFILES_ACTIVE }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+          APP_SWAGGER_ENABLED: ${{ secrets.APP_SWAGGER_ENABLED }}
         run: |
           SPRING_PROFILE="${BACKEND_SPRING_PROFILES_ACTIVE}"
           if [ -z "${SPRING_PROFILE}" ]; then
             SPRING_PROFILE="prod"
           fi
 
-          if [ "${SPRING_PROFILE}" = "prod" ] && [ -z "${OPENAI_API_KEY}" ]; then
-            echo "OPENAI_API_KEY must be set when SPRING_PROFILES_ACTIVE=prod" >&2
-            exit 1
+          SWAGGER_ENABLED="${APP_SWAGGER_ENABLED}"
+          if [ -z "${SWAGGER_ENABLED}" ]; then
+            SWAGGER_ENABLED="false"
           fi
 
+          if [ "${SPRING_PROFILE}" = "prod" ]; then
+            missing_vars=()
+            if [ -z "${OPENAI_API_KEY}" ]; then missing_vars+=("OPENAI_API_KEY"); fi
+            if [ -z "${GOOGLE_CLIENT_ID}" ]; then missing_vars+=("GOOGLE_CLIENT_ID"); fi
+            if [ -z "${GOOGLE_CLIENT_SECRET}" ]; then missing_vars+=("GOOGLE_CLIENT_SECRET"); fi
+            if [ -z "${GOOGLE_REDIRECT_URI}" ]; then missing_vars+=("GOOGLE_REDIRECT_URI"); fi
+
+            if [ "${#missing_vars[@]}" -gt 0 ]; then
+              echo "Missing required prod secrets: ${missing_vars[*]}" >&2
+              exit 1
+            fi
+          fi
+
+          write_env() {
+            local key="$1"
+            local value="$2"
+            if [[ "${value}" == *$'\n'* || "${value}" == *$'\r'* ]]; then
+              echo "${key} must not contain newlines" >&2
+              exit 1
+            fi
+            if [[ "${value}" == *"'"* ]]; then
+              echo "${key} must not contain single quotes" >&2
+              exit 1
+            fi
+            printf "%s='%s'\n" "${key}" "${value}"
+          }
+
           {
-            echo "BACKEND_IMAGE=ghcr.io/${{ github.repository_owner }}/cash-chat-backend:latest"
-            echo "SPRING_PROFILES_ACTIVE=${SPRING_PROFILE}"
-            echo "OPENAI_API_KEY=${OPENAI_API_KEY}"
+            write_env "BACKEND_IMAGE" "ghcr.io/${{ github.repository_owner }}/cash-chat-backend:latest"
+            write_env "SPRING_PROFILES_ACTIVE" "${SPRING_PROFILE}"
+            write_env "OPENAI_API_KEY" "${OPENAI_API_KEY}"
+            write_env "GOOGLE_CLIENT_ID" "${GOOGLE_CLIENT_ID}"
+            write_env "GOOGLE_CLIENT_SECRET" "${GOOGLE_CLIENT_SECRET}"
+            write_env "GOOGLE_REDIRECT_URI" "${GOOGLE_REDIRECT_URI}"
+            write_env "APP_SWAGGER_ENABLED" "${SWAGGER_ENABLED}"
           } > infra/deploy/backend/.deploy.env
 
       - name: Upload compose files to server
