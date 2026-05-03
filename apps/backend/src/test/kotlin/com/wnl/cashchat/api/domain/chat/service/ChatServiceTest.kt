@@ -7,6 +7,8 @@ import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageRole
 import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageStatus
 import com.wnl.cashchat.api.domain.chat.persistence.repository.ChatMessageRepository
 import com.wnl.cashchat.api.domain.chat.persistence.repository.ConversationRepository
+import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
+import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessage
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
@@ -19,6 +21,7 @@ import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.transaction.PlatformTransactionManager
@@ -32,6 +35,7 @@ import java.util.Optional
 class ChatServiceTest : FunSpec() {
     private lateinit var conversationRepository: ConversationRepository
     private lateinit var chatMessageRepository: ChatMessageRepository
+    private lateinit var userPointService: UserPointService
     private lateinit var llmProvider: LlmProvider
     private lateinit var chatService: ChatService
     private lateinit var savedMessages: MutableList<SavedMessageSnapshot>
@@ -42,6 +46,7 @@ class ChatServiceTest : FunSpec() {
         beforeTest {
             conversationRepository = mock()
             chatMessageRepository = mock()
+            userPointService = mock()
             llmProvider = mock()
             savedMessages = mutableListOf()
             savedMessageEntities = mutableMapOf()
@@ -49,6 +54,7 @@ class ChatServiceTest : FunSpec() {
             chatService = ChatService(
                 conversationRepository = conversationRepository,
                 chatMessageRepository = chatMessageRepository,
+                userPointService = userPointService,
                 llmProvider = llmProvider,
                 transactionManager = NoOpTransactionManager(),
             )
@@ -65,6 +71,20 @@ class ChatServiceTest : FunSpec() {
             }
 
             error.message shouldBe "Conversation does not belong to user"
+        }
+
+        test("stream rejects insufficient point balance before persisting messages") {
+            val conversation = conversation(ownerId = 1L)
+
+            whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
+            whenever(userPointService.hasEnoughBalance(1L)).thenReturn(false)
+
+            shouldThrow<InsufficientPointsException> {
+                chatService.stream(userId = 1L, conversationId = 1L, content = "hello")
+            }
+
+            verify(chatMessageRepository, never()).save(any())
+            verify(llmProvider, never()).stream(any())
         }
 
         test("stream sends only completed history plus the current user message to the provider") {
@@ -101,6 +121,7 @@ class ChatServiceTest : FunSpec() {
             )
 
             whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
+            whenever(userPointService.hasEnoughBalance(1L)).thenReturn(true)
             whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(history)
             stubMessagePersistence()
             whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi there"))
@@ -192,6 +213,7 @@ class ChatServiceTest : FunSpec() {
 
     private fun stubConversation(conversation: Conversation) {
         whenever(conversationRepository.findById(conversation.id)).thenReturn(Optional.of(conversation))
+        whenever(userPointService.hasEnoughBalance(conversation.user.id)).thenReturn(true)
         whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.id)).thenReturn(emptyList())
         stubMessagePersistence()
     }
