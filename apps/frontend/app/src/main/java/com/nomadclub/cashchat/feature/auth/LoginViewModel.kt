@@ -1,24 +1,47 @@
 package com.nomadclub.cashchat.feature.auth
 
 import androidx.lifecycle.ViewModel
-import com.nomadclub.cashchat.shared.auth.LoginStore
+import androidx.lifecycle.viewModelScope
+import com.nomadclub.cashchat.data.repository.AuthRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
-/**
- * 로그인 화면의 상태와 로직을 담당하는 ViewModel.
- * - ViewModel: 화면 회전 등으로 Composable이 다시 그려져도 데이터가 유지됩니다.
- * - MutableStateFlow: UI가 구독할 수 있는 "값이 바뀌는 상태". asStateFlow()로 읽기 전용으로 노출합니다.
- */
-class LoginViewModel : ViewModel() {
-    private val store = LoginStore()
-    val emailState = store.emailState
+class LoginViewModel : ViewModel(), KoinComponent {
 
-    /** 입력된 이메일을 상태에 반영 (추후 이메일 로그인 시 사용) */
-    fun updateEmail(email: String) {
-        store.updateEmail(email)
+    private val authRepository: AuthRepository by inject()
+
+    sealed class UiState {
+        object Idle : UiState()
+        object Loading : UiState()
+        object Success : UiState()
+        data class Error(val message: String) : UiState()
     }
 
-    /** 카카오/Apple 로그인 버튼 클릭 시 호출. 실제 로그인 API 연동은 TODO */
-    fun login() {
-        store.login()
+    private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
+    val uiState = _uiState.asStateFlow()
+
+    fun loginAsGuest() {
+        viewModelScope.launch {
+            _uiState.value = UiState.Loading
+            authRepository.loginAsGuest()
+                .onSuccess { _uiState.value = UiState.Success }
+                .onFailure { _uiState.value = UiState.Error(it.message ?: "게스트 로그인 실패") }
+        }
+    }
+
+    fun loginWithGoogle(authCode: String) {
+        viewModelScope.launch {
+            _uiState.value = UiState.Loading
+            authRepository.loginWithGoogle(authCode)
+                .onSuccess { _uiState.value = UiState.Success }
+                .onFailure { _uiState.value = UiState.Error(it.message ?: "Google 로그인 실패") }
+        }
+    }
+
+    fun clearError() {
+        _uiState.value = UiState.Idle
     }
 }
