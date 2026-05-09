@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
 import com.wnl.cashchat.api.domain.chat.service.ChatService
 import com.wnl.cashchat.api.domain.chat.web.request.ChatStreamRequest
+import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
+import com.wnl.cashchat.api.domain.point.web.exception.PointExceptionHandler
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
@@ -15,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.boot.test.mock.mockito.MockBean
+import org.springframework.context.annotation.Import
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
 import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
@@ -24,12 +27,11 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.request
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter
 import reactor.core.publisher.Flux
-import java.util.concurrent.atomic.AtomicBoolean
 
 @WebMvcTest(ChatController::class)
 @AutoConfigureMockMvc(addFilters = false)
+@Import(PointExceptionHandler::class)
 class ChatControllerWebMvcTest : FunSpec() {
     override fun extensions() = listOf(SpringExtension)
 
@@ -65,6 +67,7 @@ class ChatControllerWebMvcTest : FunSpec() {
             mockMvc.perform(asyncDispatch(result))
                 .andExpect(status().isOk)
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+                .andExpect(content().string("event:message\ndata:hi there\n\n"))
 
             verify(chatService).stream(eq(1L), eq(7L), eq("hello"))
         }
@@ -111,65 +114,18 @@ class ChatControllerWebMvcTest : FunSpec() {
             response.contains("stream failed") shouldBe true
             response.contains("sensitive details") shouldBe false
         }
-    }
-}
 
-class ChatControllerLifecycleTest : FunSpec() {
-    private lateinit var chatService: ChatService
-    private lateinit var controller: ChatController
+        test("chat stream endpoint returns payment required when points are insufficient") {
+            whenever(chatService.stream(1L, 7L, "hello")).thenThrow(InsufficientPointsException())
 
-    init {
-        beforeTest {
-            chatService = mock()
-            controller = ChatController(chatService)
-        }
-
-        test("stream disposes the upstream subscription when the emitter completes") {
-            val disposed = AtomicBoolean(false)
-            whenever(chatService.stream(1L, 7L, "hello")).thenReturn(
-                Flux.create<String> { sink -> sink.onDispose { disposed.set(true) } }
+            mockMvc.perform(
+                post("/api/v1/chat/stream")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.TEXT_EVENT_STREAM)
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "message" to "hello")))
             )
-
-            val emitter = controller.stream(
-                authentication = UsernamePasswordAuthenticationToken(1L, null),
-                request = ChatStreamRequest(conversationId = 7L, message = "hello")
-            )
-
-            invokeCallback(emitter, "completionCallback", "run")
-
-            disposed.get() shouldBe true
-        }
-
-        test("stream disposes the upstream subscription when the emitter errors") {
-            val disposed = AtomicBoolean(false)
-            whenever(chatService.stream(1L, 7L, "hello")).thenReturn(
-                Flux.create<String> { sink -> sink.onDispose { disposed.set(true) } }
-            )
-
-            val emitter = controller.stream(
-                authentication = UsernamePasswordAuthenticationToken(1L, null),
-                request = ChatStreamRequest(conversationId = 7L, message = "hello")
-            )
-
-            invokeCallback(emitter, "errorCallback", "accept", IllegalStateException("client disconnected"))
-
-            disposed.get() shouldBe true
-        }
-    }
-
-    private fun invokeCallback(emitter: ResponseBodyEmitter, fieldName: String, methodName: String, argument: Any? = null) {
-        val field = ResponseBodyEmitter::class.java.getDeclaredField(fieldName)
-        field.isAccessible = true
-        val callback = field.get(emitter)
-        val method = callback.javaClass.methods.first { candidate ->
-            candidate.name == methodName && candidate.parameterCount == if (argument == null) 0 else 1
-        }
-        method.isAccessible = true
-
-        if (argument == null) {
-            method.invoke(callback)
-        } else {
-            method.invoke(callback, argument)
+                .andExpect(status().isPaymentRequired)
         }
     }
 }

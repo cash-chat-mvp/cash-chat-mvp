@@ -1,18 +1,47 @@
 package com.nomadclub.cashchat.feature.onboarding
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.nomadclub.cashchat.data.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
-/**
- * 온보딩 화면용 ViewModel (현재는 로그인 연동 전이라 상태만 보유).
- * 필요 시 "다음" 페이지 인덱스, 스킵 여부 등을 여기서 관리할 수 있습니다.
- */
-class OnboardingViewModel : ViewModel() {
-    private val _emailState = MutableStateFlow("")
-    val emailState = _emailState.asStateFlow()
+class OnboardingViewModel : ViewModel(), KoinComponent {
 
-    fun login() {
-        // TODO: Implement login logic
+    private val authRepository: AuthRepository by inject()
+
+    sealed class UiState {
+        object Idle : UiState()
+        object Loading : UiState()
+        object Success : UiState()
+        data class Error(val message: String) : UiState()
+    }
+
+    private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
+    val uiState = _uiState.asStateFlow()
+
+    fun loginAsGuest() {
+        viewModelScope.launch {
+            _uiState.value = UiState.Loading
+            authRepository.loginAsGuest()
+                .onSuccess { _uiState.value = UiState.Success }
+                .onFailure { _uiState.value = UiState.Error(it.message ?: "게스트 로그인 실패") }
+        }
+    }
+
+    fun loginWithGoogle(authCode: String) {
+        viewModelScope.launch {
+            _uiState.value = UiState.Loading
+            authRepository.loginWithGoogle(authCode)
+                .onSuccess { _uiState.value = UiState.Success }
+                .onFailure { _uiState.value = UiState.Error(it.message ?: "Google 로그인 실패") }
+        }
+    }
+
+    fun clearError() {
+        _uiState.value = UiState.Idle
     }
 }
