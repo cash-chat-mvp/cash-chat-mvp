@@ -2,20 +2,28 @@ import Foundation
 import Security
 
 enum KeychainHelper {
+    private static let service = "com.cashchat.app"
+
     static func set(_ value: String, forKey key: String) {
         let data = Data(value.utf8)
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
-            kSecAttrAccount: key,
-            kSecValueData: data
+            kSecAttrService: service,
+            kSecAttrAccount: key
         ]
-        SecItemDelete(query as CFDictionary)
-        SecItemAdd(query as CFDictionary, nil)
+        let updateStatus = SecItemUpdate(query as CFDictionary, [kSecValueData: data] as CFDictionary)
+        if updateStatus == errSecItemNotFound {
+            var addQuery = query
+            addQuery[kSecValueData] = data
+            addQuery[kSecAttrAccessible] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            SecItemAdd(addQuery as CFDictionary, nil)
+        }
     }
 
     static func get(forKey key: String) -> String? {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
             kSecAttrAccount: key,
             kSecReturnData: true,
             kSecMatchLimit: kSecMatchLimitOne
@@ -29,6 +37,7 @@ enum KeychainHelper {
     static func remove(forKey key: String) {
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
             kSecAttrAccount: key
         ]
         SecItemDelete(query as CFDictionary)
