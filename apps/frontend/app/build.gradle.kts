@@ -2,30 +2,13 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-
-    // Google services Gradle plugin
-    id("com.google.gms.google-services")
 }
 
-// key.properties (릴리즈 서명)
-val keystorePropertiesFile = rootProject.file("key.properties")
-val keystoreProperties = Properties()
-if (keystorePropertiesFile.exists()) {
-    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) load(file.inputStream())
 }
-
-// local.properties (AdMob ID, Sentry DSN 등 민감 키 관리)
-val localPropertiesFile = rootProject.file("local.properties")
-val localProperties = Properties()
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.inputStream().use { localProperties.load(it) }
-}
-
-/** local.properties → 환경변수 → fallback 순서로 설정값 조회 */
-fun getConfigValue(key: String, fallback: String = ""): String =
-    localProperties.getProperty(key) ?: System.getenv(key) ?: fallback
 
 android {
     namespace = "com.nomadclub.cashchat"
@@ -39,65 +22,26 @@ android {
         applicationId = "com.nomadclub.cashchat"
         minSdk = 24
         targetSdk = 36
-        // CI: VERSION_CODE=github.run_number, VERSION_NAME=브랜치에서 추출 (release-fe/1.2.0 → 1.2.0)
-        // 로컬: 환경변수 없으면 fallback 값 사용
-        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("VERSION_NAME") ?: "1.0.0"
+        // CI/CD 환경에서 VERSION_CODE/VERSION_NAME 환경변수로 주입 (android-build-distribute.yml)
+        // 로컬 빌드 시에는 기본값 사용
+        versionCode = providers.environmentVariable("VERSION_CODE").orNull?.toIntOrNull() ?: 1
+        versionName = providers.environmentVariable("VERSION_NAME").orNull ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
 
-    // dev / prod 환경 분리
-    flavorDimensions += "env"
-    productFlavors {
-        create("dev") {
-            dimension = "env"
-            applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")}\"")
+        // Retrofit은 baseUrl에 끝 슬래시를 요구하므로 누락 시 자동 보정
+        val rawBaseUrl = localProperties.getProperty("BASE_URL", "https://cashchat.duckdns.org/")
+        val baseUrl = if (rawBaseUrl.endsWith("/")) rawBaseUrl else "$rawBaseUrl/"
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
 
-            // dev 환경: Google 공식 테스트 광고 ID 사용 (실제 수익 발생 안 함)
-            val appId = getConfigValue("DEV_ADMOB_APP_ID", "ca-app-pub-3940256099942544~3347511713")
-            manifestPlaceholders["admobAppId"] = appId
-            buildConfigField("String", "ADMOB_APP_ID", "\"$appId\"")
-            buildConfigField("String", "ADMOB_BANNER_AD_UNIT_ID",
-                "\"${getConfigValue("DEV_ADMOB_BANNER_AD_UNIT_ID", "ca-app-pub-3940256099942544/6300978111")}\"")
-            buildConfigField("String", "ADMOB_INTERSTITIAL_AD_UNIT_ID",
-                "\"${getConfigValue("DEV_ADMOB_INTERSTITIAL_AD_UNIT_ID", "ca-app-pub-3940256099942544/1033173712")}\"")
-            buildConfigField("String", "ADMOB_NATIVE_AD_UNIT_ID",
-                "\"${getConfigValue("DEV_ADMOB_NATIVE_AD_UNIT_ID", "ca-app-pub-3940256099942544/2247696110")}\"")
-            buildConfigField("String", "ADMOB_REWARDED_AD_UNIT_ID",
-                "\"${getConfigValue("DEV_ADMOB_REWARDED_AD_UNIT_ID", "ca-app-pub-3940256099942544/5224354917")}\"")
-            buildConfigField("String", "SENTRY_DSN",
-                "\"${getConfigValue("DEV_SENTRY_DSN")}\"")
-        }
-        create("prod") {
-            dimension = "env"
-
-            // prod 환경: local.properties 또는 CI 환경변수에서 주입 (하드코딩 금지)
-            val appId = getConfigValue("ADMOB_APP_ID")
-            manifestPlaceholders["admobAppId"] = appId
-            buildConfigField("String", "ADMOB_APP_ID", "\"$appId\"")
-            buildConfigField("String", "ADMOB_BANNER_AD_UNIT_ID",
-                "\"${getConfigValue("ADMOB_BANNER_AD_UNIT_ID")}\"")
-            buildConfigField("String", "ADMOB_INTERSTITIAL_AD_UNIT_ID",
-                "\"${getConfigValue("ADMOB_INTERSTITIAL_AD_UNIT_ID")}\"")
-            buildConfigField("String", "ADMOB_NATIVE_AD_UNIT_ID",
-                "\"${getConfigValue("ADMOB_NATIVE_AD_UNIT_ID")}\"")
-            buildConfigField("String", "ADMOB_REWARDED_AD_UNIT_ID",
-                "\"${getConfigValue("ADMOB_REWARDED_AD_UNIT_ID")}\"")
-            buildConfigField("String", "SENTRY_DSN",
-                "\"${getConfigValue("SENTRY_DSN")}\"")
-        }
-    }
-
-    signingConfigs {
-        create("release") {
-            keyAlias = (keystoreProperties["keyAlias"] as String?) ?: System.getenv("KEYSTORE_KEY_ALIAS")
-            keyPassword = (keystoreProperties["keyPassword"] as String?) ?: System.getenv("KEYSTORE_KEY_PASSWORD")
-            storeFile = (keystoreProperties["storeFile"] as String?)?.let { file(it) }
-                ?: System.getenv("KEYSTORE_PATH")?.let { file(it) }
-            storePassword = (keystoreProperties["storePassword"] as String?) ?: System.getenv("KEYSTORE_STORE_PASSWORD")
-        }
+        buildConfigField("String", "ADMOB_APP_ID", "\"${localProperties.getProperty("ADMOB_APP_ID", "")}\"")
+        manifestPlaceholders["admobAppId"] = localProperties.getProperty("ADMOB_APP_ID", "")
+        buildConfigField("String", "ADMOB_BANNER_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_BANNER_AD_UNIT_ID", "")}\"")
+        buildConfigField("String", "ADMOB_INTERSTITIAL_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_INTERSTITIAL_AD_UNIT_ID", "")}\"")
+        buildConfigField("String", "ADMOB_NATIVE_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_NATIVE_AD_UNIT_ID", "")}\"")
+        buildConfigField("String", "ADMOB_REWARDED_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_REWARDED_AD_UNIT_ID", "")}\"")
+        buildConfigField("String", "SENTRY_DSN", "\"${localProperties.getProperty("SENTRY_DSN", "")}\"")
     }
 
     buildTypes {
@@ -107,7 +51,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -120,14 +63,7 @@ android {
     }
 }
 
-kotlin {
-    jvmToolchain(21)
-}
-
 dependencies {
-    implementation(project(":shared"))
-
-    // AndroidX / Compose
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -140,19 +76,28 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
 
-    // Firebase (BOM으로 버전 관리)
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.analytics)
-    implementation(libs.firebase.config)
+    // Network
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp.logging)
+    implementation(libs.kotlinx.coroutines.android)
+
+    // Storage
+    implementation(libs.datastore.preferences)
+
+    // Google Sign-In
+    implementation(libs.google.play.services.auth)
+
+    // DI
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
 
     // AdMob
     implementation(libs.play.services.ads)
 
-    // Koin (Android + Compose)
-    implementation(libs.koin.android)
-    implementation(libs.koin.androidx.compose)
+    // Encrypted SharedPreferences
+    implementation(libs.security.crypto)
 
-    // Test
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

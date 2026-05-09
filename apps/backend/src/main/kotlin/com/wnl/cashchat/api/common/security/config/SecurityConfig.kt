@@ -4,6 +4,7 @@ import com.wnl.cashchat.api.common.security.filter.JwtAuthenticationFilter
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.env.Environment
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -13,10 +14,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 class SecurityConfig(
-    private val jwtTokenHandler: JwtTokenHandler
+    private val jwtTokenHandler: JwtTokenHandler,
+    private val environment: Environment
 ) {
 
     companion object {
+        private const val PROD_PROFILE = "prod"
+
         private val SWAGGER_PATHS = arrayOf(
             "/v3/api-docs/**",
             "/swagger-ui.html",
@@ -30,22 +34,24 @@ class SecurityConfig(
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
+        val isSwaggerEnabled =
+            !environment.activeProfiles.contains(PROD_PROFILE) ||
+                environment.getProperty("app.swagger.enabled", Boolean::class.java, false)
+
         http
             .csrf { it.disable() }
             .headers { it.frameOptions { frame -> frame.disable() } } // H2
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter::class.java)
             .authorizeHttpRequests {
-                it.requestMatchers(
-                    *SWAGGER_PATHS,
-                    "/api/auth/**",
-                    "/favicon.ico",
-                ).permitAll()
+                val publicPaths = mutableListOf("/api/auth/**", "/favicon.ico")
+                if (isSwaggerEnabled) {
+                    publicPaths.addAll(SWAGGER_PATHS)
+                }
+                it.requestMatchers(*publicPaths.toTypedArray()).permitAll()
                     .anyRequest().authenticated()
             }
 
         return http.build()
-
     }
-
 }

@@ -8,6 +8,8 @@ import com.wnl.cashchat.api.domain.chat.persistence.repository.ConversationRepos
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessage
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
+import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
+import com.wnl.cashchat.api.domain.point.service.UserPointService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -21,6 +23,7 @@ import reactor.core.publisher.SignalType
 class ChatService(
     private val conversationRepository: ConversationRepository,
     private val chatMessageRepository: ChatMessageRepository,
+    private val userPointService: UserPointService,
     private val llmProvider: LlmProvider,
     transactionManager: PlatformTransactionManager,
 ) {
@@ -29,51 +32,54 @@ class ChatService(
     /**
      * Streams an assistant response while persisting the user input and final assistant state.
      */
-    fun stream(userId: Long, conversationId: Long, content: String): Flux<String> =
-        Flux.defer {
-            val streamContext = transactionTemplate.execute {
-                val conversation = conversationRepository.findById(conversationId)
-                    .orElseThrow { IllegalArgumentException("Conversation not found") }
+    fun stream(userId: Long, conversationId: Long, content: String): Flux<String> {
+        val streamContext = transactionTemplate.execute {
+            val conversation = conversationRepository.findById(conversationId)
+                .orElseThrow { IllegalArgumentException("Conversation not found") }
 
-                require(conversation.user.id == userId) { "Conversation does not belong to user" }
+            require(conversation.user.id == userId) { "Conversation does not belong to user" }
 
-                val userMessage = chatMessageRepository.save(
-                    ChatMessage(
-                        conversation = conversation,
-                        role = MessageRole.USER,
-                        content = content,
-                        status = MessageStatus.COMPLETED
-                    )
+            if (!userPointService.hasEnoughBalance(userId)) {
+                throw InsufficientPointsException()
+            }
+
+            val userMessage = chatMessageRepository.save(
+                ChatMessage(
+                    conversation = conversation,
+                    role = MessageRole.USER,
+                    content = content,
+                    status = MessageStatus.COMPLETED
                 )
+            )
 
-                val history = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
-                val providerMessages = history
-                    .filter { it.status == MessageStatus.COMPLETED && it.id != userMessage.id }
-                    .map { it.toProviderMessage() } + userMessage.toProviderMessage()
+            val history = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
+            val providerMessages = history
+                .filter { it.status == MessageStatus.COMPLETED && it.id != userMessage.id }
+                .map { it.toProviderMessage() } + userMessage.toProviderMessage()
 
-                val assistantMessage = chatMessageRepository.save(
-                    ChatMessage(
-                        conversation = conversation,
-                        role = MessageRole.ASSISTANT,
-                        content = "",
-                        status = MessageStatus.STREAMING
-                    )
+            val assistantMessage = chatMessageRepository.save(
+                ChatMessage(
+                    conversation = conversation,
+                    role = MessageRole.ASSISTANT,
+                    content = "",
+                    status = MessageStatus.STREAMING
                 )
+            )
 
-                require(assistantMessage.id > 0) { "Assistant message id must be assigned" }
+            require(assistantMessage.id > 0) { "Assistant message id must be assigned" }
 
-                StreamContext(
-                    assistantMessageId = assistantMessage.id,
-                    providerMessages = providerMessages,
-                )
-            } ?: error("Failed to initialize chat stream")
+            StreamContext(
+                assistantMessageId = assistantMessage.id,
+                providerMessages = providerMessages,
+            )
+        } ?: error("Failed to initialize chat stream")
 
-            val buffer = StringBuilder()
+        val buffer = StringBuilder()
 
-            llmProvider.stream(streamContext.providerMessages)
-                .doOnNext { chunk -> buffer.append(chunk) }
-                .doFinally { signalType -> finalizeAssistantMessage(signalType, streamContext.assistantMessageId, buffer) }
-        }
+        return llmProvider.stream(streamContext.providerMessages)
+            .doOnNext { chunk -> buffer.append(chunk) }
+            .doFinally { signalType -> finalizeAssistantMessage(signalType, streamContext.assistantMessageId, buffer) }
+    }
 
     private fun finalizeAssistantMessage(
         signalType: SignalType,
