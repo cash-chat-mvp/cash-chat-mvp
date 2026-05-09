@@ -1,11 +1,10 @@
 default_platform(:android)
 
 platform :android do
-  desc "Build dev release APK and distribute to Firebase App Distribution"
+  desc "Build release APK and distribute to Firebase App Distribution"
   lane :distribute do
     gradle(
       task: "assemble",
-      flavor: "dev",
       build_type: "Release",
       properties: {
         "android.injected.signing.store.file"     => ENV.fetch("KEYSTORE_PATH"),
@@ -17,7 +16,6 @@ platform :android do
 
     firebase_app_distribution(
       app: ENV.fetch("FIREBASE_APP_ID"),
-      groups: "testers",
       service_credentials_file: "service-account.json",
       release_notes: ENV.fetch("RELEASE_NOTES", "New build available")
     )

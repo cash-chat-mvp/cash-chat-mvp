@@ -9,6 +9,8 @@ import com.nomadclub.cashchat.BuildConfig
  * local.properties (dev 로컬) 또는 CI 환경변수 (prod) → BuildConfig → AppConfig
  */
 data class AppConfig(
+    // API
+    val baseUrl: String,
     // AdMob
     val admobAppId: String,
     val admobBannerAdUnitId: String,
@@ -20,6 +22,7 @@ data class AppConfig(
 ) {
     companion object {
         fun fromBuildConfig(): AppConfig = AppConfig(
+            baseUrl = BuildConfig.BASE_URL,
             admobAppId = BuildConfig.ADMOB_APP_ID,
             admobBannerAdUnitId = BuildConfig.ADMOB_BANNER_AD_UNIT_ID,
             admobInterstitialAdUnitId = BuildConfig.ADMOB_INTERSTITIAL_AD_UNIT_ID,
