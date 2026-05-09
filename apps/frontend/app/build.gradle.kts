@@ -22,13 +22,18 @@ android {
         applicationId = "com.nomadclub.cashchat"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // CI/CD 환경에서 VERSION_CODE/VERSION_NAME 환경변수로 주입 (android-build-distribute.yml)
+        // 로컬 빌드 시에는 기본값 사용
+        versionCode = providers.environmentVariable("VERSION_CODE").orNull?.toIntOrNull() ?: 1
+        versionName = providers.environmentVariable("VERSION_NAME").orNull ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")}\"")
-        buildConfigField("String", "BASE_URL", "\"${localProperties.getProperty("BASE_URL", "https://cashchat.duckdns.org/")}\"")
+        // Retrofit은 baseUrl에 끝 슬래시를 요구하므로 누락 시 자동 보정
+        val rawBaseUrl = localProperties.getProperty("BASE_URL", "https://cashchat.duckdns.org/")
+        val baseUrl = if (rawBaseUrl.endsWith("/")) rawBaseUrl else "$rawBaseUrl/"
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
 
         buildConfigField("String", "ADMOB_APP_ID", "\"${localProperties.getProperty("ADMOB_APP_ID", "")}\"")
         manifestPlaceholders["admobAppId"] = localProperties.getProperty("ADMOB_APP_ID", "")
@@ -49,8 +54,8 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
     buildFeatures {
         compose = true

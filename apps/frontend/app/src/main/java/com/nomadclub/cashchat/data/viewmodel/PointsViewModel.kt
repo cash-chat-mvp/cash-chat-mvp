@@ -14,10 +14,12 @@ class PointsViewModel : ViewModel() {
     val messageCount = _messageCount.asStateFlow()
 
     fun addPoints(amount: Int) {
+        if (amount <= 0) return
         _points.update { it + amount }
     }
 
     fun spendPoints(amount: Int): Boolean {
+        if (amount <= 0) return false
         if (_points.value >= amount) {
             _points.update { it - amount }
             return true

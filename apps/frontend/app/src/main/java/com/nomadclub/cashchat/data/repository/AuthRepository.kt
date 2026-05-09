@@ -25,7 +25,8 @@ class AuthRepository(
 
     suspend fun loginWithGoogle(authCode: String): Result<AuthResponse> = runCatching {
         // 게스트로 사용 중이었다면 deviceToken을 함께 전송 → 게스트 → 회원 전환
-        val deviceToken = tokenDataStore.getDeviceTokenBlocking()
+        // suspend 버전 사용으로 불필요한 스레드 차단 방지
+        val deviceToken = tokenDataStore.getOrCreateDeviceToken()
         val response = apiService.loginWithGoogle(code = authCode, deviceToken = deviceToken)
         val body = response.body() ?: error("빈 응답: ${response.code()}")
         tokenDataStore.saveAuthResponse(body)
@@ -51,7 +52,6 @@ class AuthRepository(
     }
 
     fun getAccessToken() = tokenDataStore.getAccessTokenBlocking()
-    fun getRole() = tokenDataStore.getRoleBlocking()
     fun getUserRole() = tokenDataStore.getRoleBlocking()
     fun getUserId() = tokenDataStore.getUserIdBlocking()
     val accessTokenFlow = tokenDataStore.accessTokenFlow

@@ -134,12 +134,19 @@ private fun CashChatApp() {
         addPoints(10)
     }
 
+    // 이미 MEMBER 세션이 있으면 온보딩 생략 → 바로 메인으로
+    val startDestination = when {
+        authState is AuthState.Authenticated &&
+            (authState as AuthState.Authenticated).role == "MEMBER" -> AppRoute.main()
+        else -> AppRoute.ONBOARDING
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = AppRoute.ONBOARDING,
+            startDestination = startDestination,
             modifier = Modifier.padding(innerPadding)
         ) {
             // 온보딩 화면

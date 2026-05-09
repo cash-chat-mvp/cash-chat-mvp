@@ -84,7 +84,7 @@ fun LoginFormContent(
         try {
             val account = task.getResult(ApiException::class.java)
             val serverAuthCode = account?.serverAuthCode
-            Log.d(TAG, "✅ Google 계정 선택 완료 | email=${account?.email}, serverAuthCode=${if (serverAuthCode != null) "OK(${serverAuthCode.take(8)}...)" else "NULL"}")
+            Log.d(TAG, "✅ Google 계정 선택 완료 | serverAuthCode=${if (serverAuthCode != null) "OK" else "NULL"}")
             if (serverAuthCode != null) {
                 onGoogleSignIn(serverAuthCode)
             } else {

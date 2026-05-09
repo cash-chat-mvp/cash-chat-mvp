@@ -23,9 +23,13 @@ class TokenAuthenticator(
 ) : Authenticator {
 
     override fun authenticate(route: Route?, response: Response): Request? {
-        // 이미 갱신 중이거나 갱신 요청 자체가 401이면 포기
-        if (response.request.url.encodedPath.contains("auth/refresh") ||
-            response.request.url.encodedPath.contains("auth/guest")
+        val path = response.request.url.encodedPath
+        // 갱신 엔드포인트 자체가 401 → 무한 루프 방지
+        // google callback은 일회용 code라 재시도 불가
+        if (path.contains("auth/refresh") ||
+            path.contains("auth/guest") ||
+            path.contains("auth/callback/google") ||
+            responseCount(response) >= 2
         ) return null
 
         return synchronized(this) {
@@ -60,6 +64,17 @@ class TokenAuthenticator(
                 null
             }
         }
+    }
+
+    /** prior response 체인을 따라 실제 재시도 횟수를 반환 */
+    private fun responseCount(response: Response): Int {
+        var count = 1
+        var current = response.priorResponse
+        while (current != null) {
+            count++
+            current = current.priorResponse
+        }
+        return count
     }
 
     private fun refreshMemberToken(originalRequest: Request): Request? {

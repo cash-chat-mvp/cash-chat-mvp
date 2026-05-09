@@ -25,7 +25,8 @@ val appModule = module {
 
     single {
         val logging = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+            redactHeader("Authorization")  // Bearer 토큰이 로그에 노출되지 않도록
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
             else HttpLoggingInterceptor.Level.NONE
         }
         OkHttpClient.Builder()

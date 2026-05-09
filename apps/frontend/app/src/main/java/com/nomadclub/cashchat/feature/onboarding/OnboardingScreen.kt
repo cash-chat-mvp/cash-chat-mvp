@@ -112,7 +112,7 @@ fun OnboardingScreen(
         try {
             val account = task.getResult(ApiException::class.java)
             val authCode = account.serverAuthCode
-            Log.d("CashChatAuth", "✅ 계정 선택 완료 | email=${account.email}, serverAuthCode=${if (authCode != null) "OK" else "NULL"}")
+            Log.d("CashChatAuth", "✅ 계정 선택 완료 | serverAuthCode=${if (authCode != null) "OK" else "NULL"}")
             if (authCode != null) {
                 viewModel.loginWithGoogle(authCode)
             } else {
