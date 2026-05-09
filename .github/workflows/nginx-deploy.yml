@@ -125,3 +125,101 @@ jobs:
             fi
 
             docker compose ps
+
+      - name: Discord nginx deploy success notification
+        if: success()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          NGINX_DOMAIN: ${{ vars.NGINX_DOMAIN }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK is missing - skip notification"
+            exit 0
+          fi
+          SHORT_SHA="${SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
+          DOMAIN_VALUE=$([ -n "$NGINX_DOMAIN" ] && echo "\`$NGINX_DOMAIN\`" || echo "not configured")
+          COMMIT_VALUE=$([ -n "$COMMIT_MESSAGE" ] && echo "\`$COMMIT_MESSAGE\`" || echo "not available")
+          PAYLOAD=$(jq -n \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg sha "$SHORT_SHA" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg run_url "$RUN_URL" \
+            --arg event "$EVENT_NAME" \
+            --arg domain "$DOMAIN_VALUE" \
+            --arg commit "$COMMIT_VALUE" \
+            '{embeds: [{
+              color: 5763719,
+              title: "Nginx deployment complete",
+              description: "**Nginx stack deployment completed**",
+              fields: [
+                {name: "Domain", value: $domain, inline: true},
+                {name: "Trigger", value: ("`" + $event + "`"), inline: true},
+                {name: "Branch", value: ("`" + $branch + "`"), inline: true},
+                {name: "Actor", value: ("`" + $actor + "`"), inline: true},
+                {name: "Commit", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "Commit message", value: $commit, inline: false},
+                {name: "Actions log", value: ("[Open run](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat - Nginx Deploy"}
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || echo "Discord notification failed"
+
+      - name: Discord nginx deploy failure notification
+        if: failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          NGINX_DOMAIN: ${{ vars.NGINX_DOMAIN }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK is missing - skip notification"
+            exit 0
+          fi
+          SHORT_SHA="${SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
+          DOMAIN_VALUE=$([ -n "$NGINX_DOMAIN" ] && echo "\`$NGINX_DOMAIN\`" || echo "not configured")
+          COMMIT_VALUE=$([ -n "$COMMIT_MESSAGE" ] && echo "\`$COMMIT_MESSAGE\`" || echo "not available")
+          PAYLOAD=$(jq -n \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg sha "$SHORT_SHA" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg run_url "$RUN_URL" \
+            --arg event "$EVENT_NAME" \
+            --arg domain "$DOMAIN_VALUE" \
+            --arg commit "$COMMIT_VALUE" \
+            '{embeds: [{
+              color: 15548997,
+              title: "Nginx deployment failed",
+              description: "**Nginx asset upload, configuration, certificate handling, or stack deployment failed**",
+              fields: [
+                {name: "Domain", value: $domain, inline: true},
+                {name: "Trigger", value: ("`" + $event + "`"), inline: true},
+                {name: "Branch", value: ("`" + $branch + "`"), inline: true},
+                {name: "Actor", value: ("`" + $actor + "`"), inline: true},
+                {name: "Commit", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "Commit message", value: $commit, inline: false},
+                {name: "Actions log", value: ("[Open run](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat - Nginx Deploy"}
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || echo "Discord notification failed"

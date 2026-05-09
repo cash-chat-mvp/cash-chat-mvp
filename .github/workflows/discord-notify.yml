@@ -5,7 +5,7 @@ on:
     types: [opened, reopened, closed]
   # Android Build Check 결과 알림 (workflow_run은 base repo 시크릿 접근 가능)
   workflow_run:
-    workflows: ["Android Build Check"]
+    workflows: ["Android Build Check", "Backend CI/CD"]
     types: [completed]
 
 jobs:
@@ -132,10 +132,11 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
 
-      - name: Android 빌드 체크 결과 알림
-        if: github.event_name == 'workflow_run'
+      - name: Build check result notification
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           COMMIT_MSG: ${{ github.event.workflow_run.head_commit.message }}
@@ -146,12 +147,19 @@ jobs:
             echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
             exit 0
           fi
+          if [ "$WORKFLOW_NAME" = "Backend CI/CD" ]; then
+            SERVICE="Backend CI"
+            FOOTER="Cash Chat - Backend Build Check"
+          else
+            SERVICE="Android"
+            FOOTER="Cash Chat - Android Build Check"
+          fi
           if [ "$CONCLUSION" = "success" ]; then
             COLOR=5763719
-            TITLE="✅  Android 빌드 체크 통과"
+            TITLE="${SERVICE} build check passed"
           else
             COLOR=15548997
-            TITLE="🚨  Android 빌드 체크 실패"
+            TITLE="${SERVICE} build check failed"
           fi
           PAYLOAD=$(jq -n \
             --arg title "$TITLE" \
@@ -159,17 +167,18 @@ jobs:
             --arg actor "$ACTOR" \
             --arg run_url "$RUN_URL" \
             --arg commit "$COMMIT_MSG" \
+            --arg footer "$FOOTER" \
             --argjson color "$COLOR" \
             '{embeds: [{
               color: $color,
               title: $title,
               fields: [
-                {name: "브랜치", value: ("`" + $branch + "` → `dev`"), inline: true},
-                {name: "작성자", value: ("`" + $actor + "`"), inline: true},
-                {name: "커밋 메시지", value: ("`" + $commit + "`"), inline: false},
-                {name: "로그 확인", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
+                {name: "Branch", value: ("`" + $branch + "` -> `dev`"), inline: true},
+                {name: "Actor", value: ("`" + $actor + "`"), inline: true},
+                {name: "Commit message", value: ("`" + $commit + "`"), inline: false},
+                {name: "Actions log", value: ("[Open run](" + $run_url + ")"), inline: false}
               ],
-              footer: {text: "Cash Chat · Android Build Check"}
+              footer: {text: $footer}
             }]}')
           curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \

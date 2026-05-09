@@ -135,3 +135,87 @@ jobs:
             docker compose --env-file .deploy.env -f docker-compose.yml up -d --remove-orphans
             docker compose --env-file .deploy.env -f docker-compose.yml ps
 
+      - name: Discord backend deploy success notification
+        if: success()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          IMAGE_TAG: ghcr.io/${{ github.repository_owner }}/cash-chat-backend:${{ github.sha }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK is missing - skip notification"
+            exit 0
+          fi
+          SHORT_SHA="${SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
+          PAYLOAD=$(jq -n \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg sha "$SHORT_SHA" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg run_url "$RUN_URL" \
+            --arg image "$IMAGE_TAG" \
+            '{embeds: [{
+              color: 5763719,
+              title: "Backend deployment complete",
+              description: "**Backend image push and Docker Compose deployment completed**",
+              fields: [
+                {name: "Branch", value: ("`" + $branch + "`"), inline: true},
+                {name: "Deployer", value: ("`" + $actor + "`"), inline: true},
+                {name: "Commit", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "Image", value: ("`" + $image + "`"), inline: false},
+                {name: "Commit message", value: ("`" + $msg + "`"), inline: false},
+                {name: "Actions log", value: ("[Open run](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat - Backend Deploy"}
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || echo "Discord notification failed"
+
+      - name: Discord backend deploy failure notification
+        if: failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK is missing - skip notification"
+            exit 0
+          fi
+          SHORT_SHA="${SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
+          PAYLOAD=$(jq -n \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg sha "$SHORT_SHA" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg run_url "$RUN_URL" \
+            '{embeds: [{
+              color: 15548997,
+              title: "Backend deployment failed",
+              description: "**Backend image build, push, or server deployment failed**",
+              fields: [
+                {name: "Branch", value: ("`" + $branch + "`"), inline: true},
+                {name: "Actor", value: ("`" + $actor + "`"), inline: true},
+                {name: "Commit", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "Commit message", value: ("`" + $msg + "`"), inline: false},
+                {name: "Actions log", value: ("[Open run](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat - Backend Deploy"}
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || echo "Discord notification failed"
