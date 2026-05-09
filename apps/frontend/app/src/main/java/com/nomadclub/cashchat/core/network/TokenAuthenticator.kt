@@ -12,15 +12,15 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.Route
-
-// Confluence 문서: 동시 갱신 요청 중 첫 번째만 성공하므로 Mutex로 직렬화
-@Volatile
-private var isRefreshing = false
+import android.util.Log
 
 class TokenAuthenticator(
     private val tokenDataStore: TokenDataStore,
     private val baseUrl: String
 ) : Authenticator {
+
+    // OkHttpClient는 스레드풀·커넥션풀을 공유하므로 인스턴스 하나만 유지
+    private val refreshClient = OkHttpClient()
 
     override fun authenticate(route: Route?, response: Response): Request? {
         val path = response.request.url.encodedPath
@@ -43,15 +43,15 @@ class TokenAuthenticator(
     }
 
     private fun refreshGuestToken(originalRequest: Request): Request? {
-        val deviceToken = tokenDataStore.getDeviceTokenBlocking() ?: return null
+        // 신규 설치 직후에도 deviceToken이 없는 경우를 방어하기 위해 getOrCreate 사용
+        val deviceToken = tokenDataStore.getOrCreateDeviceTokenBlocking()
         return runBlocking {
             try {
-                val client = OkHttpClient()
                 val req = Request.Builder()
                     .url("${baseUrl}api/auth/guest?deviceToken=$deviceToken")
                     .post(ByteArray(0).toRequestBody())
                     .build()
-                val resp = client.newCall(req).execute()
+                val resp = refreshClient.newCall(req).execute()
                 if (resp.isSuccessful) {
                     val body = resp.body?.string() ?: return@runBlocking null
                     val authResponse = Gson().fromJson(body, AuthResponse::class.java)
@@ -61,6 +61,7 @@ class TokenAuthenticator(
                         .build()
                 } else null
             } catch (e: Exception) {
+                Log.e("TokenAuthenticator", "게스트 토큰 갱신 실패: ${e.message}", e)
                 null
             }
         }
@@ -81,14 +82,13 @@ class TokenAuthenticator(
         val refreshToken = tokenDataStore.getRefreshTokenBlocking() ?: return null
         return runBlocking {
             try {
-                val client = OkHttpClient()
                 val json = Gson().toJson(TokenRefreshRequest(refreshToken))
                 val body = json.toRequestBody("application/json".toMediaType())
                 val req = Request.Builder()
                     .url("${baseUrl}api/auth/refresh")
                     .post(body)
                     .build()
-                val resp = client.newCall(req).execute()
+                val resp = refreshClient.newCall(req).execute()
                 if (resp.isSuccessful) {
                     val respBody = resp.body?.string() ?: return@runBlocking null
                     val authResponse = Gson().fromJson(respBody, AuthResponse::class.java)
@@ -102,6 +102,7 @@ class TokenAuthenticator(
                     null
                 }
             } catch (e: Exception) {
+                Log.e("TokenAuthenticator", "멤버 토큰 갱신 실패: ${e.message}", e)
                 null
             }
         }

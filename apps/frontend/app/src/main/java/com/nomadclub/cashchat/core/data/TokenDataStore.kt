@@ -67,4 +67,10 @@ class TokenDataStore(private val context: Context) {
     fun getRoleBlocking(): String? = runBlocking { store.data.first()[KEY_ROLE] }
     fun getUserIdBlocking(): Long? = runBlocking { store.data.first()[KEY_USER_ID] }
     fun getDeviceTokenBlocking(): String? = runBlocking { store.data.first()[KEY_DEVICE_TOKEN] }
+
+    /**
+     * 동기 경로(TokenAuthenticator)에서도 "없으면 생성" 보장.
+     * 신규 설치 직후 게스트 토큰 갱신 시 deviceToken이 없는 엣지케이스 방어.
+     */
+    fun getOrCreateDeviceTokenBlocking(): String = runBlocking { getOrCreateDeviceToken() }
 }

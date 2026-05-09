@@ -42,7 +42,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -66,6 +68,7 @@ fun OnboardingScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     var visible by remember { mutableStateOf(false) }
     val rotation = remember { Animatable(0f) }
     val context = LocalContext.current
@@ -116,10 +119,23 @@ fun OnboardingScreen(
             if (authCode != null) {
                 viewModel.loginWithGoogle(authCode)
             } else {
-                Log.e("CashChatAuth", "❌ serverAuthCode=null → GOOGLE_WEB_CLIENT_ID가 'Web application' 타입인지 확인 필요 | clientId=${BuildConfig.GOOGLE_WEB_CLIENT_ID.take(20)}...")
+                if (BuildConfig.DEBUG) {
+                    Log.e("CashChatAuth", "❌ serverAuthCode=null — GOOGLE_WEB_CLIENT_ID 타입 확인 필요")
+                }
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Google 로그인에 실패했습니다. 잠시 후 다시 시도해주세요.")
+                }
             }
         } catch (e: ApiException) {
-            Log.e("CashChatAuth", "❌ Google Sign-In ApiException | statusCode=${e.statusCode} (10=DEVELOPER_ERROR, 12501=취소, 7=NETWORK_ERROR)")
+            if (BuildConfig.DEBUG) {
+                Log.e("CashChatAuth", "❌ Google Sign-In ApiException | statusCode=${e.statusCode}")
+            }
+            // 12501 = 사용자 취소, 그 외 = 오류
+            val message = if (e.statusCode == 12501) "Google 로그인을 취소했습니다."
+                          else "Google 로그인 오류가 발생했습니다. 다시 시도해주세요."
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(message)
+            }
         }
     }
 
