@@ -88,6 +88,9 @@ dependencies {
     // Google Sign-In
     implementation(libs.google.play.services.auth)
 
+    // KMM Shared 모듈 (공통 모델/비즈니스 로직)
+    implementation(project(":shared"))
+
     // DI
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)

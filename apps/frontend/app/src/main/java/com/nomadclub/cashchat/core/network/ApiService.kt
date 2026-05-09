@@ -1,7 +1,7 @@
 package com.nomadclub.cashchat.core.network
 
-import com.nomadclub.cashchat.data.model.AuthResponse
-import com.nomadclub.cashchat.data.model.TokenRefreshRequest
+import com.nomadclub.cashchat.shared.auth.model.AuthResponse
+import com.nomadclub.cashchat.shared.auth.model.TokenRefreshRequest
 import com.nomadclub.cashchat.data.model.UserResponse
 import retrofit2.Response
 import retrofit2.http.Body

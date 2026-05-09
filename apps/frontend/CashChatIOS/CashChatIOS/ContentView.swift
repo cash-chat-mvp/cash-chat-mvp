@@ -1,6 +1,8 @@
 import SwiftUI
 import Combine
 import UIKit
+import GoogleSignIn
+import CashChatShared
 
 private func sfSymbol(_ primary: String, fallback: String) -> String {
     UIImage(systemName: primary) == nil ? fallback : primary
@@ -8,25 +10,118 @@ private func sfSymbol(_ primary: String, fallback: String) -> String {
 
 struct ContentView: View {
     @StateObject private var appState = AppState()
-    @State private var isOnboarding = true
 
     var body: some View {
         Group {
-            if isOnboarding {
-                OnboardingView {
-                    isOnboarding = false
+            if appState.isCheckingSession {
+                ZStack {
+                    Color(red: 0.36, green: 0.42, blue: 0.98).ignoresSafeArea()
+                    ProgressView().tint(.white)
                 }
+            } else if !appState.isAuthenticated {
+                OnboardingView()
+                    .environmentObject(appState)
             } else {
                 OnboardingView.MainTabContainer()
                     .environmentObject(appState)
             }
         }
+        .task {
+            await appState.restoreSession()
+        }
     }
 }
 
+@MainActor
 final class AppState: ObservableObject {
     @Published var points: Int = 0
     @Published var messageCount: Int = 0
+    @Published var isAuthenticated: Bool = false
+    @Published var isCheckingSession: Bool = true
+    @Published var isLoading: Bool = false
+    @Published var errorMessage: String? = nil
+
+    private let apiService = AuthApiService(baseUrl: AppConfig.apiBaseUrl)
+    private let defaults = UserDefaults.standard
+
+    private enum Keys {
+        static let accessToken = "access_token"
+        static let role = "role"
+        static let deviceToken = "device_token"
+    }
+
+    init() {
+        GIDSignIn.sharedInstance.configuration = GIDConfiguration(
+            clientID: AppConfig.googleIOSClientId,
+            serverClientID: AppConfig.googleWebClientId
+        )
+    }
+
+    // 앱 시작 시 저장된 토큰으로 세션 복원
+    func restoreSession() async {
+        defer { isCheckingSession = false }
+        isAuthenticated = defaults.string(forKey: Keys.accessToken) != nil
+    }
+
+    func loginAsGuest() async {
+        isLoading = true
+        errorMessage = nil
+        do {
+            let deviceToken = getOrCreateDeviceToken()
+            let response = try await apiService.loginAsGuest(deviceToken: deviceToken)
+            defaults.set(response.accessToken, forKey: Keys.accessToken)
+            defaults.set(response.role, forKey: Keys.role)
+            isAuthenticated = true
+        } catch {
+            errorMessage = "게스트 로그인에 실패했습니다. 네트워크를 확인해주세요."
+        }
+        isLoading = false
+    }
+
+    // Apple 로그인 — API 준비 전까지 placeholder
+    func loginWithApple() {
+        errorMessage = "Apple 로그인은 준비 중입니다."
+    }
+
+    // TODO: Apple 로그인 API 완성 시 이 메서드 및 관련 버튼 제거
+    func loginWithGoogle() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            guard let windowScene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first,
+                  let rootViewController = windowScene.windows.first?.rootViewController else {
+                errorMessage = "Google 로그인을 시작할 수 없습니다."
+                return
+            }
+
+            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
+
+            guard let serverAuthCode = result.serverAuthCode else {
+                errorMessage = "Google 인증 코드를 받지 못했습니다. serverAuthCode가 nil입니다."
+                return
+            }
+
+            let deviceToken = getOrCreateDeviceToken()
+            let response = try await apiService.loginWithGoogle(serverAuthCode: serverAuthCode, deviceToken: deviceToken)
+            defaults.set(response.accessToken, forKey: Keys.accessToken)
+            defaults.set(response.role, forKey: Keys.role)
+            isAuthenticated = true
+        } catch {
+            errorMessage = "Google 로그인에 실패했습니다. 다시 시도해주세요."
+        }
+    }
+
+    func logout() {
+        defaults.removeObject(forKey: Keys.accessToken)
+        defaults.removeObject(forKey: Keys.role)
+        isAuthenticated = false
+        points = 0
+        messageCount = 0
+    }
 
     func addPoints(_ value: Int) {
         guard value > 0 else { return }
@@ -43,6 +138,13 @@ final class AppState: ObservableObject {
     func incrementMessageCount() {
         messageCount += 1
         addPoints(10)
+    }
+
+    private func getOrCreateDeviceToken() -> String {
+        if let existing = defaults.string(forKey: Keys.deviceToken) { return existing }
+        let new = UUID().uuidString
+        defaults.set(new, forKey: Keys.deviceToken)
+        return new
     }
 }
 
@@ -70,63 +172,144 @@ final class KeyboardObserver: ObservableObject {
 }
 
 struct OnboardingView: View {
-    let onStart: () -> Void
-    
+    @EnvironmentObject private var appState: AppState
+    @State private var visible = false
+
     var body: some View {
-        GeometryReader { _ in
-            ZStack {
-                LinearGradient(
-                    colors: [Color(red: 0.36, green: 0.42, blue: 0.98), Color(red: 0.29, green: 0.35, blue: 0.91)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                VStack(spacing: 24) {
-                    Spacer()
-                    VStack(spacing: 12) {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.36, green: 0.42, blue: 0.98), Color(red: 0.29, green: 0.35, blue: 0.91)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Spacer()
+
+                // 로고 영역
+                VStack(spacing: 16) {
+                    ZStack(alignment: .topTrailing) {
                         Image(systemName: sfSymbol("sparkles", fallback: "star.fill"))
-                            .font(.system(size: 74))
+                            .font(.system(size: 100))
                             .foregroundStyle(.white)
-                        Text("AI Chat+")
-                            .font(.system(size: 42, weight: .bold))
-                            .foregroundStyle(.white)
-                        Text("대화하고 포인트 받자!")
-                            .font(.title3)
-                            .foregroundStyle(.white.opacity(0.9))
+                        Image(systemName: "dollarsign.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundStyle(Color(red: 1.0, green: 0.42, blue: 0.0))
+                            .offset(x: 10, y: -10)
                     }
-                    
-                    Spacer()
-                    
-                    VStack(spacing: 12) {
-                        Button("카카오로 3초 만에 시작하기", action: onStart)
-                            .buttonStyle(FilledButtonStyle(background: .white, foreground: .blue))
-                        Button("Apple로 로그인", action: onStart)
-                            .buttonStyle(FilledButtonStyle(background: .black, foreground: .white))
-                        Text("가입하면 즉시 500P 지급!")
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
+                    Text("AI Chat+")
+                        .font(.system(size: 48, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text("대화하고 포인트 받자!")
+                        .font(.title3)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                .opacity(visible ? 1 : 0)
+                .offset(y: visible ? 0 : 30)
+                .animation(.easeOut(duration: 0.5).delay(0.1), value: visible)
+
+                Spacer()
+
+                // 버튼 영역
+                VStack(spacing: 12) {
+                    // Apple 로그인 (UI만 — 서버 API 준비 후 연동 예정)
+                    Button {
+                        appState.loginWithApple()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "apple.logo")
+                                .font(.system(size: 18, weight: .semibold))
+                            Text("Apple로 로그인")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.black)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
-                    .padding(.bottom, 24)
+                    .disabled(appState.isLoading)
+
+                    // TODO: Apple 로그인 API 완성 시 아래 Google 로그인 버튼 제거
+                    Button {
+                        Task { await appState.loginWithGoogle() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if appState.isLoading {
+                                ProgressView()
+                                    .tint(Color(red: 0.2, green: 0.2, blue: 0.2))
+                                    .scaleEffect(0.85)
+                            } else {
+                                Image(systemName: "g.circle.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundStyle(Color(red: 0.98, green: 0.27, blue: 0.22))
+                            }
+                            Text(appState.isLoading ? "로그인 중..." : "Google로 로그인")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Color(red: 0.2, green: 0.2, blue: 0.2))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .disabled(appState.isLoading)
+
+                    // 게스트 로그인 (실제 API 연동)
+                    Button {
+                        Task { await appState.loginAsGuest() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if appState.isLoading {
+                                ProgressView().tint(.white).scaleEffect(0.85)
+                            }
+                            Text(appState.isLoading ? "로그인 중..." : "게스트로 시작하기")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(.white.opacity(0.15))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.3), lineWidth: 1))
+                    }
+                    .disabled(appState.isLoading)
+
+                    Text("가입하면 즉시 500P 지급!")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.6))
                 }
                 .padding(.horizontal, 24)
+                .padding(.bottom, 40)
+                .opacity(visible ? 1 : 0)
+                .offset(y: visible ? 0 : 30)
+                .animation(.easeOut(duration: 0.5).delay(0.3), value: visible)
+            }
+
+            // 에러 토스트
+            if let msg = appState.errorMessage {
+                VStack {
+                    Spacer()
+                    Text(msg)
+                        .font(.footnote)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(.black.opacity(0.75))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .padding(.bottom, 120)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                appState.errorMessage = nil
+                            }
+                        }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-    }
-    
-    private struct FilledButtonStyle: ButtonStyle {
-        let background: Color
-        let foreground: Color
-        
-        func makeBody(configuration: Configuration) -> some View {
-            configuration.label
-                .font(.system(size: 17, weight: .semibold))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(background.opacity(configuration.isPressed ? 0.85 : 1))
-                .foregroundStyle(foreground)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-        }
+        .animation(.easeInOut(duration: 0.3), value: appState.errorMessage)
+        .onAppear { visible = true }
     }
     
     private enum MainTab: String, CaseIterable {
@@ -1078,6 +1261,7 @@ struct OnboardingView: View {
     private struct MyPageView: View {
         @EnvironmentObject private var appState: AppState
         @State private var animateIn = false
+        @State private var showLogoutConfirm = false
         private let menuItems = [
             MyPageMenuItem(icon: "gift", label: "내 기프티콘 보관함", badge: "2"),
             MyPageMenuItem(icon: "clock.arrow.circlepath", label: "포인트 적립/사용 내역", badge: nil),
@@ -1168,6 +1352,33 @@ struct OnboardingView: View {
                     .opacity(animateIn ? 1 : 0)
                     .offset(y: animateIn ? 0 : 16)
                     .animation(.easeOut(duration: 0.24).delay(0.28), value: animateIn)
+
+                    Button {
+                        showLogoutConfirm = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: sfSymbol("rectangle.portrait.and.arrow.right", fallback: "arrow.right.circle"))
+                            Text("로그아웃")
+                                .fontWeight(.bold)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(.white)
+                        .foregroundStyle(Color(red: 0.42, green: 0.45, blue: 0.53))
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(white: 0.9), lineWidth: 1))
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 40)
+                    .opacity(animateIn ? 1 : 0)
+                    .offset(y: animateIn ? 0 : 16)
+                    .animation(.easeOut(duration: 0.24).delay(0.34), value: animateIn)
+                    .confirmationDialog("로그아웃 하시겠어요?", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+                        Button("로그아웃", role: .destructive) {
+                            appState.logout()
+                        }
+                        Button("취소", role: .cancel) {}
+                    }
                 }
             }
             .background(Color(red: 0.96, green: 0.97, blue: 0.98))

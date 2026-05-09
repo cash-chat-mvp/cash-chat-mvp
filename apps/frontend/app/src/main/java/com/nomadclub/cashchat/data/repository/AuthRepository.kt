@@ -2,8 +2,8 @@ package com.nomadclub.cashchat.data.repository
 
 import com.nomadclub.cashchat.core.data.TokenDataStore
 import com.nomadclub.cashchat.core.network.ApiService
-import com.nomadclub.cashchat.data.model.AuthResponse
-import com.nomadclub.cashchat.data.model.TokenRefreshRequest
+import com.nomadclub.cashchat.shared.auth.model.AuthResponse
+import com.nomadclub.cashchat.shared.auth.model.TokenRefreshRequest
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
