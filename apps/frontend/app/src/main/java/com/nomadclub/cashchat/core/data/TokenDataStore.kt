@@ -36,8 +36,9 @@ class TokenDataStore(private val context: Context) {
             prefs[KEY_ACCESS_TOKEN] = response.accessToken
             prefs[KEY_ROLE] = response.role
             prefs[KEY_USER_ID] = response.userId
-            if (response.refreshToken != null) {
-                prefs[KEY_REFRESH_TOKEN] = response.refreshToken
+            val refreshToken = response.refreshToken
+            if (refreshToken != null) {
+                prefs[KEY_REFRESH_TOKEN] = refreshToken
             } else {
                 prefs.remove(KEY_REFRESH_TOKEN)
             }
