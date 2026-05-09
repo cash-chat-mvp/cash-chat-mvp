@@ -3,7 +3,7 @@ package com.nomadclub.cashchat.core.storage
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+import androidx.security.crypto.MasterKey
 import java.util.UUID
 
 /**
@@ -14,20 +14,26 @@ import java.util.UUID
  *   EncryptedSharedPreferences에 저장됩니다.
  * - 앱 재설치 시 UUID가 재생성되어 새로운 Guest 계정으로 처리됩니다.
  *
- * security-crypto:1.0.0 API 사용:
- *   MasterKeys.getOrCreate()  → Android Keystore 키 별칭(String) 반환
- *   EncryptedSharedPreferences.create(fileName, masterKeyAlias, context, ...)
+ * security-crypto:1.1.0 API 사용 (MasterKeys 대신 MasterKey.Builder):
+ *   MasterKey.Builder(context).setKeyScheme(AES256_GCM).build()
+ *   EncryptedSharedPreferences.create(context, fileName, masterKey, ...)
+ *
+ * TODO(Epic C): Firebase Analytics 이벤트(chat_start, ad_view 등)는
+ *   AnalyticsManager 또는 각 이벤트 발생 지점(ChatViewModel, AdManager 등)에서 추가.
+ *   DeviceTokenManager는 디바이스 식별자 저장 전용이므로 Analytics 책임 없음.
  */
 class DeviceTokenManager(context: Context) {
 
     private val prefs: SharedPreferences by lazy {
-        // AES256-GCM 스펙으로 Android Keystore 키 별칭 생성 (이미 있으면 재사용)
-        val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+        // security-crypto 1.1.0+: MasterKey.Builder 사용 (MasterKeys.getOrCreate deprecated)
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
 
         EncryptedSharedPreferences.create(
-            PREFS_NAME,
-            masterKeyAlias,
             context,
+            PREFS_NAME,
+            masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )

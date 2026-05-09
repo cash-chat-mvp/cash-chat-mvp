@@ -18,7 +18,7 @@ googlePlayServicesAuth = "21.3.0"
 koin = "3.5.6"
 koinCompose = "3.5.6"
 admob = "23.6.0"
-securityCrypto = "1.0.0"
+securityCrypto = "1.1.0"
 # ── shared 모듈(KMM) 전용 — iOS 연동 시점에 :shared 포함 후 활성화 ──
 ktor = "2.3.12"
 kotlinxSerializationJson = "1.7.3"

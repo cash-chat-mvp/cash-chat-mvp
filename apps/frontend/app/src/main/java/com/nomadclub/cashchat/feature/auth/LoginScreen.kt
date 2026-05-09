@@ -238,7 +238,13 @@ fun LoginScreen(
     LoginFormContent(
         onGoogleSignIn = { serverAuthCode ->
             isLoading = true
-            onGoogleSignInSuccess(serverAuthCode)
+            try {
+                onGoogleSignInSuccess(serverAuthCode)
+            } finally {
+                // 방어적 리셋: 향후 네비게이션 로직 변경으로 popBackStack이 생략될 경우에도
+                // 로딩 인디케이터가 영구적으로 표시되지 않도록 보장
+                isLoading = false
+            }
         },
         isLoading = isLoading,
         modifier = modifier
