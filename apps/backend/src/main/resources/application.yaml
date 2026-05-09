@@ -23,6 +23,10 @@ spring:
 server:
   forward-headers-strategy: framework
 
+app:
+  points:
+    initial-balance: ${APP_POINTS_INITIAL_BALANCE:1}
+
 # O-Auth (Open Authorization)
 # OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml
 oauth:
