@@ -33,6 +33,16 @@ class TokenAuthenticator(
         ) return null
 
         return synchronized(this) {
+            // 동시 401: 락 진입 전 다른 스레드가 이미 갱신했는지 확인.
+            // 실패 요청의 Authorization 토큰 ≠ 현재 저장 토큰이면 이미 갱신된 것 → 새 토큰으로 헤더만 교체.
+            val currentToken = tokenDataStore.getAccessTokenBlocking()
+            val requestToken = response.request.header("Authorization")?.removePrefix("Bearer ")
+            if (currentToken != null && currentToken != requestToken) {
+                return@synchronized response.request.newBuilder()
+                    .header("Authorization", "Bearer $currentToken")
+                    .build()
+            }
+
             val role = tokenDataStore.getRoleBlocking()
             when {
                 role == "GUEST" -> refreshGuestToken(response.request)
@@ -51,15 +61,16 @@ class TokenAuthenticator(
                     .url("${baseUrl}api/auth/guest?deviceToken=$deviceToken")
                     .post(ByteArray(0).toRequestBody())
                     .build()
-                val resp = refreshClient.newCall(req).execute()
-                if (resp.isSuccessful) {
+                // resp.use: 성공/실패/예외 모든 경로에서 커넥션 누수 없이 응답을 닫음
+                refreshClient.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return@runBlocking null
                     val body = resp.body?.string() ?: return@runBlocking null
                     val authResponse = Gson().fromJson(body, AuthResponse::class.java)
                     tokenDataStore.saveAuthResponse(authResponse)
                     originalRequest.newBuilder()
                         .header("Authorization", "Bearer ${authResponse.accessToken}")
                         .build()
-                } else null
+                }
             } catch (e: Exception) {
                 Log.e("TokenAuthenticator", "게스트 토큰 갱신 실패: ${e.message}", e)
                 null
@@ -88,18 +99,19 @@ class TokenAuthenticator(
                     .url("${baseUrl}api/auth/refresh")
                     .post(body)
                     .build()
-                val resp = refreshClient.newCall(req).execute()
-                if (resp.isSuccessful) {
+                // resp.use: 성공/실패/예외 모든 경로에서 커넥션 누수 없이 응답을 닫음
+                refreshClient.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        // Refresh Token 만료 → 저장된 토큰 삭제 → null 반환 시 AuthRepository가 재로그인 유도
+                        tokenDataStore.clearTokens()
+                        return@runBlocking null
+                    }
                     val respBody = resp.body?.string() ?: return@runBlocking null
                     val authResponse = Gson().fromJson(respBody, AuthResponse::class.java)
                     tokenDataStore.saveAuthResponse(authResponse)
                     originalRequest.newBuilder()
                         .header("Authorization", "Bearer ${authResponse.accessToken}")
                         .build()
-                } else {
-                    // Refresh Token 만료 → 저장된 토큰 삭제 → null 반환 시 AuthRepository가 재로그인 유도
-                    tokenDataStore.clearTokens()
-                    null
                 }
             } catch (e: Exception) {
                 Log.e("TokenAuthenticator", "멤버 토큰 갱신 실패: ${e.message}", e)
