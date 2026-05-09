@@ -2,16 +2,17 @@ import Foundation
 
 enum AppConfig {
     static let googleIOSClientId: String = required(Secrets.googleIOSClientId, key: "googleIOSClientId")
-    static let googleWebClientId: String = Secrets.googleWebClientId
-    static let apiBaseUrl: String = Secrets.apiBaseUrl
+    static let googleWebClientId: String = required(Secrets.googleWebClientId, key: "googleWebClientId")
+    static let apiBaseUrl: String = required(Secrets.apiBaseUrl, key: "apiBaseUrl")
 
     private static func required(_ value: String, key: String) -> String {
-        guard !value.isEmpty, !value.hasPrefix("YOUR_") else {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("YOUR_") else {
             preconditionFailure(
                 "[\(key)] 값이 설정되지 않았습니다.\n" +
-                "Secrets.swift.example을 Secrets.swift로 복사하고 실제 값을 입력하세요."
+                "Secrets.swift를 생성하고 실제 값을 입력하세요."
             )
         }
-        return value
+        return trimmed
     }
 }

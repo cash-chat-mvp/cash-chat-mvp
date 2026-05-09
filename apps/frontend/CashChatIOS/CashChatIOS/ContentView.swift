@@ -42,6 +42,7 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String? = nil
 
     private let apiService = AuthApiService(baseUrl: AppConfig.apiBaseUrl)
+    // deviceToken은 민감 정보가 아닌 기기 식별자이므로 UserDefaults 사용
     private let defaults = UserDefaults.standard
 
     private enum Keys {
@@ -60,7 +61,7 @@ final class AppState: ObservableObject {
     // 앱 시작 시 저장된 토큰으로 세션 복원
     func restoreSession() async {
         defer { isCheckingSession = false }
-        isAuthenticated = defaults.string(forKey: Keys.accessToken) != nil
+        isAuthenticated = KeychainHelper.get(forKey: Keys.accessToken) != nil
     }
 
     func loginAsGuest() async {
@@ -69,8 +70,8 @@ final class AppState: ObservableObject {
         do {
             let deviceToken = getOrCreateDeviceToken()
             let response = try await apiService.loginAsGuest(deviceToken: deviceToken)
-            defaults.set(response.accessToken, forKey: Keys.accessToken)
-            defaults.set(response.role, forKey: Keys.role)
+            KeychainHelper.set(response.accessToken, forKey: Keys.accessToken)
+            KeychainHelper.set(response.role, forKey: Keys.role)
             isAuthenticated = true
         } catch {
             errorMessage = "게스트 로그인에 실패했습니다. 네트워크를 확인해주세요."
@@ -107,8 +108,8 @@ final class AppState: ObservableObject {
 
             let deviceToken = getOrCreateDeviceToken()
             let response = try await apiService.loginWithGoogle(serverAuthCode: serverAuthCode, deviceToken: deviceToken)
-            defaults.set(response.accessToken, forKey: Keys.accessToken)
-            defaults.set(response.role, forKey: Keys.role)
+            KeychainHelper.set(response.accessToken, forKey: Keys.accessToken)
+            KeychainHelper.set(response.role, forKey: Keys.role)
             isAuthenticated = true
         } catch {
             errorMessage = "Google 로그인에 실패했습니다. 다시 시도해주세요."
@@ -116,8 +117,9 @@ final class AppState: ObservableObject {
     }
 
     func logout() {
-        defaults.removeObject(forKey: Keys.accessToken)
-        defaults.removeObject(forKey: Keys.role)
+        GIDSignIn.sharedInstance.signOut()
+        KeychainHelper.remove(forKey: Keys.accessToken)
+        KeychainHelper.remove(forKey: Keys.role)
         isAuthenticated = false
         points = 0
         messageCount = 0
