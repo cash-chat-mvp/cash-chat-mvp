@@ -47,6 +47,7 @@ final class AppState: ObservableObject {
 
     private enum Keys {
         static let accessToken = "access_token"
+        static let refreshToken = "refresh_token"
         static let role = "role"
         static let deviceToken = "device_token"
     }
@@ -110,6 +111,9 @@ final class AppState: ObservableObject {
             let response = try await apiService.loginWithGoogle(serverAuthCode: serverAuthCode, deviceToken: deviceToken)
             KeychainHelper.set(response.accessToken, forKey: Keys.accessToken)
             KeychainHelper.set(response.role, forKey: Keys.role)
+            if let refreshToken = response.refreshToken {
+                KeychainHelper.set(refreshToken, forKey: Keys.refreshToken)
+            }
             isAuthenticated = true
         } catch {
             errorMessage = "Google 로그인에 실패했습니다. 다시 시도해주세요."
@@ -117,8 +121,19 @@ final class AppState: ObservableObject {
     }
 
     func logout() {
+        let role = KeychainHelper.get(forKey: Keys.role)
+        let refreshToken = KeychainHelper.get(forKey: Keys.refreshToken)
+
+        // OAuth 사용자(Google 등)는 서버에 RefreshToken 무효화 요청
+        if role != nil && role != "GUEST", let token = refreshToken {
+            Task {
+                try? await apiService.logout(refreshToken: token)
+            }
+        }
+
         GIDSignIn.sharedInstance.signOut()
         KeychainHelper.remove(forKey: Keys.accessToken)
+        KeychainHelper.remove(forKey: Keys.refreshToken)
         KeychainHelper.remove(forKey: Keys.role)
         isAuthenticated = false
         points = 0
