@@ -3,7 +3,7 @@ name: Discord 알림
 on:
   pull_request_target:
     types: [opened, reopened, closed]
-  # Android Build Check 결과 알림 (workflow_run은 base repo 시크릿 접근 가능)
+  # 안드로이드/백엔드 빌드 체크 결과 알림 (workflow_run은 base repo 시크릿 접근 가능)
   workflow_run:
     workflows: ["Android Build Check", "Backend CI/CD"]
     types: [completed]
@@ -132,7 +132,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD"
 
-      - name: Build check result notification
+      - name: 빌드 체크 결과 알림
         if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
@@ -148,18 +148,18 @@ jobs:
             exit 0
           fi
           if [ "$WORKFLOW_NAME" = "Backend CI/CD" ]; then
-            SERVICE="Backend CI"
-            FOOTER="Cash Chat - Backend Build Check"
+            SERVICE="백엔드 CI"
+            FOOTER="Cash Chat • 백엔드 빌드 체크"
           else
-            SERVICE="Android"
-            FOOTER="Cash Chat - Android Build Check"
+            SERVICE="안드로이드"
+            FOOTER="Cash Chat • 안드로이드 빌드 체크"
           fi
           if [ "$CONCLUSION" = "success" ]; then
             COLOR=5763719
-            TITLE="${SERVICE} build check passed"
+            TITLE="✅ ${SERVICE} 빌드 체크 통과"
           else
             COLOR=15548997
-            TITLE="${SERVICE} build check failed"
+            TITLE="🚨 ${SERVICE} 빌드 체크 실패"
           fi
           PAYLOAD=$(jq -n \
             --arg title "$TITLE" \
@@ -173,10 +173,10 @@ jobs:
               color: $color,
               title: $title,
               fields: [
-                {name: "Branch", value: ("`" + $branch + "` -> `dev`"), inline: true},
-                {name: "Actor", value: ("`" + $actor + "`"), inline: true},
-                {name: "Commit message", value: ("`" + $commit + "`"), inline: false},
-                {name: "Actions log", value: ("[Open run](" + $run_url + ")"), inline: false}
+                {name: "브랜치", value: ("`" + $branch + "` → `dev`"), inline: true},
+                {name: "작성자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋 메시지", value: ("`" + $commit + "`"), inline: false},
+                {name: "Actions 로그", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
               ],
               footer: {text: $footer}
             }]}')

@@ -126,7 +126,7 @@ jobs:
 
             docker compose ps
 
-      - name: Discord nginx deploy success notification
+      - name: Nginx 배포 성공 Discord 알림
         if: success()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
@@ -140,13 +140,13 @@ jobs:
           NGINX_DOMAIN: ${{ vars.NGINX_DOMAIN }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
-            echo "DISCORD_WEBHOOK is missing - skip notification"
+            echo "ℹ️ DEPLOY_BOT_DISCORD 없음 — 알림 건너뜀"
             exit 0
           fi
           SHORT_SHA="${SHA:0:7}"
           COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
-          DOMAIN_VALUE=$([ -n "$NGINX_DOMAIN" ] && echo "\`$NGINX_DOMAIN\`" || echo "not configured")
-          COMMIT_VALUE=$([ -n "$COMMIT_MESSAGE" ] && echo "\`$COMMIT_MESSAGE\`" || echo "not available")
+          DOMAIN_VALUE=$([ -n "$NGINX_DOMAIN" ] && echo "\`$NGINX_DOMAIN\`" || echo "설정되지 않음")
+          COMMIT_VALUE=$([ -n "$COMMIT_MESSAGE" ] && echo "\`$COMMIT_MESSAGE\`" || echo "확인 불가")
           PAYLOAD=$(jq -n \
             --arg branch "$BRANCH" \
             --arg actor "$ACTOR" \
@@ -158,24 +158,24 @@ jobs:
             --arg commit "$COMMIT_VALUE" \
             '{embeds: [{
               color: 5763719,
-              title: "Nginx deployment complete",
-              description: "**Nginx stack deployment completed**",
+              title: "✅ Nginx 배포 완료",
+              description: "**Nginx 스택 배포가 완료되었습니다**",
               fields: [
-                {name: "Domain", value: $domain, inline: true},
-                {name: "Trigger", value: ("`" + $event + "`"), inline: true},
-                {name: "Branch", value: ("`" + $branch + "`"), inline: true},
-                {name: "Actor", value: ("`" + $actor + "`"), inline: true},
-                {name: "Commit", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
-                {name: "Commit message", value: $commit, inline: false},
-                {name: "Actions log", value: ("[Open run](" + $run_url + ")"), inline: false}
+                {name: "도메인", value: $domain, inline: true},
+                {name: "트리거", value: ("`" + $event + "`"), inline: true},
+                {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
+                {name: "실행자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "커밋 메시지", value: $commit, inline: false},
+                {name: "Actions 로그", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
               ],
-              footer: {text: "Cash Chat - Nginx Deploy"}
+              footer: {text: "Cash Chat • Nginx 배포"}
             }]}')
           curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD" || echo "Discord notification failed"
+            -d "$PAYLOAD" || echo "Discord 알림 전송 실패"
 
-      - name: Discord nginx deploy failure notification
+      - name: Nginx 배포 실패 Discord 알림
         if: failure()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
@@ -189,13 +189,13 @@ jobs:
           NGINX_DOMAIN: ${{ vars.NGINX_DOMAIN }}
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
-            echo "DISCORD_WEBHOOK is missing - skip notification"
+            echo "ℹ️ DEPLOY_BOT_DISCORD 없음 — 알림 건너뜀"
             exit 0
           fi
           SHORT_SHA="${SHA:0:7}"
           COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
-          DOMAIN_VALUE=$([ -n "$NGINX_DOMAIN" ] && echo "\`$NGINX_DOMAIN\`" || echo "not configured")
-          COMMIT_VALUE=$([ -n "$COMMIT_MESSAGE" ] && echo "\`$COMMIT_MESSAGE\`" || echo "not available")
+          DOMAIN_VALUE=$([ -n "$NGINX_DOMAIN" ] && echo "\`$NGINX_DOMAIN\`" || echo "설정되지 않음")
+          COMMIT_VALUE=$([ -n "$COMMIT_MESSAGE" ] && echo "\`$COMMIT_MESSAGE\`" || echo "확인 불가")
           PAYLOAD=$(jq -n \
             --arg branch "$BRANCH" \
             --arg actor "$ACTOR" \
@@ -207,19 +207,19 @@ jobs:
             --arg commit "$COMMIT_VALUE" \
             '{embeds: [{
               color: 15548997,
-              title: "Nginx deployment failed",
-              description: "**Nginx asset upload, configuration, certificate handling, or stack deployment failed**",
+              title: "🚨 Nginx 배포 실패",
+              description: "**Nginx 자산 업로드, 설정, 인증서 처리 또는 스택 배포에 실패했습니다**",
               fields: [
-                {name: "Domain", value: $domain, inline: true},
-                {name: "Trigger", value: ("`" + $event + "`"), inline: true},
-                {name: "Branch", value: ("`" + $branch + "`"), inline: true},
-                {name: "Actor", value: ("`" + $actor + "`"), inline: true},
-                {name: "Commit", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
-                {name: "Commit message", value: $commit, inline: false},
-                {name: "Actions log", value: ("[Open run](" + $run_url + ")"), inline: false}
+                {name: "도메인", value: $domain, inline: true},
+                {name: "트리거", value: ("`" + $event + "`"), inline: true},
+                {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
+                {name: "실행자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "커밋 메시지", value: $commit, inline: false},
+                {name: "Actions 로그", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
               ],
-              footer: {text: "Cash Chat - Nginx Deploy"}
+              footer: {text: "Cash Chat • Nginx 배포"}
             }]}')
           curl -sS -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d "$PAYLOAD" || echo "Discord notification failed"
+            -d "$PAYLOAD" || echo "Discord 알림 전송 실패"
