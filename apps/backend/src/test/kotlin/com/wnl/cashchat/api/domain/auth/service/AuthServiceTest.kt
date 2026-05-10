@@ -94,4 +94,25 @@ class AuthServiceTest : FunSpec({
 
         verify(refreshTokenRepository).deleteByUserIdAndTokenReturningCount(1L, "missing-token")
     }
+
+    test("logout does not delete a refresh token for another caller") {
+        val userRepository = mock<UserRepository>()
+        val refreshTokenRepository = mock<RefreshTokenRepository>()
+        val jwtTokenHandler = mock<JwtTokenHandler>()
+        val userPointService = mock<UserPointService>()
+        val authService = AuthService(
+            userRepository = userRepository,
+            refreshTokenRepository = refreshTokenRepository,
+            jwtTokenHandler = jwtTokenHandler,
+            oAuthProperties = OAuthProperties(),
+            restClient = mock<RestClient>(),
+            userPointService = userPointService,
+            oAuthUserInfoExtractors = emptyList(),
+        )
+        whenever(refreshTokenRepository.deleteByUserIdAndTokenReturningCount(2L, "refresh-token")).thenReturn(0)
+
+        authService.logout(2L, "refresh-token")
+
+        verify(refreshTokenRepository).deleteByUserIdAndTokenReturningCount(2L, "refresh-token")
+    }
 })
