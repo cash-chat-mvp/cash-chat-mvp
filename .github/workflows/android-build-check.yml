@@ -2,12 +2,16 @@ name: Android Build Check
 
 on:
   pull_request:
-    types: [labeled, synchronize, reopened]
+    types: [opened, synchronize, reopened]
     branches: [dev]
+    paths:
+      - 'apps/frontend/app/**'
+      - 'apps/frontend/shared/**'
+      - 'apps/frontend/**/*.gradle.kts'
+      - 'apps/frontend/gradle/**'
 
 jobs:
   build-check:
-    if: contains(github.event.pull_request.labels.*.name, '🤖 안드로이드')
     runs-on: ubuntu-latest
     defaults:
       run:
