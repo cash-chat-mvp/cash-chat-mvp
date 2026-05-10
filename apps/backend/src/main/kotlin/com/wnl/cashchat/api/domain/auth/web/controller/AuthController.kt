@@ -2,6 +2,7 @@ package com.wnl.cashchat.api.domain.auth.web.controller
 
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.auth.service.AuthService
+import com.wnl.cashchat.api.domain.auth.web.request.GoogleOAuthCallbackRequest
 import com.wnl.cashchat.api.domain.auth.web.request.LogoutRequest
 import com.wnl.cashchat.api.domain.auth.web.request.TokenRefreshRequest
 import com.wnl.cashchat.api.domain.auth.web.response.AuthResponse
@@ -21,12 +22,16 @@ class AuthController(
         return ResponseEntity.ok(response)
     }
 
-    @GetMapping("/callback/google")
+    @PostMapping("/callback/google")
     fun loginWithGoogle(
-        @RequestParam code: String,
-        @RequestParam(required = false) deviceToken: String?
+        @Valid @RequestBody request: GoogleOAuthCallbackRequest
     ): ResponseEntity<AuthResponse> {
-        val response = authService.loginWithOAuth("google-app", AuthProviderType.GOOGLE, code, deviceToken)
+        val response = authService.loginWithOAuth(
+            "google-app",
+            AuthProviderType.GOOGLE,
+            request.code,
+            request.deviceToken
+        )
         return ResponseEntity.ok(response)
     }
 
