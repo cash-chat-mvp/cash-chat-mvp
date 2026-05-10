@@ -2,12 +2,14 @@ name: iOS Build Check
 
 on:
   pull_request:
-    types: [labeled, synchronize, reopened]
+    types: [opened, synchronize, reopened]
     branches: [dev]
+    paths:
+      - 'apps/frontend/CashChatIOS/**'
+      - 'apps/frontend/shared/**'
 
 jobs:
   build-check:
-    if: contains(github.event.pull_request.labels.*.name, '🍎 iOS')
     runs-on: macos-latest
     defaults:
       run:
