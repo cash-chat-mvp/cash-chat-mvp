@@ -16,6 +16,12 @@
 local.properties
 /local.properties
 
+# iOS 로컬 환경 설정 (Google Client ID 등 민감 정보)
+CashChatIOS/local.xcconfig
+
+# iOS 민감 값 파일 (Secrets.swift.example을 복사해서 실제 값 입력)
+CashChatIOS/CashChatIOS/Secrets.swift
+
 # Firebase 서비스 계정 키 (CI에서 secret으로 주입)
 **/google-services.json
 service-account.json

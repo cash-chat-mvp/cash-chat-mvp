@@ -4,15 +4,25 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class LoginStore {
-    private val _emailState = MutableStateFlow("")
-    val emailState: StateFlow<String> = _emailState.asStateFlow()
+sealed class AuthState {
+    object Loading : AuthState()
+    data class Authenticated(val userId: Long, val role: String) : AuthState()
+    object Unauthenticated : AuthState()
+}
 
-    fun updateEmail(email: String) {
-        _emailState.value = email
+class LoginStore {
+    private val _authState = MutableStateFlow<AuthState>(AuthState.Loading)
+    val authState: StateFlow<AuthState> = _authState.asStateFlow()
+
+    fun setAuthenticated(userId: Long, role: String) {
+        _authState.value = AuthState.Authenticated(userId, role)
     }
 
-    fun login() {
-        // TODO: Implement login logic
+    fun logout() {
+        _authState.value = AuthState.Unauthenticated
+    }
+
+    fun setLoading() {
+        _authState.value = AuthState.Loading
     }
 }

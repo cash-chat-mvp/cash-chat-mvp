@@ -1,13 +1,14 @@
 package com.nomadclub.cashchat.shared.auth
 
 import com.nomadclub.cashchat.shared.auth.model.AuthResponse
+import com.nomadclub.cashchat.shared.auth.model.GoogleOAuthCallbackRequest
+import com.nomadclub.cashchat.shared.auth.model.LogoutRequest
 import com.nomadclub.cashchat.shared.auth.model.TokenRefreshRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.get
-import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.parameter
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -52,13 +53,26 @@ class AuthApiService(private val baseUrl: String) {
      * Android Google Sign-In SDK에서 받은 serverAuthCode를 BE로 전달하면
      * BE가 Google과 직접 교환하여 사용자 정보를 획득합니다.
      *
-     * GET /api/auth/callback/google?code={serverAuthCode}&deviceToken={deviceToken}
+     * POST /api/auth/callback/google
      */
     suspend fun loginWithGoogle(serverAuthCode: String, deviceToken: String): AuthResponse {
-        return httpClient.get("$baseUrl/api/auth/callback/google") {
-            parameter("code", serverAuthCode)
-            parameter("deviceToken", deviceToken)
+        return httpClient.post("$baseUrl/api/auth/callback/google") {
+            contentType(ContentType.Application.Json)
+            setBody(GoogleOAuthCallbackRequest(code = serverAuthCode, deviceToken = deviceToken))
         }.body()
+    }
+
+    /**
+     * 로그아웃 — 서버 측 RefreshToken 무효화.
+     * GUEST 사용자는 호출하지 않습니다.
+     *
+     * POST /api/auth/logout
+     */
+    suspend fun logout(refreshToken: String) {
+        httpClient.post("$baseUrl/api/auth/logout") {
+            contentType(ContentType.Application.Json)
+            setBody(LogoutRequest(refreshToken))
+        }
     }
 
     /**

@@ -1,0 +1,21 @@
+// xcconfig에서 // 는 주석이므로 슬래시 변수로 URL 조합
+SLASH = /
+
+// ──────────────────────────────────────────────
+// 기본값 — local.xcconfig에서 재정의 가능
+// ──────────────────────────────────────────────
+
+// Google Cloud Console > iOS 앱 타입 OAuth Client ID (번들 ID: com.nomadlab.CashChatIOS)
+GOOGLE_IOS_CLIENT_ID = YOUR_IOS_GOOGLE_CLIENT_ID
+
+// GOOGLE_IOS_CLIENT_ID 역순 → CFBundleURLSchemes 등록값
+GOOGLE_REVERSED_CLIENT_ID = YOUR_REVERSED_IOS_CLIENT_ID
+
+// 서버에서 Auth Code 교환에 사용하는 Web OAuth Client ID (백엔드 공유)
+GOOGLE_WEB_CLIENT_ID = 537767754668-enk7onppcmkhsfa1j7hupuc6jig1c0s2.apps.googleusercontent.com
+
+// API 서버 기본 URL
+API_BASE_URL = https:$(SLASH)/cashchat.duckdns.org
+
+// local.xcconfig가 있으면 위 기본값을 오버라이드 (없어도 빌드 가능)
+#include? "local.xcconfig"

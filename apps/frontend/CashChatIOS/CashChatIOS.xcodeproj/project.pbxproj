@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CC2130032F5D5C2B009F83EE /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = CC2130022F5D5C2B009F83EE /* GoogleSignIn */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		FBEF9B9C2F5D5C2C009F83ED /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,6 +28,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		CC2130042F5D5C2B009F83EE /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = SOURCE_ROOT; };
 		FBEF9B8E2F5D5C2B009F83ED /* CashChatIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CashChatIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FBEF9B9B2F5D5C2C009F83ED /* CashChatIOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CashChatIOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FBEF9BA52F5D5C2C009F83ED /* CashChatIOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CashChatIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -52,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CC2130032F5D5C2B009F83EE /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,6 +81,7 @@
 		FBEF9B852F5D5C2B009F83ED = {
 			isa = PBXGroup;
 			children = (
+				CC2130042F5D5C2B009F83EE /* Config.xcconfig */,
 				FBEF9B902F5D5C2B009F83ED /* CashChatIOS */,
 				FBEF9B9E2F5D5C2C009F83ED /* CashChatIOSTests */,
 				FBEF9BA82F5D5C2C009F83ED /* CashChatIOSUITests */,
@@ -99,8 +106,8 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = FBEF9BAF2F5D5C2C009F83ED /* Build configuration list for PBXNativeTarget "CashChatIOS" */;
 			buildPhases = (
-				FBEF9B8A2F5D5C2B009F83ED /* Sources */,
 				FBEF9BC42F5D5F3B009F83ED /* Embed Shared Framework */,
+				FBEF9B8A2F5D5C2B009F83ED /* Sources */,
 				FBEF9B8B2F5D5C2B009F83ED /* Frameworks */,
 				FBEF9B8C2F5D5C2B009F83ED /* Resources */,
 			);
@@ -113,6 +120,7 @@
 			);
 			name = CashChatIOS;
 			packageProductDependencies = (
+				CC2130022F5D5C2B009F83EE /* GoogleSignIn */,
 			);
 			productName = CashChatIOS;
 			productReference = FBEF9B8E2F5D5C2B009F83ED /* CashChatIOS.app */;
@@ -196,6 +204,9 @@
 			);
 			mainGroup = FBEF9B852F5D5C2B009F83ED;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FBEF9B8F2F5D5C2B009F83ED /* Products */;
 			projectDirPath = "";
@@ -412,6 +423,7 @@
 		};
 		FBEF9BB02F5D5C2C009F83ED /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC2130042F5D5C2B009F83EE /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -419,12 +431,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -444,6 +451,7 @@
 		};
 		FBEF9BB12F5D5C2C009F83ED /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CC2130042F5D5C2B009F83EE /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -451,12 +459,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -594,6 +597,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CC2130022F5D5C2B009F83EE /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = FBEF9B862F5D5C2B009F83ED /* Project object */;
 }
