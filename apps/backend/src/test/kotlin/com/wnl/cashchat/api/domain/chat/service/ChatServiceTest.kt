@@ -1,17 +1,19 @@
 package com.wnl.cashchat.api.domain.chat.service
 
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
+import com.wnl.cashchat.api.domain.chat.exception.ConversationAccessDeniedException
+import com.wnl.cashchat.api.domain.chat.exception.ConversationNotFoundException
 import com.wnl.cashchat.api.domain.chat.persistence.entity.ChatMessage
 import com.wnl.cashchat.api.domain.chat.persistence.entity.Conversation
 import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageRole
 import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageStatus
 import com.wnl.cashchat.api.domain.chat.persistence.repository.ChatMessageRepository
 import com.wnl.cashchat.api.domain.chat.persistence.repository.ConversationRepository
-import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
-import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessage
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
+import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
+import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import io.kotest.assertions.throwables.shouldThrow
@@ -31,6 +33,7 @@ import org.springframework.transaction.support.SimpleTransactionStatus
 import reactor.core.publisher.Flux
 import reactor.test.StepVerifier
 import java.util.Optional
+import java.util.UUID
 
 class ChatServiceTest : FunSpec() {
     private lateinit var conversationRepository: ConversationRepository
@@ -209,6 +212,61 @@ class ChatServiceTest : FunSpec() {
                 content = "hi",
             )
         }
+
+        test("getHistory returns owned conversation messages ordered by creation time") {
+            val conversationUuid = UUID.fromString("0c4fe408-6d7c-4bd9-b0f8-5fdbe2a6a6e8")
+            val conversation = conversation(ownerId = 1L, uuid = conversationUuid)
+            val first = ChatMessage(
+                id = 10L,
+                conversation = conversation,
+                role = MessageRole.USER,
+                content = "hello",
+                status = MessageStatus.COMPLETED
+            )
+            val second = ChatMessage(
+                id = 11L,
+                conversation = conversation,
+                role = MessageRole.ASSISTANT,
+                content = "hi there",
+                status = MessageStatus.COMPLETED,
+                model = "gpt-4o-mini"
+            )
+
+            whenever(conversationRepository.findByUuid(conversationUuid)).thenReturn(conversation)
+            whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L))
+                .thenReturn(listOf(first, second))
+
+            val history = chatService.getHistory(userId = 1L, conversationUuid = conversationUuid)
+
+            history.conversationUuid shouldBe conversationUuid
+            history.messages shouldBe listOf(first, second)
+            verify(chatMessageRepository).findAllByConversationIdOrderByCreatedAtAsc(1L)
+        }
+
+        test("getHistory rejects conversations owned by another user") {
+            val conversationUuid = UUID.fromString("7a4e58c0-e8dc-4f26-9b86-fdc50d03d49f")
+            val conversation = conversation(ownerId = 2L, uuid = conversationUuid)
+
+            whenever(conversationRepository.findByUuid(conversationUuid)).thenReturn(conversation)
+
+            shouldThrow<ConversationAccessDeniedException> {
+                chatService.getHistory(userId = 1L, conversationUuid = conversationUuid)
+            }
+
+            verify(chatMessageRepository, never()).findAllByConversationIdOrderByCreatedAtAsc(any())
+        }
+
+        test("getHistory rejects unknown conversation uuid") {
+            val conversationUuid = UUID.fromString("bd1d0ebf-599c-4a11-a582-5a8fbb716a5c")
+
+            whenever(conversationRepository.findByUuid(conversationUuid)).thenReturn(null)
+
+            shouldThrow<ConversationNotFoundException> {
+                chatService.getHistory(userId = 1L, conversationUuid = conversationUuid)
+            }
+
+            verify(chatMessageRepository, never()).findAllByConversationIdOrderByCreatedAtAsc(any())
+        }
     }
 
     private fun stubConversation(conversation: Conversation) {
@@ -218,9 +276,9 @@ class ChatServiceTest : FunSpec() {
         stubMessagePersistence()
     }
 
-    private fun conversation(ownerId: Long): Conversation {
+    private fun conversation(ownerId: Long, uuid: UUID = UUID.randomUUID()): Conversation {
         val owner = User(id = ownerId, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
-        return Conversation(id = 1L, user = owner, title = null)
+        return Conversation(id = 1L, uuid = uuid, user = owner, title = null)
     }
 
     private fun stubMessagePersistence() {

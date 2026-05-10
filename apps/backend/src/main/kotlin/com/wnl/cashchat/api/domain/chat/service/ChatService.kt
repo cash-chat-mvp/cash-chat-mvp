@@ -1,5 +1,7 @@
 package com.wnl.cashchat.api.domain.chat.service
 
+import com.wnl.cashchat.api.domain.chat.exception.ConversationAccessDeniedException
+import com.wnl.cashchat.api.domain.chat.exception.ConversationNotFoundException
 import com.wnl.cashchat.api.domain.chat.persistence.entity.ChatMessage
 import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageRole
 import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageStatus
@@ -15,6 +17,7 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import reactor.core.publisher.Flux
 import reactor.core.publisher.SignalType
+import java.util.UUID
 
 /**
  * Coordinates persistence and provider streaming for chat conversations.
@@ -79,6 +82,25 @@ class ChatService(
         return llmProvider.stream(streamContext.providerMessages)
             .doOnNext { chunk -> buffer.append(chunk) }
             .doFinally { signalType -> finalizeAssistantMessage(signalType, streamContext.assistantMessageId, buffer) }
+    }
+
+    /**
+     * Returns persisted messages for an owned conversation.
+     */
+    fun getHistory(userId: Long, conversationUuid: UUID): ChatHistory {
+        return transactionTemplate.execute {
+            val conversation = conversationRepository.findByUuid(conversationUuid)
+                ?: throw ConversationNotFoundException(conversationUuid)
+
+            if (conversation.user.id != userId) {
+                throw ConversationAccessDeniedException(conversationUuid)
+            }
+
+            ChatHistory(
+                conversationUuid = conversation.uuid,
+                messages = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.id),
+            )
+        } ?: error("Failed to load chat history")
     }
 
     private fun finalizeAssistantMessage(
