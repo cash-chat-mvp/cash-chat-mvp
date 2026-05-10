@@ -26,13 +26,13 @@ class ProdDisabledSwaggerSecurityConfigTest @Autowired constructor(
     @Test
     fun `prod blocks openapi docs when swagger flag is disabled`() {
         mockMvc.perform(get("/v3/api-docs"))
-            .andExpect(status().isForbidden)
+            .andExpect(status().isUnauthorized)
     }
 
     @Test
     fun `prod blocks swagger ui when swagger flag is disabled`() {
         mockMvc.perform(get("/swagger-ui/index.html"))
-            .andExpect(status().isForbidden)
+            .andExpect(status().isUnauthorized)
     }
 }
 

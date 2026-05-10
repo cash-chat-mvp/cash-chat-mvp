@@ -1,5 +1,7 @@
 package com.wnl.cashchat.api.domain.auth.web.controller
 
+import com.wnl.cashchat.api.common.security.config.SecurityConfig
+import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.auth.service.AuthService
 import com.wnl.cashchat.api.domain.auth.web.response.AuthResponse
@@ -11,6 +13,7 @@ import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
+import org.springframework.context.annotation.Import
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
 import org.springframework.http.MediaType
 import org.springframework.test.context.bean.override.mockito.MockitoBean
@@ -21,7 +24,8 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPat
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
 @WebMvcTest(AuthController::class)
-@AutoConfigureMockMvc(addFilters = false)
+@AutoConfigureMockMvc
+@Import(SecurityConfig::class)
 class AuthControllerTest {
 
     @Autowired
@@ -29,6 +33,9 @@ class AuthControllerTest {
 
     @MockitoBean
     private lateinit var authService: AuthService
+
+    @MockitoBean
+    private lateinit var jwtTokenHandler: JwtTokenHandler
 
     @MockitoBean
     private lateinit var jpaMetamodelMappingContext: JpaMetamodelMappingContext
@@ -130,6 +137,52 @@ class AuthControllerTest {
                 .param("deviceToken", "device-token")
         )
             .andExpect(status().isMethodNotAllowed)
+
+        verifyNoInteractions(authService)
+    }
+
+    @Test
+    fun `logout deletes the submitted refresh token`() {
+        whenever(jwtTokenHandler.validateToken("access-token")).thenReturn(true)
+        whenever(jwtTokenHandler.getUserId("access-token")).thenReturn(1L)
+        whenever(jwtTokenHandler.getRole("access-token")).thenReturn(Role.MEMBER)
+
+        mockMvc.perform(
+            post("/api/auth/logout")
+                .header("Authorization", "Bearer access-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"refreshToken":"refresh-token"}""")
+        )
+            .andExpect(status().isNoContent)
+
+        verify(authService).logout(1L, "refresh-token")
+    }
+
+    @Test
+    fun `logout requires authentication`() {
+        mockMvc.perform(
+            post("/api/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"refreshToken":"refresh-token"}""")
+        )
+            .andExpect(status().isUnauthorized)
+
+        verifyNoInteractions(authService)
+    }
+
+    @Test
+    fun `logout rejects a blank refresh token`() {
+        whenever(jwtTokenHandler.validateToken("access-token")).thenReturn(true)
+        whenever(jwtTokenHandler.getUserId("access-token")).thenReturn(1L)
+        whenever(jwtTokenHandler.getRole("access-token")).thenReturn(Role.MEMBER)
+
+        mockMvc.perform(
+            post("/api/auth/logout")
+                .header("Authorization", "Bearer access-token")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"refreshToken":" "}""")
+        )
+            .andExpect(status().isBadRequest)
 
         verifyNoInteractions(authService)
     }

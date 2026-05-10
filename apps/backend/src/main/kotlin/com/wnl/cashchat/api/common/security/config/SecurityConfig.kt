@@ -2,6 +2,7 @@ package com.wnl.cashchat.api.common.security.config
 
 import com.wnl.cashchat.api.common.security.filter.JwtAuthenticationFilter
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
+import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
@@ -42,13 +43,27 @@ class SecurityConfig(
             .csrf { it.disable() }
             .headers { it.frameOptions { frame -> frame.disable() } } // H2
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
+            .exceptionHandling {
+                it.authenticationEntryPoint { _, response, _ ->
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED)
+                }
+                it.accessDeniedHandler { _, response, _ ->
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN)
+                }
+            }
             .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter::class.java)
             .authorizeHttpRequests {
-                val publicPaths = mutableListOf("/api/auth/**", "/favicon.ico")
+                val publicPaths = mutableListOf(
+                    "/api/auth/guest",
+                    "/api/auth/callback/google",
+                    "/api/auth/refresh",
+                    "/favicon.ico"
+                )
                 if (isSwaggerEnabled) {
                     publicPaths.addAll(SWAGGER_PATHS)
                 }
-                it.requestMatchers(*publicPaths.toTypedArray()).permitAll()
+                it.requestMatchers("/api/auth/logout").authenticated()
+                    .requestMatchers(*publicPaths.toTypedArray()).permitAll()
                     .anyRequest().authenticated()
             }
 
