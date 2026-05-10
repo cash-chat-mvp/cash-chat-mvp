@@ -1,1 +1,5 @@
-package_name "com.nomadclub.cashchat"
+app_identifier "com.nomadclub.cashchat"  # Android default
+
+for_platform :ios do
+  app_identifier "com.nomadlab.CashChatIOS"
+end
