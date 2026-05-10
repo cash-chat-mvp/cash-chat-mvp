@@ -39,7 +39,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
 
-    implementation("org.springframework.ai:spring-ai-starter-model-openai")
+    implementation("org.springframework.ai:spring-ai-starter-model-openai") {
+        exclude(group = "io.swagger.core.v3", module = "swagger-annotations")
+    }
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.16")
 
@@ -63,6 +65,7 @@ dependencies {
 
     // Mockito-Kotlin
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.4.0")
+    testImplementation("io.projectreactor:reactor-test")
 
     // run-time only
     runtimeOnly("com.h2database:h2")

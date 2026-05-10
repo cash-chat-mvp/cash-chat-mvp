@@ -1,30 +1,49 @@
 *.iml
 .gradle
 /.gradle-user-home
-/local.properties
 /.idea
 .DS_Store
 /build
 /captures
 .externalNativeBuild
 .cxx
+
+# ──────────────────────────────────────────────
+# 🔐 보안 파일 (절대 커밋 금지)
+# ──────────────────────────────────────────────
+
+# 로컬 환경 설정 (SDK 경로, API 키 등)
 local.properties
-/shared/build
-/.gradle-local
-/CashChatIOS/.git
-/CashChatIOS/**/xcuserdata
-/CashChatIOS/**/*.xcuserstate
-key.properties
-*.keystore
-*.jks
-# Firebase 설정 (루트 및 flavor별 경로 모두 포함)
+/local.properties
+
+# iOS 로컬 환경 설정 (Google Client ID 등 민감 정보)
+CashChatIOS/local.xcconfig
+
+# iOS 민감 값 파일 (Secrets.swift.example을 복사해서 실제 값 입력)
+CashChatIOS/CashChatIOS/Secrets.swift
+
+# Firebase 서비스 계정 키 (CI에서 secret으로 주입)
 **/google-services.json
-# iOS Firebase 설정 (dev/prod scheme 포함)
-**/GoogleService-Info.plist
 service-account.json
 
- #  - /.gradle, /.gradle-user-home: Gradle 캐시/다운로드 파일 (재생성 가능)
- #  - /.idea, *.iml: Android Studio/IntelliJ 개인 IDE 설정 (팀 공용 소스 아님)
- #  - /build, .externalNativeBuild, .cxx: 빌드 산출물/중간 파일 (빌드시 다시 생성)
- #  - /captures, .DS_Store: 스크린샷/OS 메타파일
- #  - /local.properties: 로컬 SDK 경로 같은 개인 환경 설정 (보안/환경 차이 때문에 보통 미커밋)
+# Android 릴리즈 서명 키
+*.keystore
+*.jks
+key.properties
+
+# ──────────────────────────────────────────────
+# 빌드 산출물 (재생성 가능)
+# ──────────────────────────────────────────────
+shared/build/
+
+# ──────────────────────────────────────────────
+# 주석
+# ──────────────────────────────────────────────
+#  - /.gradle, /.gradle-user-home: Gradle 캐시/다운로드 파일 (재생성 가능)
+#  - /.idea, *.iml: Android Studio/IntelliJ 개인 IDE 설정 (팀 공용 소스 아님)
+#  - /build, .externalNativeBuild, .cxx: 빌드 산출물/중간 파일 (빌드시 다시 생성)
+#  - /captures, .DS_Store: 스크린샷/OS 메타파일
+#  - local.properties: 로컬 SDK 경로/API 키 (보안 + 환경별 차이로 미커밋)
+#  - google-services.json: Firebase 프로젝트 설정 (CI에서 secret으로 주입)
+#  - service-account.json: Firebase Admin SDK 서비스 계정 키 (CI에서 secret으로 주입)
+#  - *.keystore / key.properties: Android 릴리즈 서명 키 (CI에서 secret으로 주입)

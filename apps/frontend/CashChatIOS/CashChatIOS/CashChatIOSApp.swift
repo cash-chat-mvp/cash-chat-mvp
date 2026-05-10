@@ -1,17 +1,14 @@
-//
-//  CashChatIOSApp.swift
-//  CashChatIOS
-//
-//  Created by gudals-mac on 3/8/26.
-//
-
 import SwiftUI
+import GoogleSignIn
 
 @main
 struct CashChatIOSApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
+                }
         }
     }
 }

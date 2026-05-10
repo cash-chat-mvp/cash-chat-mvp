@@ -2,9 +2,13 @@ name: Android Build Check
 
 on:
   pull_request:
-    branches: [ dev ]
+    types: [opened, synchronize, reopened]
+    branches: [dev]
     paths:
-      - 'apps/frontend/**'
+      - 'apps/frontend/app/**'
+      - 'apps/frontend/shared/**'
+      - 'apps/frontend/**/*.gradle.kts'
+      - 'apps/frontend/gradle/**'
 
 jobs:
   build-check:

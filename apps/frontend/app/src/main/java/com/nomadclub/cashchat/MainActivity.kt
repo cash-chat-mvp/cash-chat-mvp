@@ -1,19 +1,48 @@
 package com.nomadclub.cashchat
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.compose.rememberNavController
+import com.nomadclub.cashchat.feature.auth.AuthState
+import com.nomadclub.cashchat.feature.auth.AuthViewModel
+import com.nomadclub.cashchat.feature.auth.LoginScreen
 import com.nomadclub.cashchat.feature.main.MainScreen
 import com.nomadclub.cashchat.feature.onboarding.OnboardingScreen
 import com.nomadclub.cashchat.ui.theme.CashChatTheme
+import kotlinx.coroutines.launch
+import org.koin.androidx.compose.koinViewModel
 
 /**
  * 앱 내 화면 경로(route)를 정의하는 객체.
@@ -21,6 +50,7 @@ import com.nomadclub.cashchat.ui.theme.CashChatTheme
  */
 private object AppRoute {
     const val ONBOARDING = "onboarding"
+    const val LOGIN = "login"
     const val MAIN = "main?firstEntry={firstEntry}"
 
     /** 메인 화면으로 이동할 때 쿼리 파라미터 firstEntry를 붙인 경로 문자열을 반환 */
@@ -29,9 +59,6 @@ private object AppRoute {
 
 /**
  * 앱의 진입점(Activity).
- * onCreate: 앱이 처음 실행될 때 한 번 호출됩니다.
- * setContent: Compose로 UI를 그리기 시작하는 곳입니다.
- * enableEdgeToEdge: 상태바/네비게이션바까지 화면을 쓰도록 설정합니다.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,77 +75,191 @@ class MainActivity : ComponentActivity() {
 
 /**
  * 앱 전체 네비게이션과 공유 상태를 담당하는 Composable.
- * rememberNavController(): 화면 전환을 관리하는 컨트롤러 (한 번 생성 후 유지)
- * rememberSaveable: 화면 회전 등으로 재생성돼도 값이 유지됩니다 (포인트, 메시지 수 등)
  */
 @Composable
 private fun CashChatApp() {
+    // 앱 시작 시 게스트 세션 자동 초기화 (CC-154, CC-155)
+    val authViewModel: AuthViewModel = koinViewModel()
+    val authState by authViewModel.authState.collectAsState()
+
+    // 세션 초기화 중에는 로딩 화면 표시
+    if (authState is AuthState.Loading) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    // 인증 오류 시 친화적 에러 화면 표시
+    if (authState is AuthState.Error) {
+        val errorMessage = (authState as AuthState.Error).message
+
+        // 개발 빌드: 상세 에러를 Logcat에 기록
+        if (BuildConfig.DEBUG) {
+            Log.e("CashChatAuth", "세션 초기화 실패: $errorMessage")
+        }
+
+        AuthErrorScreen(onRetry = { authViewModel.retry() })
+        return
+    }
+
     val navController = rememberNavController()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     // 앱 전역에서 쓰는 포인트와 대화 횟수 (다른 화면에서도 동일한 값을 참조)
     var points by rememberSaveable { mutableIntStateOf(0) }
     var messageCount by rememberSaveable { mutableIntStateOf(0) }
 
-    /** 포인트 증가 (리워드/미션 등에서 호출) */
     fun addPoints(value: Int) {
         if (value <= 0) return
         points += value
     }
 
-    /** 포인트 사용 (상점에서 구매 시). 잔액 부족이면 false 반환 */
     fun spendPoints(value: Int): Boolean {
         if (value <= 0) return false
         return if (points >= value) {
             points -= value
             true
-        } else {
-            false
-        }
+        } else false
     }
 
-    /** 대화 1회당 호출. 메시지 수 +1, 포인트 +10 */
     fun incrementMessageCount() {
         messageCount += 1
         addPoints(10)
     }
 
-    // NavHost = "여기서 보여줄 화면은 route에 따라 결정된다"는 컨테이너
-    NavHost(
-        navController = navController,
-        startDestination = AppRoute.ONBOARDING  // 처음에는 온보딩 화면부터
-    ) {
-        // "onboarding" 경로 → OnboardingScreen 표시
-        composable(AppRoute.ONBOARDING) {
-            OnboardingScreen(
-                onStartClick = {
-                    // 시작하기 클릭 시 메인으로 이동, 온보딩은 백스택에서 제거
-                    navController.navigate(AppRoute.main(firstEntry = true)) {
-                        popUpTo(AppRoute.ONBOARDING) { inclusive = true }
-                        launchSingleTop = true
+    // 이미 MEMBER 세션이 있으면 온보딩 생략 → 바로 메인으로
+    val startDestination = when {
+        authState is AuthState.Authenticated &&
+            (authState as AuthState.Authenticated).role == "MEMBER" -> AppRoute.main()
+        else -> AppRoute.ONBOARDING
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
+        NavHost(
+            navController = navController,
+            startDestination = startDestination,
+            modifier = Modifier.padding(innerPadding)
+        ) {
+            // 온보딩 화면
+            composable(AppRoute.ONBOARDING) {
+                OnboardingScreen(
+                    onLoginSuccess = {
+                        navController.navigate(AppRoute.main(firstEntry = true)) {
+                            popUpTo(AppRoute.ONBOARDING) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
-                }
-            )
+                )
+            }
+
+            // Google 로그인 화면 (게스트 → 멤버 전환)
+            composable(AppRoute.LOGIN) {
+                LoginScreen(
+                    onGoogleSignInSuccess = { serverAuthCode ->
+                        authViewModel.loginWithGoogle(
+                            serverAuthCode = serverAuthCode,
+                            onError = { errorMsg ->
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("로그인 실패: $errorMsg")
+                                }
+                            }
+                        )
+                        // 로그인 시도 후 백스택 복귀 (authState가 갱신되면 UI 자동 반영)
+                        navController.popBackStack()
+                    }
+                )
+            }
+
+            // 메인 화면 (하단 탭)
+            composable(
+                route = AppRoute.MAIN,
+                arguments = listOf(
+                    navArgument("firstEntry") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    }
+                )
+            ) {
+                MainScreen(
+                    points = points,
+                    messageCount = messageCount,
+                    addPoints = ::addPoints,
+                    spendPoints = ::spendPoints,
+                    incrementMessageCount = ::incrementMessageCount,
+                    onNavigateToLogin = {
+                        navController.navigate(AppRoute.LOGIN)
+                    },
+                    onLogout = {
+                        authViewModel.logout()
+                        navController.navigate(AppRoute.ONBOARDING) {
+                            popUpTo(0) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
         }
+    }
+}
 
-        // "main?firstEntry=..." 경로 → 하단 탭이 있는 MainScreen
-        composable(
-            route = AppRoute.MAIN,
-            arguments = listOf(
-                navArgument("firstEntry") {
-                    type = NavType.BoolType
-                    defaultValue = false
-                }
+/**
+ * 인증 실패 시 표시되는 에러 화면.
+ *
+ * - 사용자에게 친화적인 메시지와 재시도 버튼을 제공합니다.
+ * - 상세 에러(서버 메시지 등)는 화면에 노출하지 않습니다.
+ *   개발 중 확인은 Logcat의 "CashChatAuth" 태그를 이용하세요.
+ */
+@Composable
+private fun AuthErrorScreen(onRetry: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.WifiOff,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.outline
             )
-        ) { backStackEntry ->
-            val firstEntry = backStackEntry.arguments?.getBoolean("firstEntry") ?: false
 
-            MainScreen(
-                points = points,
-                messageCount = messageCount,
-                addPoints = ::addPoints,
-                spendPoints = ::spendPoints,
-                incrementMessageCount = ::incrementMessageCount
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "연결할 수 없어요",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "네트워크 상태를 확인하고\n다시 시도해주세요",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Button(onClick = onRetry) {
+                Text("다시 시도")
+            }
         }
     }
 }
