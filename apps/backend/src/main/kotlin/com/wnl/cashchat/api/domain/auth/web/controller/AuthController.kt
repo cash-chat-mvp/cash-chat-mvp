@@ -8,6 +8,7 @@ import com.wnl.cashchat.api.domain.auth.web.request.TokenRefreshRequest
 import com.wnl.cashchat.api.domain.auth.web.response.AuthResponse
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -42,8 +43,12 @@ class AuthController(
     }
 
     @PostMapping("/logout")
-    fun logout(@Valid @RequestBody request: LogoutRequest): ResponseEntity<Void> {
-        authService.logout(request.refreshToken)
+    fun logout(
+        authentication: Authentication,
+        @Valid @RequestBody request: LogoutRequest
+    ): ResponseEntity<Void> {
+        val userId = authentication.principal as Long
+        authService.logout(userId, request.refreshToken)
         return ResponseEntity.noContent().build()
     }
 }
