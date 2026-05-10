@@ -310,6 +310,19 @@ jobs:
             -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" build.keychain
 
+      - name: Verify bundle ID
+        env:
+          EXPECTED_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+        run: |
+          ACTUAL=$(grep -A1 'PRODUCT_BUNDLE_IDENTIFIER' \
+            CashChatIOS/CashChatIOS.xcodeproj/project.pbxproj \
+            | grep -o 'com\.nomadlab\.[^;]*' | head -1)
+          if [ "$ACTUAL" != "$EXPECTED_BUNDLE_ID" ]; then
+            echo "::error::Bundle ID 불일치 — expected=$EXPECTED_BUNDLE_ID actual=$ACTUAL"
+            exit 1
+          fi
+          echo "✅ Bundle ID 일치: $ACTUAL"
+
       - name: Install provisioning profile
         env:
           PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
@@ -318,7 +331,6 @@ jobs:
           mkdir -p "$PROFILES_DIR"
           echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILES_DIR/cashchat.mobileprovision"
 
-          # 프로파일 이름을 xcconfig에서 참조할 수 있도록 env로 추출
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" \
             /dev/stdin <<< "$(security cms -D -i "$PROFILES_DIR/cashchat.mobileprovision")")
           echo "PROVISIONING_PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_ENV

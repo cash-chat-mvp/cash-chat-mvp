@@ -1,5 +1,5 @@
 app_identifier "com.nomadclub.cashchat"  # Android default
 
 for_platform :ios do
-  app_identifier "com.nomadlab.CashChatIOS"
+  app_identifier "com.nomadlab.cashchat"
 end
