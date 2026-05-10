@@ -102,6 +102,15 @@ class ChatPersistenceIntegrationTest : FunSpec() {
 
             indexedColumns shouldContain "conversation_id"
             indexedColumns shouldContain "created_at"
+
+            persistedConversation.uuid shouldBe conversation.uuid
+            conversationRepository.findByUuid(conversation.uuid)?.id shouldBe conversationId
+
+            val conversationIndexes = JdbcTemplate(dataSource).queryForList("SHOW INDEX FROM conversations")
+            val hasUniqueUuidIndex = conversationIndexes.any {
+                it["Column_name"] == "uuid" && (it["Non_unique"] as Number).toInt() == 0
+            }
+            hasUniqueUuidIndex shouldBe true
         }
     }
 
