@@ -13,7 +13,7 @@ API docs deployment is out of scope for this change.
 
 Update these workflows:
 
-- `.github/workflows/discord-notify.yml`
+- `.github/workflows/backend-build-discord-notify.yml`
 - `.github/workflows/backend-cicd.yml`
 - `.github/workflows/nginx-deploy.yml`
 
@@ -23,9 +23,9 @@ Do not change application code, deployment scripts, or GitHub Pages API docs beh
 
 ### Backend CI Build Check
 
-`backend-cicd.yml` already runs the `ci` job for pull requests that touch backend or backend deploy files. The existing `discord-notify.yml` workflow will be extended so its `workflow_run` trigger also listens for `Backend CI/CD`.
+`backend-cicd.yml` already runs the `ci` job for pull requests that touch backend or backend deploy files. The new `backend-build-discord-notify.yml` workflow listens for `Backend CI/CD` workflow-run completion without changing the existing Android notification workflow.
 
-When a backend PR build completes, `discord-notify.yml` sends a success or failure embed to `DISCORD_WEBHOOK`. The message includes the branch, actor, commit message, and Actions run URL.
+When a backend PR build completes, `backend-build-discord-notify.yml` sends a success or failure embed to `DISCORD_WEBHOOK`. The message includes the branch, actor, commit message, and Actions run URL.
 
 ### Backend Deployment
 

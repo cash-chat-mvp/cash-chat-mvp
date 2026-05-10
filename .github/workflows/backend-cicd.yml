@@ -187,7 +187,7 @@ jobs:
           SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          IMAGE_TAG: ghcr.io/${{ github.repository_owner }}/cash-chat-backend:${{ github.sha }}
+          IMAGE_TAG: ${{ steps.backend-image.outputs.name }}:latest
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
             echo "ℹ️ DEPLOY_BOT_DISCORD 없음 — 알림 건너뜀"

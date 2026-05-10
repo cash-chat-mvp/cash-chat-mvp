@@ -4,7 +4,7 @@
 
 **Goal:** Add Discord notifications for backend CI build checks, backend deployments, and nginx deployments.
 
-**Architecture:** Extend the existing notification model instead of introducing a new reusable workflow. Build-check notifications stay centralized in `.github/workflows/discord-notify.yml` through `workflow_run`; deployment notifications live at the end of the deployment jobs so they can include deployment-specific context.
+**Architecture:** Keep the existing Android notification workflow unchanged and add a separate backend build notification workflow. Backend and nginx deployment notifications live at the end of their deployment jobs so they can include deployment-specific context.
 
 **Tech Stack:** GitHub Actions YAML, bash, `jq`, Discord webhooks.
 
@@ -12,60 +12,49 @@
 
 ## File Structure
 
-- Modify `.github/workflows/discord-notify.yml`: add `Backend CI/CD` to the workflow-run trigger and generalize the build-check notification step so Android and backend runs both report to `DISCORD_WEBHOOK`.
+- Add `.github/workflows/backend-build-discord-notify.yml`: listen for `Backend CI/CD` workflow-run completion and report backend PR build checks to `DISCORD_WEBHOOK`.
 - Modify `.github/workflows/backend-cicd.yml`: append success and failure Discord notification steps to the `cd` job using `DEPLOY_BOT_DISCORD`.
 - Modify `.github/workflows/nginx-deploy.yml`: append success and failure Discord notification steps to the `deploy` job using `DEPLOY_BOT_DISCORD`.
 
 ### Task 1: Backend CI build-check notification
 
 **Files:**
-- Modify: `.github/workflows/discord-notify.yml`
+- Add: `.github/workflows/backend-build-discord-notify.yml`
 
-- [ ] **Step 1: Inspect current workflow-run trigger**
+- [ ] **Step 1: Add backend build workflow-run trigger**
 
-Run: `Get-Content -Raw .github\workflows\discord-notify.yml`
-
-Expected: The `workflow_run.workflows` list contains only `"Android Build Check"`.
-
-- [ ] **Step 2: Add Backend CI/CD to workflow_run**
-
-Change:
+Create a backend-only notification workflow:
 
 ```yaml
+name: 백엔드 빌드 알림
+
+on:
   workflow_run:
-    workflows: ["Android Build Check", "Backend CI/CD"]
+    workflows: ["Backend CI/CD"]
     types: [completed]
 ```
 
-- [ ] **Step 3: Generalize the workflow-run notification step**
+- [ ] **Step 2: Add backend build result notification**
 
-Replace the Android-only title/footer logic with workflow-name-aware logic:
+Add a `notify` job that only runs for pull request workflow runs and posts the backend build result to `DISCORD_WEBHOOK`:
 
 ```bash
-if [ "$WORKFLOW_NAME" = "Backend CI/CD" ]; then
-  SERVICE="Backend CI"
-  FOOTER="Cash Chat - Backend Build Check"
-else
-  SERVICE="Android"
-  FOOTER="Cash Chat - Android Build Check"
-fi
-
 if [ "$CONCLUSION" = "success" ]; then
   COLOR=5763719
-  TITLE="✅ ${SERVICE} build check passed"
+  TITLE="✅ 백엔드 CI 빌드 체크 통과"
 else
   COLOR=15548997
-  TITLE="❌ ${SERVICE} build check failed"
+  TITLE="🚨 백엔드 CI 빌드 체크 실패"
 fi
 ```
 
-Pass `WORKFLOW_NAME: ${{ github.event.workflow_run.name }}` and include `$FOOTER` in the `jq` payload.
+The message includes branch, actor, commit message, Actions log link, and footer `Cash Chat • 백엔드 빌드 체크`.
 
-- [ ] **Step 4: Validate YAML**
+- [ ] **Step 3: Validate YAML**
 
 Run: parse all changed workflow files with a YAML parser.
 
-Expected: parser succeeds for `.github/workflows/discord-notify.yml`.
+Expected: parser succeeds for `.github/workflows/backend-build-discord-notify.yml`.
 
 ### Task 2: Backend deployment notification
 
@@ -87,7 +76,7 @@ Append a step at the end of the `cd` job:
           SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          IMAGE_TAG: ghcr.io/${{ github.repository_owner }}/cash-chat-backend:${{ github.sha }}
+          IMAGE_TAG: ${{ steps.backend-image.outputs.name }}:latest
         run: |
           if [ -z "$DISCORD_WEBHOOK" ]; then
             echo "DISCORD_WEBHOOK is missing - skip notification"
@@ -247,13 +236,13 @@ Expected: parser succeeds for `.github/workflows/nginx-deploy.yml`.
 ### Task 4: Final verification
 
 **Files:**
-- Verify: `.github/workflows/discord-notify.yml`
+- Verify: `.github/workflows/backend-build-discord-notify.yml`
 - Verify: `.github/workflows/backend-cicd.yml`
 - Verify: `.github/workflows/nginx-deploy.yml`
 
 - [ ] **Step 1: Search notification secrets**
 
-Run: `rg -n "DISCORD_WEBHOOK|DEPLOY_BOT_DISCORD|Backend CI/CD|Nginx deployment|Backend deployment" .github/workflows`
+Run: `rg -n "DISCORD_WEBHOOK|DEPLOY_BOT_DISCORD|Backend CI/CD|백엔드 CI|Nginx 배포|백엔드 배포" .github/workflows`
 
 Expected:
 - Build-check notification uses `DISCORD_WEBHOOK`.
@@ -262,6 +251,6 @@ Expected:
 
 - [ ] **Step 2: Check git diff**
 
-Run: `git -c safe.directory=D:/Work/cash-chat-mvp diff -- .github/workflows/discord-notify.yml .github/workflows/backend-cicd.yml .github/workflows/nginx-deploy.yml`
+Run: `git -c safe.directory=D:/Work/cash-chat-mvp diff -- .github/workflows/backend-build-discord-notify.yml .github/workflows/backend-cicd.yml .github/workflows/nginx-deploy.yml`
 
 Expected: Diff only contains notification changes for backend CI/CD and nginx deployment.
