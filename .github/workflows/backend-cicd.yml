@@ -177,3 +177,87 @@ jobs:
             docker compose --env-file .deploy.env -f docker-compose.yml up -d --remove-orphans
             docker compose --env-file .deploy.env -f docker-compose.yml ps
 
+      - name: 백엔드 배포 성공 Discord 알림
+        if: success()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          IMAGE_TAG: ${{ steps.backend-image.outputs.name }}:latest
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DEPLOY_BOT_DISCORD 없음 — 알림 건너뜀"
+            exit 0
+          fi
+          SHORT_SHA="${SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
+          PAYLOAD=$(jq -n \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg sha "$SHORT_SHA" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg run_url "$RUN_URL" \
+            --arg image "$IMAGE_TAG" \
+            '{embeds: [{
+              color: 5763719,
+              title: "✅ 백엔드 배포 완료",
+              description: "**백엔드 이미지 푸시와 Docker Compose 배포가 완료되었습니다**",
+              fields: [
+                {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
+                {name: "배포자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "이미지", value: ("`" + $image + "`"), inline: false},
+                {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false},
+                {name: "Actions 로그", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat • 백엔드 배포"}
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || echo "Discord 알림 전송 실패"
+
+      - name: 백엔드 배포 실패 Discord 알림
+        if: failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DEPLOY_BOT_DISCORD 없음 — 알림 건너뜀"
+            exit 0
+          fi
+          SHORT_SHA="${SHA:0:7}"
+          COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
+          PAYLOAD=$(jq -n \
+            --arg msg "$COMMIT_MESSAGE" \
+            --arg branch "$BRANCH" \
+            --arg actor "$ACTOR" \
+            --arg sha "$SHORT_SHA" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg run_url "$RUN_URL" \
+            '{embeds: [{
+              color: 15548997,
+              title: "🚨 백엔드 배포 실패",
+              description: "**백엔드 이미지 빌드, 푸시 또는 서버 배포에 실패했습니다**",
+              fields: [
+                {name: "브랜치", value: ("`" + $branch + "`"), inline: true},
+                {name: "실행자", value: ("`" + $actor + "`"), inline: true},
+                {name: "커밋", value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false},
+                {name: "Actions 로그", value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat • 백엔드 배포"}
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || echo "Discord 알림 전송 실패"
