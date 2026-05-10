@@ -20,6 +20,13 @@ interface RefreshTokenRepository : JpaRepository<RefreshToken, Long> {
     @Query("DELETE FROM RefreshToken r WHERE r.token = :token")
     fun deleteByTokenReturningCount(@Param("token") token: String): Int
 
+    @Modifying
+    @Query("DELETE FROM RefreshToken r WHERE r.user.id = :userId AND r.token = :token")
+    fun deleteByUserIdAndTokenReturningCount(
+        @Param("userId") userId: Long,
+        @Param("token") token: String
+    ): Int
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM RefreshToken r WHERE r.token = :token")
     fun findByTokenForUpdate(@Param("token") token: String): RefreshToken?
