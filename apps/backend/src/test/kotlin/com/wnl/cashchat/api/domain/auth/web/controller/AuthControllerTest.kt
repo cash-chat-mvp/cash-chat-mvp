@@ -6,6 +6,7 @@ import com.wnl.cashchat.api.domain.auth.web.response.AuthResponse
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc
@@ -117,6 +118,8 @@ class AuthControllerTest {
                 .content("""{"code":" ","deviceToken":"device-token"}""")
         )
             .andExpect(status().isBadRequest)
+
+        verifyNoInteractions(authService)
     }
 
     @Test
@@ -127,5 +130,7 @@ class AuthControllerTest {
                 .param("deviceToken", "device-token")
         )
             .andExpect(status().isMethodNotAllowed)
+
+        verifyNoInteractions(authService)
     }
 }
