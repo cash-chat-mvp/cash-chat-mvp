@@ -5,26 +5,19 @@ platform :android do
   lane :distribute do
     gradle(
       task: "assemble",
-      build_type: "Release"
+      build_type: "Release",
+      properties: {
+        "android.injected.signing.store.file"     => ENV.fetch("KEYSTORE_PATH"),
+        "android.injected.signing.store.password" => ENV.fetch("KEYSTORE_STORE_PASSWORD"),
+        "android.injected.signing.key.alias"      => ENV.fetch("KEYSTORE_KEY_ALIAS"),
+        "android.injected.signing.key.password"   => ENV.fetch("KEYSTORE_KEY_PASSWORD"),
+      }
     )
 
     firebase_app_distribution(
       app: ENV.fetch("FIREBASE_APP_ID"),
-      groups: "testers",
       service_credentials_file: "service-account.json",
       release_notes: ENV.fetch("RELEASE_NOTES", "New build available")
     )
   end
 end
-
-# TODO: iOS lanes
-# platform :ios do
-#   lane :distribute do
-#     build_app(scheme: "CashChat")
-#     pilot(groups: ["testers"])  # TestFlight
-#   end
-#
-#   lane :release do
-#     deliver                      # App Store
-#   end
-# end

@@ -2,17 +2,12 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-
-    // Add the Google services Gradle plugin
-    id("com.google.gms.google-services")
 }
 
-val keystorePropertiesFile = rootProject.file("key.properties")
-val keystoreProperties = Properties()
-if (keystorePropertiesFile.exists()) {
-    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) load(file.inputStream())
 }
 
 android {
@@ -27,20 +22,26 @@ android {
         applicationId = "com.nomadclub.cashchat"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // CI/CD 환경에서 VERSION_CODE/VERSION_NAME 환경변수로 주입 (android-build-distribute.yml)
+        // 로컬 빌드 시에는 기본값 사용
+        versionCode = providers.environmentVariable("VERSION_CODE").orNull?.toIntOrNull() ?: 1
+        versionName = providers.environmentVariable("VERSION_NAME").orNull ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
 
-    signingConfigs {
-        create("release") {
-            keyAlias = (keystoreProperties["keyAlias"] as String?) ?: System.getenv("KEYSTORE_KEY_ALIAS")
-            keyPassword = (keystoreProperties["keyPassword"] as String?) ?: System.getenv("KEYSTORE_KEY_PASSWORD")
-            storeFile = (keystoreProperties["storeFile"] as String?)?.let { file(it) }
-                ?: System.getenv("KEYSTORE_PATH")?.let { file(it) }
-            storePassword = (keystoreProperties["storePassword"] as String?) ?: System.getenv("KEYSTORE_STORE_PASSWORD")
-        }
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")}\"")
+        // Retrofit은 baseUrl에 끝 슬래시를 요구하므로 누락 시 자동 보정
+        val rawBaseUrl = localProperties.getProperty("BASE_URL", "https://cashchat.duckdns.org/")
+        val baseUrl = if (rawBaseUrl.endsWith("/")) rawBaseUrl else "$rawBaseUrl/"
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
+
+        buildConfigField("String", "ADMOB_APP_ID", "\"${localProperties.getProperty("ADMOB_APP_ID", "")}\"")
+        manifestPlaceholders["admobAppId"] = localProperties.getProperty("ADMOB_APP_ID", "")
+        buildConfigField("String", "ADMOB_BANNER_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_BANNER_AD_UNIT_ID", "")}\"")
+        buildConfigField("String", "ADMOB_INTERSTITIAL_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_INTERSTITIAL_AD_UNIT_ID", "")}\"")
+        buildConfigField("String", "ADMOB_NATIVE_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_NATIVE_AD_UNIT_ID", "")}\"")
+        buildConfigField("String", "ADMOB_REWARDED_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_REWARDED_AD_UNIT_ID", "")}\"")
+        buildConfigField("String", "SENTRY_DSN", "\"${localProperties.getProperty("SENTRY_DSN", "")}\"")
     }
 
     buildTypes {
@@ -50,7 +51,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -59,15 +59,11 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
-kotlin {
-    jvmToolchain(21)
-}
-
 dependencies {
-    implementation(project(":shared"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -79,6 +75,29 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
+
+    // Network
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
+    implementation(libs.okhttp.logging)
+    implementation(libs.kotlinx.coroutines.android)
+
+    // Storage
+    implementation(libs.datastore.preferences)
+
+    // Google Sign-In
+    implementation(libs.google.play.services.auth)
+
+    // DI
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
+
+    // AdMob
+    implementation(libs.play.services.ads)
+
+    // Encrypted SharedPreferences
+    implementation(libs.security.crypto)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
