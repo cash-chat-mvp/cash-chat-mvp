@@ -44,13 +44,11 @@ class SecurityConfig(
             .headers { it.frameOptions { frame -> frame.disable() } } // H2
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .exceptionHandling {
-                it.authenticationEntryPoint { request, response, _ ->
-                    val status = if (request.requestURI == "/api/auth/logout") {
-                        HttpServletResponse.SC_UNAUTHORIZED
-                    } else {
-                        HttpServletResponse.SC_FORBIDDEN
-                    }
-                    response.sendError(status)
+                it.authenticationEntryPoint { _, response, _ ->
+                    response.sendError(HttpServletResponse.SC_UNAUTHORIZED)
+                }
+                it.accessDeniedHandler { _, response, _ ->
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN)
                 }
             }
             .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter::class.java)
