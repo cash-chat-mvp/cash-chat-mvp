@@ -19,28 +19,67 @@ jobs:
   comment:
     runs-on: ubuntu-latest
     steps:
-      - name: Create code-review-helper token
-        id: app-token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3
-        with:
-          app-id: ${{ secrets.CODE_REVIEW_HELPER_APP_ID }}
-          private-key: ${{ secrets.CODE_REVIEW_HELPER_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
-
       - name: Post comment as code-review-helper
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         env:
+          APP_ID: ${{ secrets.CODE_REVIEW_HELPER_APP_ID }}
+          INSTALLATION_ID: ${{ secrets.CODE_REVIEW_HELPER_INSTALLATION_ID }}
+          PRIVATE_KEY: ${{ secrets.CODE_REVIEW_HELPER_PRIVATE_KEY }}
           PR_NUMBER: ${{ inputs.pr_number }}
           COMMENT_BODY: ${{ inputs.body }}
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
           script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: Number(process.env.PR_NUMBER),
-              body: process.env.COMMENT_BODY,
-            });
+            const crypto = require('crypto');
+
+            function base64url(input) {
+              return Buffer.from(input)
+                .toString('base64')
+                .replace(/=/g, '')
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_');
+            }
+
+            const now = Math.floor(Date.now() / 1000);
+            const header = { alg: 'RS256', typ: 'JWT' };
+            const payload = {
+              iat: now - 60,
+              exp: now + 10 * 60,
+              iss: process.env.APP_ID,
+            };
+
+            const unsignedToken = `${base64url(JSON.stringify(header))}.${base64url(JSON.stringify(payload))}`;
+            const signature = crypto
+              .createSign('RSA-SHA256')
+              .update(unsignedToken)
+              .sign(process.env.PRIVATE_KEY, 'base64')
+              .replace(/=/g, '')
+              .replace(/\+/g, '-')
+              .replace(/\//g, '_');
+            const appJwt = `${unsignedToken}.${signature}`;
+
+            const { data: tokenResponse } = await github.request(
+              'POST /app/installations/{installation_id}/access_tokens',
+              {
+                installation_id: process.env.INSTALLATION_ID,
+                headers: {
+                  authorization: `Bearer ${appJwt}`,
+                  accept: 'application/vnd.github+json',
+                },
+              }
+            );
+
+            await github.request(
+              'POST /repos/{owner}/{repo}/issues/{issue_number}/comments',
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: Number(process.env.PR_NUMBER),
+                body: process.env.COMMENT_BODY,
+                headers: {
+                  authorization: `Bearer ${tokenResponse.token}`,
+                  accept: 'application/vnd.github+json',
+                },
+              }
+            );
 
             console.log(`Posted comment on PR #${process.env.PR_NUMBER} as code-review-helper.`);
