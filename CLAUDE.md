@@ -76,9 +76,13 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 
 **커밋 메시지 형식**:
 ```
-[ISSUE-#] type : description
+type(scope?): description
 ```
-- `feat` / `fix` / `refactor` / `docs` / `chore`
+- Conventional Commits 형식을 사용합니다.
+- 예: `feat: add chat streaming`
+- 예: `fix(auth): refresh expired token`
+- 예: `chore: setup commitlint with husky`
+- 주요 타입: `feat` / `fix` / `refactor` / `docs` / `chore`
 
 **PR 제목**: `[ISSUE-#] Summary`
 GitHub Issue는 사용하지 않으며, **Jira로 작업 관리**. PR 생성 시 Jira Issue가 자동으로 `In Review`로 전환됨.
