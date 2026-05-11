@@ -1,0 +1,83 @@
+default_platform(:android)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Android — Firebase App Distribution
+# ─────────────────────────────────────────────────────────────────────────────
+platform :android do
+  desc "Build release APK and distribute to Firebase App Distribution"
+  lane :distribute do
+    gradle(
+      task: "assemble",
+      build_type: "Release",
+      properties: {
+        "android.injected.signing.store.file"     => ENV.fetch("KEYSTORE_PATH"),
+        "android.injected.signing.store.password" => ENV.fetch("KEYSTORE_STORE_PASSWORD"),
+        "android.injected.signing.key.alias"      => ENV.fetch("KEYSTORE_KEY_ALIAS"),
+        "android.injected.signing.key.password"   => ENV.fetch("KEYSTORE_KEY_PASSWORD"),
+        "android.injected.version.name"           => ENV.fetch("VERSION_NAME"),
+        "android.injected.version.code"           => ENV.fetch("VERSION_CODE"),
+      }
+    )
+
+    firebase_app_distribution(
+      app: ENV.fetch("FIREBASE_APP_ID"),
+      service_credentials_file: "service-account.json",
+      release_notes: ENV.fetch("RELEASE_NOTES", "New build available")
+    )
+  end
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# iOS — TestFlight
+# ─────────────────────────────────────────────────────────────────────────────
+platform :ios do
+  desc "Build iOS app and upload to TestFlight"
+  lane :distribute do
+    api_key = app_store_connect_api_key(
+      key_id:      ENV.fetch("ASC_API_KEY_ID"),
+      issuer_id:   ENV.fetch("ASC_API_ISSUER_ID"),
+      key_content: ENV.fetch("ASC_API_KEY_CONTENT"),
+    )
+
+    # VERSION_NAME은 semantic versioning으로 항상 X.Y.Z 형식이지만,
+    # Apple CFBundleShortVersionString 형식 보장을 위해 파싱 + nil 안전 처리
+    version_match = ENV.fetch("VERSION_NAME").match(/\A\d+\.\d+\.\d+/)
+    UI.user_error!("VERSION_NAME must start with X.Y.Z format, got: #{ENV.fetch('VERSION_NAME')}") unless version_match
+    clean_version = version_match[0]
+
+    increment_version_number(
+      version_number: clean_version,
+      xcodeproj: "CashChatIOS/CashChatIOS.xcodeproj"
+    )
+
+    increment_build_number(
+      build_number: ENV.fetch("VERSION_CODE"),
+      xcodeproj: "CashChatIOS/CashChatIOS.xcodeproj"
+    )
+
+    # 코드 서명 — CI에서 keychain/profile 설치 후 manual 모드로 전환
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path:                  "CashChatIOS/CashChatIOS.xcodeproj",
+      code_sign_identity:    "Apple Distribution",
+      profile_name:          ENV.fetch("PROVISIONING_PROFILE_NAME"),
+      team_id:               ENV.fetch("IOS_DEVELOPMENT_TEAM_ID"),
+    )
+
+    build_app(
+      project:          "CashChatIOS/CashChatIOS.xcodeproj",
+      scheme:           "CashChatIOS",
+      export_method:    "app-store",
+      clean:            true,
+      output_directory: "build",
+      output_name:      "CashChatIOS.ipa",
+    )
+
+    upload_to_testflight(
+      api_key:                           api_key,
+      changelog:                         ENV.fetch("RELEASE_NOTES", "New build"),
+      skip_waiting_for_build_processing: true,
+      distribute_external:               false,
+    )
+  end
+end
