@@ -1,4 +1,4 @@
-name: FE Release — Android & iOS Distribute
+name: FE Release — Build & Distribute
 
 on:
   push:
@@ -6,50 +6,129 @@ on:
       - 'release-fe'
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Job 1: 버전 태그 채번 (Android/iOS 공통 — 한 번만 실행)
+# Job 1: 버전 채번(Semantic) + AI 릴리즈 노트 생성
 # ─────────────────────────────────────────────────────────────────────────────
 jobs:
   version:
     if: github.repository == 'cash-chat-mvp/cash-chat-mvp'
     runs-on: ubuntu-latest
     outputs:
-      name:       ${{ steps.ver.outputs.name }}
-      name_short: ${{ steps.ver.outputs.name_short }}
-      code: ${{ steps.ver.outputs.code }}
-      tag:  ${{ steps.ver.outputs.tag }}
+      name:          ${{ steps.ver.outputs.name }}
+      code:          ${{ steps.ver.outputs.code }}
+      tag:           ${{ steps.ver.outputs.tag }}
+      release_notes: ${{ steps.ai_notes.outputs.notes }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Auto-bump version tag
-        id: bump
-        uses: mathieudutour/github-tag-action@v6.2
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          default_bump: patch
-          tag_prefix: v
-
-      - name: Set version outputs
+      - name: Compute semantic version & push tag
         id: ver
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ steps.bump.outputs.new_version }}"
-          # Strip pre-release suffix (e.g. "0.1.0-release-fe.0" → "0.1.0")
-          VERSION_SHORT=$(echo "$VERSION" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
-          if [ -z "$VERSION_SHORT" ]; then
-            echo "::error::Invalid version format: $VERSION must start with X.Y.Z"
+          set -euo pipefail
+
+          # 마지막 릴리즈 태그 조회
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LAST_VER="${LAST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VER"
+
+          # 마지막 태그 이후 커밋 메시지 수집 ([CC-XXX] type : desc 형식 지원)
+          if [ "$LAST_TAG" = "v0.0.0" ]; then
+            COMMITS=$(git log --pretty=format:"%s")
+          else
+            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s")
+          fi
+
+          # bump 타입 결정
+          # feat → minor / BREAKING CHANGE → major / 그 외 → patch
+          BUMP="patch"
+          if echo "$COMMITS" | grep -qiE '^\[.*?\]\s+feat\s*[:：]|^feat\s*[:：]'; then
+            BUMP="minor"
+          fi
+          if echo "$COMMITS" | grep -qiE 'BREAKING[[:space:]]CHANGE'; then
+            BUMP="major"
+          fi
+
+          # 새 버전 계산
+          case "$BUMP" in
+            major) NEW_VERSION="$((MAJOR + 1)).0.0" ;;
+            minor) NEW_VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
+            patch) NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+          esac
+
+          # versionCode: MAJOR*10000 + MINOR*100 + PATCH
+          IFS='.' read -r NM NMI NP <<< "$NEW_VERSION"
+          VERSION_CODE=$(( NM * 10000 + NMI * 100 + NP ))
+
+          if [ "$VERSION_CODE" -eq 0 ]; then
+            echo "::error::VERSION_CODE 계산 실패 — NEW_VERSION=${NEW_VERSION}"
             exit 1
           fi
-          MAJOR=$(echo "$VERSION_SHORT" | cut -d. -f1)
-          MINOR=$(echo "$VERSION_SHORT" | cut -d. -f2)
-          PATCH=$(echo "$VERSION_SHORT" | cut -d. -f3)
-          VERSION_CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
-          echo "name=$VERSION"                         >> $GITHUB_OUTPUT
-          echo "name_short=$VERSION_SHORT"             >> $GITHUB_OUTPUT
-          echo "code=$VERSION_CODE"                    >> $GITHUB_OUTPUT
-          echo "tag=${{ steps.bump.outputs.new_tag }}" >> $GITHUB_OUTPUT
-          echo "✅ versionName=$VERSION (short=$VERSION_SHORT) / versionCode=$VERSION_CODE"
+
+          # 태그 생성 및 푸시
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+          if git rev-parse -q --verify "refs/tags/v${NEW_VERSION}" >/dev/null; then
+            echo "ℹ️ 로컬 태그 v${NEW_VERSION} 이미 존재"
+          else
+            git tag -a "v${NEW_VERSION}" -m "chore: release v${NEW_VERSION}"
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v${NEW_VERSION}" >/dev/null; then
+            echo "ℹ️ 원격 태그 v${NEW_VERSION} 이미 존재 — 푸시 스킵"
+          else
+            git push origin "v${NEW_VERSION}"
+          fi
+
+          echo "name=${NEW_VERSION}"     >> "$GITHUB_OUTPUT"
+          echo "code=${VERSION_CODE}"    >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW_VERSION}"     >> "$GITHUB_OUTPUT"
+          echo "✅ ${LAST_TAG} → v${NEW_VERSION} (bump=${BUMP}, versionCode=${VERSION_CODE})"
+
+      - name: Generate AI Release Notes
+        id: ai_notes
+        env:
+          GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null \
+            || git rev-list --max-parents=0 HEAD)
+          COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" 2>/dev/null \
+            | head -50 || echo "")
+
+          # API 키가 없거나 커밋이 없으면 기본 메시지 사용
+          if [ -z "${GOOGLE_GEMINI_API_KEY:-}" ] || [ -z "$COMMITS" ]; then
+            {
+              echo 'notes<<__NOTES_EOF__'
+              echo "v${{ steps.ver.outputs.name }} 새 빌드가 배포되었습니다."
+              echo '__NOTES_EOF__'
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PROMPT="다음은 Cash Chat 앱 v${{ steps.ver.outputs.name }} 릴리즈 커밋 목록입니다.\n\n${COMMITS}\n\n위 내용을 바탕으로 한국어 릴리즈 노트를 작성해주세요:\n- 사용자 관점에서 무엇이 바뀌었는지 설명\n- 이모지로 시작하는 3~5줄\n- 기술 내부 구현 상세는 제외"
+
+          RESPONSE=$(curl -sf \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
+            -H "content-type: application/json" \
+            --data "$(jq -n --arg p "$PROMPT" '{
+              contents: [{"parts": [{"text": $p}]}]
+            }')" \
+            || echo '{"candidates":[{"content":{"parts":[{"text":"새로운 빌드가 배포되었습니다."}]}}]}')
+
+          NOTES=$(echo "$RESPONSE" \
+            | jq -r '.candidates[0].content.parts[0].text // "새로운 빌드가 배포되었습니다."')
+
+          {
+            echo 'notes<<__NOTES_EOF__'
+            echo "$NOTES"
+            echo '__NOTES_EOF__'
+          } >> "$GITHUB_OUTPUT"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 2: Android — Firebase App Distribution
@@ -98,14 +177,14 @@ jobs:
 
       - name: Write local.properties
         run: |
-          echo "BASE_URL=${{ secrets.BASE_URL }}"                                     >> local.properties
-          echo "GOOGLE_WEB_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}"                 >> local.properties
-          echo "ADMOB_APP_ID=${{ secrets.ADMOB_APP_ID }}"                             >> local.properties
-          echo "ADMOB_BANNER_AD_UNIT_ID=${{ secrets.ADMOB_BANNER_AD_UNIT_ID }}"       >> local.properties
-          echo "ADMOB_INTERSTITIAL_AD_UNIT_ID=${{ secrets.ADMOB_INTERSTITIAL_AD_UNIT_ID }}" >> local.properties
-          echo "ADMOB_NATIVE_AD_UNIT_ID=${{ secrets.ADMOB_NATIVE_AD_UNIT_ID }}"       >> local.properties
-          echo "ADMOB_REWARDED_AD_UNIT_ID=${{ secrets.ADMOB_REWARDED_AD_UNIT_ID }}"   >> local.properties
-          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}"                                 >> local.properties
+          echo "BASE_URL=${{ secrets.BASE_URL }}"                                                     >> local.properties
+          echo "GOOGLE_WEB_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}"                                 >> local.properties
+          echo "ADMOB_APP_ID=${{ secrets.ADMOB_APP_ID }}"                                             >> local.properties
+          echo "ADMOB_BANNER_AD_UNIT_ID=${{ secrets.ADMOB_BANNER_AD_UNIT_ID }}"                       >> local.properties
+          echo "ADMOB_INTERSTITIAL_AD_UNIT_ID=${{ secrets.ADMOB_INTERSTITIAL_AD_UNIT_ID }}"           >> local.properties
+          echo "ADMOB_NATIVE_AD_UNIT_ID=${{ secrets.ADMOB_NATIVE_AD_UNIT_ID }}"                       >> local.properties
+          echo "ADMOB_REWARDED_AD_UNIT_ID=${{ secrets.ADMOB_REWARDED_AD_UNIT_ID }}"                   >> local.properties
+          echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}"                                                 >> local.properties
 
       - name: Write Firebase Service Account
         env:
@@ -115,20 +194,16 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Run Fastlane distribute
+      - name: Run Fastlane distribute (Android)
         env:
-          KEYSTORE_PATH:            ${{ github.workspace }}/apps/frontend/cashchat-release.keystore
-          KEYSTORE_STORE_PASSWORD:  ${{ secrets.KEYSTORE_STORE_PASSWORD }}
-          KEYSTORE_KEY_ALIAS:       ${{ secrets.KEYSTORE_KEY_ALIAS }}
-          KEYSTORE_KEY_PASSWORD:    ${{ secrets.KEYSTORE_KEY_PASSWORD }}
-          FIREBASE_APP_ID:          ${{ secrets.FIREBASE_APP_ID }}
-          VERSION_NAME:             ${{ needs.version.outputs.name }}
-          VERSION_CODE:             ${{ needs.version.outputs.code }}
-          RELEASE_NOTES: |
-            ${{ needs.version.outputs.name }} (build ${{ needs.version.outputs.code }})
-            Branch: ${{ github.ref_name }}
-            Commit: ${{ github.sha }}
-            ${{ github.event.head_commit.message }}
+          KEYSTORE_PATH:           ${{ github.workspace }}/apps/frontend/cashchat-release.keystore
+          KEYSTORE_STORE_PASSWORD: ${{ secrets.KEYSTORE_STORE_PASSWORD }}
+          KEYSTORE_KEY_ALIAS:      ${{ secrets.KEYSTORE_KEY_ALIAS }}
+          KEYSTORE_KEY_PASSWORD:   ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+          FIREBASE_APP_ID:         ${{ secrets.FIREBASE_APP_ID }}
+          VERSION_NAME:            ${{ needs.version.outputs.name }}
+          VERSION_CODE:            ${{ needs.version.outputs.code }}
+          RELEASE_NOTES:           ${{ needs.version.outputs.release_notes }}
         run: bundle exec fastlane android distribute
 
       - name: Find APK path
@@ -140,7 +215,7 @@ jobs:
             echo "::error::APK를 찾지 못했습니다"
             exit 1
           fi
-          echo "path=$APK"          >> "$GITHUB_OUTPUT"
+          echo "path=$APK"               >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$APK")" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK artifact
@@ -154,7 +229,6 @@ jobs:
         if: success()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
-          COMMIT_MESSAGE:  ${{ github.event.head_commit.message }}
           BRANCH:          ${{ github.ref_name }}
           ACTOR:           ${{ github.actor }}
           TIMESTAMP:       ${{ github.event.head_commit.timestamp }}
@@ -162,24 +236,24 @@ jobs:
           REPO:            ${{ github.repository }}
           VERSION_NAME:    ${{ needs.version.outputs.name }}
           VERSION_CODE:    ${{ needs.version.outputs.code }}
-          VERSION_TAG:     ${{ needs.version.outputs.tag }}
+          RELEASE_NOTES:   ${{ needs.version.outputs.release_notes }}
         run: |
           [ -z "$DISCORD_WEBHOOK" ] && echo "ℹ️ DISCORD_WEBHOOK 없음 — 건너뜀" && exit 0
           SHORT_SHA="${SHA:0:7}"
           COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
           PAYLOAD=$(jq -n \
-            --arg msg "$COMMIT_MESSAGE" --arg branch "$BRANCH" --arg actor "$ACTOR" \
+            --arg branch "$BRANCH" --arg actor "$ACTOR" \
             --arg ts "$TIMESTAMP" --arg sha "$SHORT_SHA" --arg commit_url "$COMMIT_URL" \
             --arg version "v${VERSION_NAME} (build ${VERSION_CODE})" \
+            --arg notes "$RELEASE_NOTES" \
             '{embeds: [{
               color: 5763719,
               title: "✅  Android 배포 완료",
-              description: "**Firebase App Distribution 배포 성공**",
+              description: ("**Firebase App Distribution 배포 성공**\n\n" + $notes),
               fields: [
-                {name: "버전",    value: ("`" + $version + "`"), inline: true},
-                {name: "배포자",  value: ("`" + $actor + "`"),   inline: true},
-                {name: "커밋",    value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
-                {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false}
+                {name: "버전",   value: ("`" + $version + "`"), inline: true},
+                {name: "배포자", value: ("`" + $actor + "`"),   inline: true},
+                {name: "커밋",   value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true}
               ],
               footer: {text: "Cash Chat · Android Build"},
               timestamp: $ts
@@ -207,11 +281,11 @@ jobs:
               color: 15548997,
               title: "🚨  Android 빌드/배포 실패",
               fields: [
-                {name: "브랜치",  value: ("`" + $branch + "`"), inline: true},
-                {name: "실패자",  value: ("`" + $actor + "`"),  inline: true},
-                {name: "커밋",    value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "브랜치",      value: ("`" + $branch + "`"), inline: true},
+                {name: "실패자",      value: ("`" + $actor + "`"),  inline: true},
+                {name: "커밋",        value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
                 {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false},
-                {name: "로그 확인",  value: ("[Actions 로그](" + $run_url + ")"), inline: false}
+                {name: "로그 확인",   value: ("[Actions 로그](" + $run_url + ")"), inline: false}
               ],
               footer: {text: "Cash Chat · Android Build"}
             }]}')
@@ -219,10 +293,12 @@ jobs:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 3: iOS — TestFlight
+# macos-26 runner 사용 → Xcode 26 포함 → iOS 26 SDK 지원
+# (Apple: 2026년부터 iOS 26 SDK 이상으로 빌드된 앱만 업로드 가능)
 # ─────────────────────────────────────────────────────────────────────────────
   ios:
     needs: version
-    runs-on: macos-latest
+    runs-on: macos-26
     defaults:
       run:
         working-directory: apps/frontend
@@ -299,7 +375,7 @@ jobs:
       # ── 코드 서명 설정 ──────────────────────────────────────────────────────
       - name: Set up keychain & import certificate
         env:
-          CERTIFICATE_P12_BASE64:  ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          CERTIFICATE_P12_BASE64:   ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
           CERTIFICATE_P12_PASSWORD: ${{ secrets.IOS_CERTIFICATE_P12_PASSWORD }}
         run: |
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
@@ -349,18 +425,14 @@ jobs:
 
       - name: Run Fastlane iOS distribute
         env:
-          ASC_API_KEY_ID:             ${{ secrets.ASC_API_KEY_ID }}
-          ASC_API_ISSUER_ID:          ${{ secrets.ASC_API_ISSUER_ID }}
-          ASC_API_KEY_CONTENT:        ${{ secrets.ASC_API_KEY_CONTENT }}
-          IOS_BUNDLE_ID:              ${{ secrets.IOS_BUNDLE_ID }}
-          IOS_DEVELOPMENT_TEAM_ID:    ${{ secrets.IOS_DEVELOPMENT_TEAM_ID }}
-          VERSION_NAME:               ${{ needs.version.outputs.name }}
-          VERSION_CODE:               ${{ needs.version.outputs.code }}
-          RELEASE_NOTES: |
-            ${{ needs.version.outputs.name }} (build ${{ needs.version.outputs.code }})
-            Branch: ${{ github.ref_name }}
-            Commit: ${{ github.sha }}
-            ${{ github.event.head_commit.message }}
+          ASC_API_KEY_ID:          ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID:       ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_CONTENT:     ${{ secrets.ASC_API_KEY_CONTENT }}
+          IOS_BUNDLE_ID:           ${{ secrets.IOS_BUNDLE_ID }}
+          IOS_DEVELOPMENT_TEAM_ID: ${{ secrets.IOS_DEVELOPMENT_TEAM_ID }}
+          VERSION_NAME:            ${{ needs.version.outputs.name }}
+          VERSION_CODE:            ${{ needs.version.outputs.code }}
+          RELEASE_NOTES:           ${{ needs.version.outputs.release_notes }}
         run: bundle exec fastlane ios distribute
 
       - name: Upload IPA artifact
@@ -374,7 +446,6 @@ jobs:
         if: success()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DEPLOY_BOT_DISCORD }}
-          COMMIT_MESSAGE:  ${{ github.event.head_commit.message }}
           BRANCH:          ${{ github.ref_name }}
           ACTOR:           ${{ github.actor }}
           TIMESTAMP:       ${{ github.event.head_commit.timestamp }}
@@ -382,23 +453,24 @@ jobs:
           REPO:            ${{ github.repository }}
           VERSION_NAME:    ${{ needs.version.outputs.name }}
           VERSION_CODE:    ${{ needs.version.outputs.code }}
+          RELEASE_NOTES:   ${{ needs.version.outputs.release_notes }}
         run: |
           [ -z "$DISCORD_WEBHOOK" ] && echo "ℹ️ DISCORD_WEBHOOK 없음 — 건너뜀" && exit 0
           SHORT_SHA="${SHA:0:7}"
           COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
           PAYLOAD=$(jq -n \
-            --arg msg "$COMMIT_MESSAGE" --arg branch "$BRANCH" --arg actor "$ACTOR" \
+            --arg branch "$BRANCH" --arg actor "$ACTOR" \
             --arg ts "$TIMESTAMP" --arg sha "$SHORT_SHA" --arg commit_url "$COMMIT_URL" \
             --arg version "v${VERSION_NAME} (build ${VERSION_CODE})" \
+            --arg notes "$RELEASE_NOTES" \
             '{embeds: [{
               color: 5763719,
               title: "✅  iOS 배포 완료",
-              description: "**TestFlight 업로드 성공**",
+              description: ("**TestFlight 업로드 성공**\n\n" + $notes),
               fields: [
-                {name: "버전",    value: ("`" + $version + "`"), inline: true},
-                {name: "배포자",  value: ("`" + $actor + "`"),   inline: true},
-                {name: "커밋",    value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
-                {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false}
+                {name: "버전",   value: ("`" + $version + "`"), inline: true},
+                {name: "배포자", value: ("`" + $actor + "`"),   inline: true},
+                {name: "커밋",   value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true}
               ],
               footer: {text: "Cash Chat · iOS Build"},
               timestamp: $ts
@@ -426,18 +498,18 @@ jobs:
               color: 15548997,
               title: "🚨  iOS 빌드/배포 실패",
               fields: [
-                {name: "브랜치",  value: ("`" + $branch + "`"), inline: true},
-                {name: "실패자",  value: ("`" + $actor + "`"),  inline: true},
-                {name: "커밋",    value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "브랜치",      value: ("`" + $branch + "`"), inline: true},
+                {name: "실패자",      value: ("`" + $actor + "`"),  inline: true},
+                {name: "커밋",        value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
                 {name: "커밋 메시지", value: ("`" + $msg + "`"), inline: false},
-                {name: "로그 확인",  value: ("[Actions 로그](" + $run_url + ")"), inline: false}
+                {name: "로그 확인",   value: ("[Actions 로그](" + $run_url + ")"), inline: false}
               ],
               footer: {text: "Cash Chat · iOS Build"}
             }]}')
           curl -sS -X POST "$DISCORD_WEBHOOK" -H "Content-Type: application/json" -d "$PAYLOAD"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Job 4: GitHub Release 생성 (Android APK + 릴리즈 노트)
+# Job 4: GitHub Release 생성 (Android APK + AI 릴리즈 노트)
 # ─────────────────────────────────────────────────────────────────────────────
   github-release:
     needs: [version, android, ios]
@@ -452,8 +524,9 @@ jobs:
       - name: GitHub Release 생성 및 APK 업로드
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.version.outputs.tag }}
-          name:     ${{ needs.version.outputs.tag }}
-          generate_release_notes: true
-          files: release-assets/*.apk
-          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name:               ${{ needs.version.outputs.tag }}
+          name:                   ${{ needs.version.outputs.tag }}
+          body:                   ${{ needs.version.outputs.release_notes }}
+          generate_release_notes: false
+          files:                  release-assets/*.apk
+          token:                  ${{ secrets.GITHUB_TOKEN }}

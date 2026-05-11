@@ -39,18 +39,17 @@ platform :ios do
       key_content: ENV.fetch("ASC_API_KEY_CONTENT"),
     )
 
-    # versionName (예: 1.2.3) → MARKETING_VERSION
-    # Apple CFBundleShortVersionString must be X.Y.Z integers only;
-    # strip any pre-release suffix (e.g. "0.1.0-release-fe.0" → "0.1.0")
+    # VERSION_NAME은 semantic versioning으로 항상 X.Y.Z 형식이지만,
+    # Apple CFBundleShortVersionString 형식 보장을 위해 파싱 + nil 안전 처리
     version_match = ENV.fetch("VERSION_NAME").match(/\A\d+\.\d+\.\d+/)
     UI.user_error!("VERSION_NAME must start with X.Y.Z format, got: #{ENV.fetch('VERSION_NAME')}") unless version_match
     clean_version = version_match[0]
+
     increment_version_number(
       version_number: clean_version,
       xcodeproj: "CashChatIOS/CashChatIOS.xcodeproj"
     )
 
-    # versionCode (예: 10203) → CURRENT_PROJECT_VERSION
     increment_build_number(
       build_number: ENV.fetch("VERSION_CODE"),
       xcodeproj: "CashChatIOS/CashChatIOS.xcodeproj"
@@ -75,10 +74,10 @@ platform :ios do
     )
 
     upload_to_testflight(
-      api_key:                          api_key,
-      changelog:                        ENV.fetch("RELEASE_NOTES", "New build"),
+      api_key:                           api_key,
+      changelog:                         ENV.fetch("RELEASE_NOTES", "New build"),
       skip_waiting_for_build_processing: true,
-      distribute_external:              false,
+      distribute_external:               false,
     )
   end
 end
