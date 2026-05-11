@@ -49,12 +49,27 @@ jobs:
             const duplicateWindowMs = 2 * 60 * 60 * 1000;
             const duplicateCutoff = Date.now() - duplicateWindowMs;
 
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pullNumber,
-              per_page: 100,
-            });
+            const perPage = 100;
+            let page = 1;
+            const comments = [];
+
+            while (true) {
+              const { data: pageComments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pullNumber,
+                per_page: perPage,
+                page,
+              });
+
+              comments.push(...pageComments);
+
+              if (pageComments.length < perPage) {
+                break;
+              }
+
+              page += 1;
+            }
 
             const alreadyRequested = comments.some((comment) => {
               const createdAt = Date.parse(comment.created_at);
