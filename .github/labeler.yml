@@ -34,3 +34,6 @@
 
 ♻️ 리팩토링:
   - head-branch: ['^refactor/']
+
+release-test:
+  - base-branch: ['release-fe']
