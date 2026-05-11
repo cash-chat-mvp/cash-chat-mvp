@@ -1,0 +1,88 @@
+name: Jira 프로젝트 현황 & 마감 알림
+
+on:
+  schedule:
+    # 매일 한국시간 오전 9시 (UTC 0시)
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Jira 현황 조회 후 Discord 전송
+        id: jira-check
+        env:
+          JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          JIRA_BASE_URL: "https://moneyfactoryslave.atlassian.net"
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          D1=$(date -u -d "+1 day" +%Y-%m-%d 2>/dev/null || date -u -v+1d +%Y-%m-%d)
+          D3=$(date -u -d "+3 days" +%Y-%m-%d 2>/dev/null || date -u -v+3d +%Y-%m-%d)
+          export TODAY D1 D3
+          echo "오늘: $TODAY / D-1: $D1 / D-3: $D3"
+
+          # ── API 호출 1: 전체 이슈 (통계용) ──
+          curl -sS --fail-with-body \
+            -H "Authorization: Basic $JIRA_AUTH" \
+            -H "Content-Type: application/json" \
+            --connect-timeout 10 --max-time 30 \
+            --get \
+            --data-urlencode "jql=project=CC ORDER BY created ASC" \
+            --data-urlencode "fields=status,labels,assignee" \
+            --data-urlencode "maxResults=200" \
+            "$JIRA_BASE_URL/rest/api/3/search/jql" > /tmp/all_issues.json || {
+              echo "::error::Jira 전체 조회 실패"
+              exit 1
+            }
+
+          # ── API 호출 2: 마감 지난 이슈 + D-3 이내 이슈 (미완료만) ──
+          DUE_JQL="project=CC AND (duedate < \"$TODAY\" OR duedate in (\"$TODAY\",\"$D1\",\"$D3\")) AND statusCategory != Done ORDER BY duedate ASC"
+          curl -sS --fail-with-body \
+            -H "Authorization: Basic $JIRA_AUTH" \
+            -H "Content-Type: application/json" \
+            --connect-timeout 10 --max-time 30 \
+            --get \
+            --data-urlencode "jql=$DUE_JQL" \
+            --data-urlencode "fields=summary,assignee,duedate,status,priority,labels" \
+            --data-urlencode "maxResults=50" \
+            "$JIRA_BASE_URL/rest/api/3/search/jql" > /tmp/due_issues.json || {
+              echo "::error::Jira 마감 조회 실패"
+              exit 1
+            }
+
+          echo "Jira 조회 완료"
+          python3 .github/scripts/jira_notify.py
+
+      - name: 워크플로우 실패 알림
+        if: failure()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
+          PAYLOAD=$(jq -n \
+            --arg actor "$ACTOR" \
+            --arg run_url "$RUN_URL" \
+            '{embeds: [{
+              color: 15158332,
+              title: "🚨  워크플로우 실패",
+              description: "**Jira 프로젝트 현황 알림 워크플로우가 실패했어요**",
+              fields: [
+                {name: "워크플로우", value: "`jira-duedate-discord.yml`", inline: true},
+                {name: "실행자",     value: ("`" + $actor + "`"),         inline: true},
+                {name: "로그 확인",  value: ("[Actions 로그 바로가기](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Cash Chat · GitHub Actions"}
+            }]}')
+          curl -sS -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"

@@ -32,7 +32,9 @@ fun MainScreen(
     messageCount: Int,
     addPoints: (Int) -> Unit,
     spendPoints: (Int) -> Boolean,
-    incrementMessageCount: () -> Unit
+    incrementMessageCount: () -> Unit,
+    onNavigateToLogin: () -> Unit = {},
+    onLogout: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -102,7 +104,7 @@ fun MainScreen(
                 ShopScreen(points = points, spendPoints = spendPoints) 
             }
             composable(MainTab.MY_PAGE.route) {
-                MyPageScreen(points = points) 
+                MyPageScreen(points = points, onLogout = onLogout)
             }
         }
     }

@@ -1,0 +1,21 @@
+services:
+  backend:
+    build:
+      context: ../../../apps/backend
+      dockerfile: Dockerfile
+    image: cash-chat-backend:local
+    container_name: cash-chat-backend-local
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.h2.Driver
+      SPRING_DATASOURCE_URL: jdbc:h2:mem:cashchat;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+      SPRING_DATASOURCE_USERNAME: sa
+      SPRING_H2_CONSOLE_ENABLED: "true"
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-your-gemini-api-key}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-google-client-id}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-google-client-secret}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:8080/api/auth/callback/google}
+      APP_SWAGGER_ENABLED: ${APP_SWAGGER_ENABLED:-true}

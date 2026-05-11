@@ -1,0 +1,15 @@
+addReviewers: true
+addAssignees: author  # PR 작성자 본인이 어싸이니
+
+reviewers:
+  - seedplan005
+  - Jeonj95
+  - gudals-kim
+
+# 여러 명 중 랜덤으로 N명만 지정하고 싶으면
+numberOfReviewers: 1  # 0 이면 전원 지정
+
+# 특정 브랜치만 적용하고 싶으면
+# filterLabels:
+#   include: []
+#   exclude: ['WIP']

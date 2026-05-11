@@ -1,0 +1,73 @@
+#cloud-config
+package_update: false
+package_upgrade: false
+
+write_files:
+  - path: /usr/local/bin/bootstrap-container-tools.sh
+    permissions: "0755"
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      apt_retry() {
+        local max_retries="$1"
+        shift
+
+        local attempt=1
+        while true; do
+          if "$@"; then
+            return 0
+          fi
+
+          if [ "$attempt" -ge "$max_retries" ]; then
+            echo "APT command failed after ${attempt} attempt(s): $*" >&2
+            return 1
+          fi
+
+          local delay=$((attempt * 5))
+          echo "APT command failed (attempt ${attempt}/${max_retries}); retrying in ${delay}s: $*" >&2
+          sleep "${delay}"
+          attempt=$((attempt + 1))
+        done
+      }
+
+      apt_retry 12 apt-get -o DPkg::Lock::Timeout=300 update
+      apt_retry 12 apt-get -o DPkg::Lock::Timeout=300 install -y \
+        ca-certificates \
+        curl \
+        docker.io \
+        default-mysql-client
+
+      systemctl enable --now docker
+      usermod -aG docker ubuntu || true
+      mkdir -p /usr/local/lib/docker/cli-plugins
+
+      if ! apt_retry 8 apt-get -o DPkg::Lock::Timeout=300 install -y docker-compose-plugin; then
+        echo "docker-compose-plugin install failed; using binary fallback." >&2
+      fi
+
+      if ! docker compose version >/dev/null 2>&1; then
+        COMPOSE_VERSION="v2.27.0"
+        COMPOSE_BIN="docker-compose-linux-aarch64"
+        TMP_DIR="$(mktemp -d)"
+        curl -fsSL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/${COMPOSE_BIN}" \
+          -o "${TMP_DIR}/${COMPOSE_BIN}"
+        curl -fsSL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/checksums.txt" \
+          -o "${TMP_DIR}/checksums.txt"
+        grep " ${COMPOSE_BIN}$" "${TMP_DIR}/checksums.txt" > "${TMP_DIR}/checksums-${COMPOSE_BIN}.txt"
+        (
+          cd "${TMP_DIR}"
+          sha256sum -c "checksums-${COMPOSE_BIN}.txt"
+        )
+        install -m 0755 "${TMP_DIR}/${COMPOSE_BIN}" /usr/local/lib/docker/cli-plugins/docker-compose
+        rm -rf "${TMP_DIR}"
+      fi
+
+      docker --version | tee /var/log/docker-version.txt
+      docker compose version | tee /var/log/docker-compose-version.txt
+      mysql --version | tee /var/log/mysql-client-version.txt
+
+runcmd:
+  - /usr/local/bin/bootstrap-container-tools.sh

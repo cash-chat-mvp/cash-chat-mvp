@@ -1,0 +1,28 @@
+tenancy_ocid     = "ocid1.tenancy.oc1..replace_me"
+user_ocid        = "ocid1.user.oc1..replace_me"
+fingerprint      = "12:34:56:78:90:ab:cd:ef:12:34:56:78:90:ab:cd:ef"
+private_key_path = "C:/Users/your-user/.oci/oci_api_key.pem"
+region           = "ap-seoul-1"
+compartment_ocid = "ocid1.compartment.oc1..replace_me"
+
+display_name_prefix = "autonomous-db"
+db_name_prefix      = "AFDB"
+
+# Always Free ADB admin 비밀번호 규칙:
+# 12~30자, 대문자 1개 이상, 소문자 1개 이상, 숫자 1개 이상 포함
+# "admin" 문자열과 큰따옴표는 포함하면 안 됨
+admin_password = "ReplaceThisWithAStrongPassword1!"
+
+# OLTP, DW, AJD, APEX 중 선택
+db_workload = "OLTP"
+
+# 비워두면 OCI가 해당 리전에서 지원되는 버전을 자동 선택
+db_version = null
+
+# Public endpoint ACL
+is_access_control_enabled = true
+whitelisted_ips           = ["203.0.113.4/32"] # Replace with your egress/fixed IP CIDR
+
+# Optional: automatically read reserved egress IP from ../oci-arm/terraform.tfstate
+use_oci_arm_reserved_ip_for_acl = false
+oci_arm_state_path              = "../oci-arm/terraform.tfstate"
