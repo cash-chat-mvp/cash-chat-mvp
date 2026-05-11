@@ -46,6 +46,8 @@ jobs:
             const pr = data.items[0];
             const pullNumber = pr.number;
             const reviewCommand = '@coderabbitai full review';
+            const duplicateWindowMs = 2 * 60 * 60 * 1000;
+            const duplicateCutoff = Date.now() - duplicateWindowMs;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -54,13 +56,20 @@ jobs:
               per_page: 100,
             });
 
-            const alreadyRequested = comments.some((comment) =>
-              comment.user?.type === 'Bot' && comment.body?.trim() === reviewCommand
-            );
+            const alreadyRequested = comments.some((comment) => {
+              const createdAt = Date.parse(comment.created_at);
+
+              return (
+                comment.user?.type === 'Bot' &&
+                comment.body?.trim() === reviewCommand &&
+                Number.isFinite(createdAt) &&
+                createdAt >= duplicateCutoff
+              );
+            });
             const reviewStatus = alreadyRequested ? 'kept existing request for' : 'requested';
 
             if (alreadyRequested) {
-              console.log(`CodeRabbit full review was already requested for PR #${pullNumber}.`);
+              console.log(`CodeRabbit full review was already requested for PR #${pullNumber} within the last 2 hours.`);
             } else {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
