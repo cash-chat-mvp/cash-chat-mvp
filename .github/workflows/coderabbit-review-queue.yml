@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Request CodeRabbit review for oldest queued PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -45,21 +45,46 @@ jobs:
 
             const pr = data.items[0];
             const pullNumber = pr.number;
+            const reviewCommand = '@coderabbitai full review';
 
-            await github.rest.issues.createComment({
+            const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: pullNumber,
-              body: '@coderabbitai full review',
+              per_page: 100,
             });
 
-            await github.rest.issues.removeLabel({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pullNumber,
-              name: label,
-            });
+            const alreadyRequested = comments.some((comment) =>
+              comment.user?.type === 'Bot' && comment.body?.trim() === reviewCommand
+            );
+            const reviewStatus = alreadyRequested ? 'kept existing request for' : 'requested';
+
+            if (alreadyRequested) {
+              console.log(`CodeRabbit full review was already requested for PR #${pullNumber}.`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pullNumber,
+                body: reviewCommand,
+              });
+            }
+
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pullNumber,
+                name: label,
+              });
+            } catch (err) {
+              if (err.status !== 404) {
+                throw err;
+              }
+
+              console.log(`"${label}" label was already absent from PR #${pullNumber}.`);
+            }
 
             console.log(
-              `Requested CodeRabbit full review for PR #${pullNumber} and removed "${label}" label.`
+              `CodeRabbit full review ${reviewStatus} PR #${pullNumber} and ensured "${label}" label is removed.`
             );
