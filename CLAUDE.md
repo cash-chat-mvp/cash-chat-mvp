@@ -76,7 +76,7 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 
 **커밋 메시지 형식**:
 ```
-type(scope): description
+type(scope?): description
 ```
 - Conventional Commits 형식을 사용합니다.
 - 예: `feat: add chat streaming`
