@@ -73,8 +73,16 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}"
-          git tag -a "v${NEW_VERSION}" -m "chore: release v${NEW_VERSION}" || echo "ℹ️ 태그 이미 존재"
-          git push origin "v${NEW_VERSION}" 2>/dev/null || echo "ℹ️ 태그 푸시 스킵 (이미 원격에 존재)"
+          if git rev-parse -q --verify "refs/tags/v${NEW_VERSION}" >/dev/null; then
+            echo "ℹ️ 로컬 태그 v${NEW_VERSION} 이미 존재"
+          else
+            git tag -a "v${NEW_VERSION}" -m "chore: release v${NEW_VERSION}"
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v${NEW_VERSION}" >/dev/null; then
+            echo "ℹ️ 원격 태그 v${NEW_VERSION} 이미 존재 — 푸시 스킵"
+          else
+            git push origin "v${NEW_VERSION}"
+          fi
 
           echo "name=${NEW_VERSION}"     >> "$GITHUB_OUTPUT"
           echo "code=${VERSION_CODE}"    >> "$GITHUB_OUTPUT"
@@ -285,12 +293,12 @@ jobs:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 3: iOS — TestFlight
-# macos-16 runner 사용 → Xcode 26 포함 → iOS 26 SDK 지원
+# macos-26 runner 사용 → Xcode 26 포함 → iOS 26 SDK 지원
 # (Apple: 2026년부터 iOS 26 SDK 이상으로 빌드된 앱만 업로드 가능)
 # ─────────────────────────────────────────────────────────────────────────────
   ios:
     needs: version
-    runs-on: macos-16
+    runs-on: macos-26
     defaults:
       run:
         working-directory: apps/frontend
