@@ -40,8 +40,11 @@ platform :ios do
     )
 
     # versionName (예: 1.2.3) → MARKETING_VERSION
+    # Apple CFBundleShortVersionString must be X.Y.Z integers only;
+    # strip any pre-release suffix (e.g. "0.1.0-release-fe.0" → "0.1.0")
+    clean_version = ENV.fetch("VERSION_NAME").match(/\A\d+\.\d+\.\d+/)[0]
     increment_version_number(
-      version_number: ENV.fetch("VERSION_NAME"),
+      version_number: clean_version,
       xcodeproj: "CashChatIOS/CashChatIOS.xcodeproj"
     )
 

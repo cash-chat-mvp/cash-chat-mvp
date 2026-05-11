@@ -13,7 +13,8 @@ jobs:
     if: github.repository == 'cash-chat-mvp/cash-chat-mvp'
     runs-on: ubuntu-latest
     outputs:
-      name: ${{ steps.ver.outputs.name }}
+      name:       ${{ steps.ver.outputs.name }}
+      name_short: ${{ steps.ver.outputs.name_short }}
       code: ${{ steps.ver.outputs.code }}
       tag:  ${{ steps.ver.outputs.tag }}
     steps:
@@ -34,14 +35,17 @@ jobs:
         id: ver
         run: |
           VERSION="${{ steps.bump.outputs.new_version }}"
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          MINOR=$(echo "$VERSION" | cut -d. -f2)
-          PATCH=$(echo "$VERSION" | cut -d. -f3)
+          # Strip pre-release suffix (e.g. "0.1.0-release-fe.0" → "0.1.0")
+          VERSION_SHORT=$(echo "$VERSION" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
+          MAJOR=$(echo "$VERSION_SHORT" | cut -d. -f1)
+          MINOR=$(echo "$VERSION_SHORT" | cut -d. -f2)
+          PATCH=$(echo "$VERSION_SHORT" | cut -d. -f3)
           VERSION_CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
-          echo "name=$VERSION"              >> $GITHUB_OUTPUT
-          echo "code=$VERSION_CODE"         >> $GITHUB_OUTPUT
+          echo "name=$VERSION"                         >> $GITHUB_OUTPUT
+          echo "name_short=$VERSION_SHORT"             >> $GITHUB_OUTPUT
+          echo "code=$VERSION_CODE"                    >> $GITHUB_OUTPUT
           echo "tag=${{ steps.bump.outputs.new_tag }}" >> $GITHUB_OUTPUT
-          echo "✅ versionName=$VERSION / versionCode=$VERSION_CODE"
+          echo "✅ versionName=$VERSION (short=$VERSION_SHORT) / versionCode=$VERSION_CODE"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 2: Android — Firebase App Distribution
