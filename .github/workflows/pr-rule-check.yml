@@ -32,12 +32,12 @@ jobs:
           fi
 
           # ── 2. 브랜치명 체크 ─────────────────────────────────────────
-          VALID_BRANCH_PATTERN='^(feature|feat|fix|bugfix|refactor|chore|docs|test|hotfix|release)/'
+          VALID_BRANCH_PATTERN='^(feature|feat|fix|bugfix|refactor|chore|docs|test|hotfix|release|revert)/|^revert-'
 
           if [[ ! "$BRANCH" =~ $VALID_BRANCH_PATTERN ]]; then
             echo "❌ 브랜치명이 허용된 prefix로 시작하지 않습니다."
             echo "   현재: $BRANCH"
-            echo "   허용: feature/ feat/ fix/ bugfix/ refactor/ chore/ docs/ test/ hotfix/ release/"
+            echo "   허용: feature/ feat/ fix/ bugfix/ refactor/ chore/ docs/ test/ hotfix/ release/ revert/ revert-"
             FAILED=1
           else
             echo "✅ 브랜치명 형식 OK: $BRANCH"
