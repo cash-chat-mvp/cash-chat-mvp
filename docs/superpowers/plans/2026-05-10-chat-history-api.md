@@ -795,7 +795,7 @@ Expected: PASS. whitespace error가 없어야 한다.
 
 아래 Markdown을 Confluence page body로 사용한다. 이 문서는 Task 5의 집중 테스트와 전체 테스트가 모두 PASS인 상태에서 생성한다.
 
-```markdown
+````markdown
 # [DOCS] CC-161 · 대화 기록 조회 API
 
 * Jira: `CC-161`
@@ -893,7 +893,7 @@ Accept: application/json
 * conversation 생성 API 또는 목록 API
 * history pagination
 * stream API의 conversation 식별자를 UUID로 전환할지 여부
-```
+````
 
 - [ ] **Step 2: Confluence 페이지를 만든다**
 
