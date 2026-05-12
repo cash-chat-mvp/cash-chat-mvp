@@ -81,8 +81,8 @@ jobs:
           HAS_MAJOR_LABEL=$(echo "$PR_LABELS_JSON" | jq -r 'if type == "array" then map(select(test("version\\.major"; "i"))) | length > 0 else false end // false')
 
           # feat 수 → MINOR 증가 / fix 수 → PATCH 증가
-          FEAT_COUNT=$(echo "$COMMITS_RAW" | grep -cE '^\[.*?\]\s+feat\s*[:：]|^feat\s*[:：]' 2>/dev/null) || FEAT_COUNT=0
-          FIX_COUNT=$(echo "$COMMITS_RAW"  | grep -cE '^\[.*?\]\s+fix\s*[:：]|^fix\s*[:：]'   2>/dev/null) || FIX_COUNT=0
+          FEAT_COUNT=$(echo "$COMMITS_RAW" | grep -cE '^\[[^]]+\]\s+feat\s*[:：]|^feat\s*[:：]' 2>/dev/null) || FEAT_COUNT=0
+          FIX_COUNT=$(echo "$COMMITS_RAW"  | grep -cE '^\[[^]]+\]\s+fix\s*[:：]|^fix\s*[:：]'   2>/dev/null) || FIX_COUNT=0
           BREAKING=$(echo "$COMMITS_RAW"   | grep -cE 'BREAKING[[:space:]]CHANGE'              2>/dev/null) || BREAKING=0
 
           if [ "$NO_RELEASE" = "true" ]; then
@@ -113,25 +113,38 @@ jobs:
           if [ -z "${GOOGLE_GEMINI_API_KEY:-}" ] || [ -z "$COMMIT_LIST" ]; then
             NOTES="v${NEW_VERSION} 새 빌드가 배포될 예정입니다."
           else
-            FEAT_COMMITS=$(echo "$COMMIT_LIST" | grep -E '^- \[.*?\]\s+feat\s*[:：]|^- feat\s*[:：]' | sed 's/^- /  /' || echo "  없음")
-            FIX_COMMITS=$(echo "$COMMIT_LIST"  | grep -E '^- \[.*?\]\s+fix\s*[:：]|^- fix\s*[:：]'   | sed 's/^- /  /' || echo "  없음")
-            OTHER_COMMITS=$(echo "$COMMIT_LIST" | grep -vE '^- \[.*?\]\s+(feat|fix)\s*[:：]|^- (feat|fix)\s*[:：]' | sed 's/^- /  /' || echo "  없음")
+            FEAT_COMMITS=$(echo "$COMMIT_LIST" | grep -E '^- \[[^]]+\]\s+feat\s*[:：]|^- feat\s*[:：]' | sed 's/^- /  /' || echo "  없음")
+            FIX_COMMITS=$(echo "$COMMIT_LIST"  | grep -E '^- \[[^]]+\]\s+fix\s*[:：]|^- fix\s*[:：]'   | sed 's/^- /  /' || echo "  없음")
+            OTHER_COMMITS=$(echo "$COMMIT_LIST" | grep -vE '^- \[[^]]+\]\s+(feat|fix)\s*[:：]|^- (feat|fix)\s*[:：]' | sed 's/^- /  /' || echo "  없음")
 
             PROMPT=$(jq -rn \
               --arg ver   "$NEW_VERSION" \
               --arg feat  "$FEAT_COMMITS" \
               --arg fix   "$FIX_COMMITS" \
               --arg other "$OTHER_COMMITS" \
-              '"Cash Chat 앱 v\($ver) 한국어 릴리즈 노트를 작성해주세요.\n\n[새 기능 커밋]\n\($feat)\n\n[버그 수정 커밋]\n\($fix)\n\n[기타 변경 커밋]\n\($other)\n\n작성 규칙:\n- 사용자 관점에서 실제 체감 변화 중심으로 설명\n- 이모지로 시작하는 불릿 포인트 3~5줄\n- 함수명·파일명 등 기술 내부 상세 제외\n- 전체 200자 이내로 간결하게\n- 변경사항 없는 섹션은 릴리즈 노트에서 생략"')
+              '"Cash Chat 앱 v\($ver) 한국어 릴리즈 노트를 작성해주세요.\n\n[새 기능 커밋]\n\($feat)\n\n[버그 수정 커밋]\n\($fix)\n\n[기타 변경 커밋]\n\($other)\n\n작성 규칙:\n- 사용자가 직접 느끼는 변화만 작성 (\"~ 개선했습니다\" 형태)\n- 개발자 용어·함수명·파일명 금지\n- QA·리팩토링·코드정리 언급 금지\n- 이모지로 시작하는 불릿 포인트 3~5줄\n- 전체 200자 이내로 간결하게\n- 변경사항 없는 섹션은 생략"')
 
-            RESPONSE=$(curl -sf \
+            HTTP_RESPONSE=$(mktemp)
+            HTTP_CODE=$(curl -s -o "$HTTP_RESPONSE" -w "%{http_code}" \
               "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
               -H "content-type: application/json" \
-              --data "$(jq -n --arg p "$PROMPT" '{contents: [{"parts": [{"text": $p}]}]}')" \
-              || echo '{"candidates":[{"content":{"parts":[{"text":"새로운 빌드가 배포될 예정입니다."}]}}]}')
+              --data "$(jq -n --arg p "$PROMPT" '{
+                contents: [{"parts": [{"text": $p}]}],
+                generationConfig: { temperature: 0.4 }
+              }')") || HTTP_CODE="000"
 
-            NOTES=$(echo "$RESPONSE" \
-              | jq -r '.candidates[0].content.parts[0].text // "새로운 빌드가 배포될 예정입니다."')
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "::warning::Gemini API 실패 (HTTP $HTTP_CODE): $(head -c 300 "$HTTP_RESPONSE")"
+              NOTES="v${NEW_VERSION} 새 빌드가 배포될 예정입니다."
+            else
+              NOTES=$(jq -r '.candidates[0].content.parts[0].text // empty' "$HTTP_RESPONSE" 2>/dev/null || echo "")
+              if [ -z "$NOTES" ]; then
+                echo "::warning::Gemini 응답 파싱 실패: $(head -c 300 "$HTTP_RESPONSE")"
+                NOTES="v${NEW_VERSION} 새 빌드가 배포될 예정입니다."
+              fi
+            fi
+
+            NOTES="${NOTES:0:500}"
           fi
 
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
