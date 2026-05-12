@@ -22,7 +22,8 @@ platform :android do
     firebase_app_distribution(
       app: ENV.fetch("FIREBASE_APP_ID"),
       service_credentials_file: "service-account.json",
-      release_notes: ENV.fetch("RELEASE_NOTES", "New build available")
+      release_notes: ENV.fetch("RELEASE_NOTES", "New build available"),
+      groups: "testers"
     )
   end
 end
@@ -76,8 +77,9 @@ platform :ios do
     upload_to_testflight(
       api_key:                           api_key,
       changelog:                         ENV.fetch("RELEASE_NOTES", "New build"),
-      skip_waiting_for_build_processing: true,
+      skip_waiting_for_build_processing: false,
       distribute_external:               false,
+      groups:                            ["testers"],
     )
   end
 end
