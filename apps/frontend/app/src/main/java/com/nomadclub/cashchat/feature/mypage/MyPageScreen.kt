@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nomadclub.cashchat.BuildConfig
+import java.util.Locale
 
 private data class MenuItem(
     val icon: ImageVector,
@@ -142,7 +143,7 @@ fun MyPageScreen(
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = String.format("%,d", points),
+                                    text = String.format(Locale.getDefault(), "%,d", points),
                                     color = Color.White,
                                     fontSize = 32.sp,
                                     fontWeight = FontWeight.Black
