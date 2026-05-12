@@ -2,15 +2,28 @@ package com.wnl.cashchat.api.domain.chat.web.controller
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
+import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
+import com.wnl.cashchat.api.domain.chat.exception.ConversationAccessDeniedException
+import com.wnl.cashchat.api.domain.chat.exception.ConversationNotFoundException
+import com.wnl.cashchat.api.domain.chat.persistence.entity.ChatMessage
+import com.wnl.cashchat.api.domain.chat.persistence.entity.Conversation
+import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageRole
+import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageStatus
+import com.wnl.cashchat.api.domain.chat.service.ChatHistory
 import com.wnl.cashchat.api.domain.chat.service.ChatService
+import com.wnl.cashchat.api.domain.chat.web.exception.ChatExceptionHandler
 import com.wnl.cashchat.api.domain.chat.web.request.ChatStreamRequest
 import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
 import com.wnl.cashchat.api.domain.point.web.exception.PointExceptionHandler
+import com.wnl.cashchat.api.domain.user.persistence.entity.Role
+import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
+import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
@@ -23,15 +36,19 @@ import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.content
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.request
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import reactor.core.publisher.Flux
+import java.time.Instant
+import java.util.UUID
 
 @WebMvcTest(ChatController::class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(PointExceptionHandler::class)
+@Import(PointExceptionHandler::class, ChatExceptionHandler::class)
 class ChatControllerWebMvcTest : FunSpec() {
     override fun extensions() = listOf(SpringExtension)
 
@@ -127,5 +144,85 @@ class ChatControllerWebMvcTest : FunSpec() {
             )
                 .andExpect(status().isPaymentRequired)
         }
+
+        test("chat history endpoint returns ordered messages for authenticated user") {
+            val conversationUuid = UUID.fromString("0c4fe408-6d7c-4bd9-b0f8-5fdbe2a6a6e8")
+            val conversation = conversation(ownerId = 1L, uuid = conversationUuid)
+            val createdAt = Instant.parse("2026-05-10T12:34:56Z")
+            val message = ChatMessage(
+                id = 10L,
+                conversation = conversation,
+                role = MessageRole.USER,
+                content = "hello",
+                status = MessageStatus.COMPLETED
+            ).apply {
+                this.createdAt = createdAt
+            }
+
+            whenever(chatService.getHistory(1L, conversationUuid))
+                .thenReturn(ChatHistory(conversationUuid = conversationUuid, messages = listOf(message)))
+
+            mockMvc.perform(
+                get("/api/v1/chat/history/$conversationUuid")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .accept(MediaType.APPLICATION_JSON)
+            )
+                .andExpect(status().isOk)
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.conversationUuid").value(conversationUuid.toString()))
+                .andExpect(jsonPath("$.messages[0].id").value(10))
+                .andExpect(jsonPath("$.messages[0].role").value("USER"))
+                .andExpect(jsonPath("$.messages[0].content").value("hello"))
+                .andExpect(jsonPath("$.messages[0].status").value("COMPLETED"))
+                .andExpect(jsonPath("$.messages[0].createdAt").value("2026-05-10T12:34:56Z"))
+
+            verify(chatService).getHistory(eq(1L), eq(conversationUuid))
+        }
+
+        test("chat history endpoint returns not found for unknown conversation") {
+            val conversationUuid = UUID.fromString("bd1d0ebf-599c-4a11-a582-5a8fbb716a5c")
+
+            whenever(chatService.getHistory(1L, conversationUuid))
+                .thenThrow(ConversationNotFoundException(conversationUuid))
+
+            mockMvc.perform(
+                get("/api/v1/chat/history/$conversationUuid")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .accept(MediaType.APPLICATION_JSON)
+            )
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.code").value("CONVERSATION_NOT_FOUND"))
+        }
+
+        test("chat history endpoint returns forbidden for another user's conversation") {
+            val conversationUuid = UUID.fromString("7a4e58c0-e8dc-4f26-9b86-fdc50d03d49f")
+
+            whenever(chatService.getHistory(1L, conversationUuid))
+                .thenThrow(ConversationAccessDeniedException(conversationUuid))
+
+            mockMvc.perform(
+                get("/api/v1/chat/history/$conversationUuid")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .accept(MediaType.APPLICATION_JSON)
+            )
+                .andExpect(status().isForbidden)
+                .andExpect(jsonPath("$.code").value("CONVERSATION_ACCESS_DENIED"))
+        }
+
+        test("chat history endpoint rejects malformed uuid") {
+            mockMvc.perform(
+                get("/api/v1/chat/history/not-a-uuid")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .accept(MediaType.APPLICATION_JSON)
+            )
+                .andExpect(status().isBadRequest)
+
+            verify(chatService, never()).getHistory(any(), any())
+        }
+    }
+
+    private fun conversation(ownerId: Long, uuid: UUID): Conversation {
+        val owner = User(id = ownerId, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
+        return Conversation(id = 1L, uuid = uuid, user = owner, title = null)
     }
 }
