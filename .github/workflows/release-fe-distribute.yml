@@ -31,34 +31,63 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 마지막 릴리즈 태그 조회
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          # ── 현재 버전: GitHub Releases API (실제 마지막 배포 버전 기준) ──────
+          LAST_RELEASE=$(curl -sf \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" \
+            2>/dev/null || echo "{}")
+          LAST_TAG=$(echo "$LAST_RELEASE" | jq -r '.tag_name // ""')
+          # 릴리즈가 없으면 Apple 기준 최소 버전(1.0.0)으로 시작
+          if [ -z "$LAST_TAG" ] || [ "$LAST_TAG" = "null" ]; then
+            LAST_TAG="v1.0.0"
+            echo "ℹ️ GitHub Release 없음 — 기준 버전 v1.0.0 사용"
+          fi
           LAST_VER="${LAST_TAG#v}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VER"
+          echo "ℹ️ 기준 버전: ${LAST_TAG}"
 
-          # 마지막 태그 이후 커밋 메시지 수집 ([CC-XXX] type : desc 형식 지원)
-          if [ "$LAST_TAG" = "v0.0.0" ]; then
-            COMMITS=$(git log --pretty=format:"%s")
+          # ── 머지된 PR 정보 조회 (버전 동기화 + major 라벨 확인) ───────────
+          MERGE_MSG=$(git log -1 --pretty=format:"%s")
+          PR_NUMBER=$(echo "$MERGE_MSG" | grep -oE '#[0-9]+' | head -1 | tr -d '#' 2>/dev/null || echo "")
+          VERSION_FROM_PR=""
+          HAS_MAJOR_LABEL="false"
+
+          if [ -n "$PR_NUMBER" ]; then
+            PR_DATA=$(curl -sf \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+              2>/dev/null || echo "{}")
+            PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // ""')
+            VERSION_FROM_PR=$(echo "$PR_TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | tr -d 'v' || echo "")
+            PR_LABELS=$(echo "$PR_DATA" | jq -r '[.labels[].name] | join(",")' 2>/dev/null || echo "")
+            if echo "$PR_LABELS" | grep -qiE 'version\.major'; then
+              HAS_MAJOR_LABEL="true"
+            fi
+          fi
+
+          if [ -n "$VERSION_FROM_PR" ]; then
+            # PR 제목에 버전이 있으면 그대로 사용 → MR↔배포 버전 동기화
+            NEW_VERSION="$VERSION_FROM_PR"
+            echo "ℹ️ PR 제목에서 버전 추출: v${NEW_VERSION}"
           else
-            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s")
-          fi
+            # 커밋 수 기반 버전 계산 (마지막 릴리즈 이후 커밋만)
+            COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" --no-merges 2>/dev/null || echo "")
 
-          # bump 타입 결정
-          # feat → minor / BREAKING CHANGE → major / 그 외 → patch
-          BUMP="patch"
-          if echo "$COMMITS" | grep -qiE '^\[.*?\]\s+feat\s*[:：]|^feat\s*[:：]'; then
-            BUMP="minor"
-          fi
-          if echo "$COMMITS" | grep -qiE 'BREAKING[[:space:]]CHANGE'; then
-            BUMP="major"
-          fi
+            FEAT_COUNT=$(echo "$COMMITS" | grep -cE '^\[.*?\]\s+feat\s*[:：]|^feat\s*[:：]' 2>/dev/null) || FEAT_COUNT=0
+            FIX_COUNT=$(echo "$COMMITS"  | grep -cE '^\[.*?\]\s+fix\s*[:：]|^fix\s*[:：]'   2>/dev/null) || FIX_COUNT=0
+            BREAKING=$(echo "$COMMITS"   | grep -cE 'BREAKING[[:space:]]CHANGE'              2>/dev/null) || BREAKING=0
 
-          # 새 버전 계산
-          case "$BUMP" in
-            major) NEW_VERSION="$((MAJOR + 1)).0.0" ;;
-            minor) NEW_VERSION="${MAJOR}.$((MINOR + 1)).0" ;;
-            patch) NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
-          esac
+            if [ "$BREAKING" -gt 0 ] || [ "$HAS_MAJOR_LABEL" = "true" ]; then
+              NEW_VERSION="$((MAJOR + 1)).0.0"
+            elif [ "$FEAT_COUNT" -gt 0 ]; then
+              # feat N개 → MINOR+N, fix M개 → PATCH=M (MINOR 증가 시 PATCH 리셋)
+              NEW_VERSION="${MAJOR}.$((MINOR + FEAT_COUNT)).${FIX_COUNT}"
+            elif [ "$FIX_COUNT" -gt 0 ]; then
+              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + FIX_COUNT))"
+            else
+              NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
+            fi
+          fi
 
           # versionCode: MAJOR*10000 + MINOR*100 + PATCH
           IFS='.' read -r NM NMI NP <<< "$NEW_VERSION"
@@ -87,7 +116,7 @@ jobs:
           echo "name=${NEW_VERSION}"     >> "$GITHUB_OUTPUT"
           echo "code=${VERSION_CODE}"    >> "$GITHUB_OUTPUT"
           echo "tag=v${NEW_VERSION}"     >> "$GITHUB_OUTPUT"
-          echo "✅ ${LAST_TAG} → v${NEW_VERSION} (bump=${BUMP}, versionCode=${VERSION_CODE})"
+          echo "✅ ${LAST_TAG} → v${NEW_VERSION} (versionCode=${VERSION_CODE})"
 
       - name: Generate AI Release Notes
         id: ai_notes
@@ -98,11 +127,9 @@ jobs:
 
           LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null \
             || git rev-list --max-parents=0 HEAD)
-          COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" 2>/dev/null \
-            | head -50 || echo "")
+          ALL_COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" --no-merges 2>/dev/null | head -50 || echo "")
 
-          # API 키가 없거나 커밋이 없으면 기본 메시지 사용
-          if [ -z "${GOOGLE_GEMINI_API_KEY:-}" ] || [ -z "$COMMITS" ]; then
+          if [ -z "${GOOGLE_GEMINI_API_KEY:-}" ] || [ -z "$ALL_COMMITS" ]; then
             {
               echo 'notes<<__NOTES_EOF__'
               echo "v${{ steps.ver.outputs.name }} 새 빌드가 배포되었습니다."
@@ -111,7 +138,31 @@ jobs:
             exit 0
           fi
 
-          PROMPT="다음은 Cash Chat 앱 v${{ steps.ver.outputs.name }} 릴리즈 커밋 목록입니다.\n\n${COMMITS}\n\n위 내용을 바탕으로 한국어 릴리즈 노트를 작성해주세요:\n- 사용자 관점에서 무엇이 바뀌었는지 설명\n- 이모지로 시작하는 3~5줄\n- 기술 내부 구현 상세는 제외"
+          # 커밋을 유형별로 분류해서 AI에게 전달
+          FEAT_COMMITS=$(echo "$ALL_COMMITS" | grep -E '^\[.*?\]\s+feat\s*[:：]|^feat\s*[:：]' | sed 's/^/  - /' || echo "  없음")
+          FIX_COMMITS=$(echo "$ALL_COMMITS"  | grep -E '^\[.*?\]\s+fix\s*[:：]|^fix\s*[:：]'   | sed 's/^/  - /' || echo "  없음")
+          OTHER_COMMITS=$(echo "$ALL_COMMITS" | grep -vE '^\[.*?\]\s+(feat|fix)\s*[:：]|^(feat|fix)\s*[:：]' | sed 's/^/  - /' || echo "  없음")
+
+          PROMPT=$(cat <<PROMPT_EOF
+Cash Chat 앱 v${{ steps.ver.outputs.name }} 한국어 릴리즈 노트를 작성해주세요.
+
+[새 기능 커밋]
+${FEAT_COMMITS}
+
+[버그 수정 커밋]
+${FIX_COMMITS}
+
+[기타 변경 커밋]
+${OTHER_COMMITS}
+
+작성 규칙:
+- 사용자 관점에서 실제 체감 변화 중심으로 설명
+- 이모지로 시작하는 불릿 포인트 3~5줄
+- 함수명·파일명 등 기술 내부 상세 제외
+- 전체 200자 이내로 간결하게
+- 변경사항 없는 섹션은 릴리즈 노트에서 생략
+PROMPT_EOF
+          )
 
           RESPONSE=$(curl -sf \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
@@ -241,19 +292,27 @@ jobs:
           [ -z "$DISCORD_WEBHOOK" ] && echo "ℹ️ DISCORD_WEBHOOK 없음 — 건너뜀" && exit 0
           SHORT_SHA="${SHA:0:7}"
           COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
+          RELEASE_URL="https://github.com/${REPO}/releases/tag/v${VERSION_NAME}"
+          # Discord embed 길이 제한 대응 (4096자) — 릴리즈 노트 800자 초과 시 truncate
+          NOTES_DISPLAY="${RELEASE_NOTES}"
+          if [ ${#RELEASE_NOTES} -gt 800 ]; then
+            NOTES_DISPLAY="${RELEASE_NOTES:0:800}...\n\n👉 [전체 릴리즈 노트](${RELEASE_URL})"
+          fi
           PAYLOAD=$(jq -n \
             --arg branch "$BRANCH" --arg actor "$ACTOR" \
             --arg ts "$TIMESTAMP" --arg sha "$SHORT_SHA" --arg commit_url "$COMMIT_URL" \
             --arg version "v${VERSION_NAME} (build ${VERSION_CODE})" \
-            --arg notes "$RELEASE_NOTES" \
+            --arg notes "$NOTES_DISPLAY" \
+            --arg release_url "$RELEASE_URL" \
             '{embeds: [{
               color: 5763719,
               title: "✅  Android 배포 완료",
               description: ("**Firebase App Distribution 배포 성공**\n\n" + $notes),
               fields: [
-                {name: "버전",   value: ("`" + $version + "`"), inline: true},
-                {name: "배포자", value: ("`" + $actor + "`"),   inline: true},
-                {name: "커밋",   value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true}
+                {name: "버전",         value: ("`" + $version + "`"), inline: true},
+                {name: "배포자",       value: ("`" + $actor + "`"),   inline: true},
+                {name: "커밋",         value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "GitHub Release", value: ("[릴리즈 페이지](" + $release_url + ")"), inline: false}
               ],
               footer: {text: "Cash Chat · Android Build"},
               timestamp: $ts
@@ -458,19 +517,26 @@ jobs:
           [ -z "$DISCORD_WEBHOOK" ] && echo "ℹ️ DISCORD_WEBHOOK 없음 — 건너뜀" && exit 0
           SHORT_SHA="${SHA:0:7}"
           COMMIT_URL="https://github.com/${REPO}/commit/${SHA}"
+          RELEASE_URL="https://github.com/${REPO}/releases/tag/v${VERSION_NAME}"
+          NOTES_DISPLAY="${RELEASE_NOTES}"
+          if [ ${#RELEASE_NOTES} -gt 800 ]; then
+            NOTES_DISPLAY="${RELEASE_NOTES:0:800}...\n\n👉 [전체 릴리즈 노트](${RELEASE_URL})"
+          fi
           PAYLOAD=$(jq -n \
             --arg branch "$BRANCH" --arg actor "$ACTOR" \
             --arg ts "$TIMESTAMP" --arg sha "$SHORT_SHA" --arg commit_url "$COMMIT_URL" \
             --arg version "v${VERSION_NAME} (build ${VERSION_CODE})" \
-            --arg notes "$RELEASE_NOTES" \
+            --arg notes "$NOTES_DISPLAY" \
+            --arg release_url "$RELEASE_URL" \
             '{embeds: [{
               color: 5763719,
               title: "✅  iOS 배포 완료",
               description: ("**TestFlight 업로드 성공**\n\n" + $notes),
               fields: [
-                {name: "버전",   value: ("`" + $version + "`"), inline: true},
-                {name: "배포자", value: ("`" + $actor + "`"),   inline: true},
-                {name: "커밋",   value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true}
+                {name: "버전",         value: ("`" + $version + "`"), inline: true},
+                {name: "배포자",       value: ("`" + $actor + "`"),   inline: true},
+                {name: "커밋",         value: ("[`" + $sha + "`](" + $commit_url + ")"), inline: true},
+                {name: "GitHub Release", value: ("[릴리즈 페이지](" + $release_url + ")"), inline: false}
               ],
               footer: {text: "Cash Chat · iOS Build"},
               timestamp: $ts
