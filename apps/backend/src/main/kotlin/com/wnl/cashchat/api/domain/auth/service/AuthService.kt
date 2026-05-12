@@ -233,4 +233,9 @@ class AuthService(
         return buildAuthResponse(user)
 
     }
+
+    @Transactional
+    fun logout(userId: Long, refreshToken: String) {
+        refreshTokenRepository.deleteByUserIdAndTokenReturningCount(userId, refreshToken)
+    }
 }

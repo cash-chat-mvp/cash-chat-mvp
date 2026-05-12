@@ -13,6 +13,12 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
           BRANCH: ${{ github.head_ref }}
         run: |
+          # dev → release-fe 배포 PR은 규칙 체크 대상 아님
+          if [[ "$BRANCH" == "dev" && "${{ github.base_ref }}" == "release-fe" ]]; then
+            echo "ℹ️ dev → release-fe 배포 PR — 규칙 체크 생략"
+            exit 0
+          fi
+
           FAILED=0
 
           # ── 1. PR 제목 체크 ───────────────────────────────────────────

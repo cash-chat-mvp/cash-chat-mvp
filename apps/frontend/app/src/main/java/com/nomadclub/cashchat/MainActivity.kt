@@ -197,6 +197,13 @@ private fun CashChatApp() {
                     incrementMessageCount = ::incrementMessageCount,
                     onNavigateToLogin = {
                         navController.navigate(AppRoute.LOGIN)
+                    },
+                    onLogout = {
+                        authViewModel.logout()
+                        navController.navigate(AppRoute.ONBOARDING) {
+                            popUpTo(0) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
                 )
             }

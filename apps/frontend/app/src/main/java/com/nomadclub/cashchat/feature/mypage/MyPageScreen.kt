@@ -62,7 +62,8 @@ private data class MenuItem(
 
 @Composable
 fun MyPageScreen(
-    points: Int
+    points: Int,
+    onLogout: () -> Unit = {}
 ) {
     val menuItems = listOf(
         MenuItem(Icons.Default.Redeem, "내 기프티콘 보관함", "2"),
@@ -256,7 +257,7 @@ fun MyPageScreen(
             // Logout Button
             Box(modifier = Modifier.padding(horizontal = 24.dp)) {
                 Button(
-                    onClick = {},
+                    onClick = onLogout,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
