@@ -1,8 +1,11 @@
 package com.wnl.cashchat.api.domain.chat.web.controller
 
+import com.wnl.cashchat.api.common.web.response.ErrorResponse
 import com.wnl.cashchat.api.domain.chat.service.ChatService
 import com.wnl.cashchat.api.domain.chat.web.request.ChatStreamRequest
+import com.wnl.cashchat.api.domain.chat.web.response.ChatHistoryResponse
 import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.parameters.RequestBody as OpenApiRequestBody
@@ -11,13 +14,17 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses
 import io.swagger.v3.oas.annotations.tags.Tag
 import jakarta.validation.Valid
 import org.springframework.http.MediaType
+import org.springframework.http.ResponseEntity
 import org.springframework.http.codec.ServerSentEvent
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import reactor.core.publisher.Flux
+import java.util.UUID
 
 /**
  * Exposes server-sent event endpoints for chat responses.
@@ -28,6 +35,58 @@ import reactor.core.publisher.Flux
 class ChatController(
     private val chatService: ChatService,
 ) {
+
+    /**
+     * Returns persisted chat history for the authenticated user's conversation.
+     */
+    @GetMapping("/history/{uuid}")
+    @Operation(
+        summary = "Get chat history",
+        description = "Returns persisted messages for an authenticated user's conversation."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(
+                responseCode = "200",
+                description = "Chat history returned successfully.",
+                content = [Content(schema = Schema(implementation = ChatHistoryResponse::class))]
+            ),
+            ApiResponse(
+                responseCode = "400",
+                description = "The supplied conversation UUID is malformed.",
+                content = [Content(schema = Schema(implementation = ErrorResponse::class))]
+            ),
+            ApiResponse(
+                responseCode = "401",
+                description = "Authentication is required.",
+                content = [Content(schema = Schema(implementation = ErrorResponse::class))]
+            ),
+            ApiResponse(
+                responseCode = "403",
+                description = "The conversation belongs to another user.",
+                content = [Content(schema = Schema(implementation = ErrorResponse::class))]
+            ),
+            ApiResponse(
+                responseCode = "404",
+                description = "Conversation not found.",
+                content = [Content(schema = Schema(implementation = ErrorResponse::class))]
+            )
+        ]
+    )
+    fun history(
+        authentication: Authentication,
+        @PathVariable
+        @Parameter(
+            description = "Public conversation UUID.",
+            example = "0c4fe408-6d7c-4bd9-b0f8-5fdbe2a6a6e8"
+        )
+        uuid: UUID,
+    ): ResponseEntity<ChatHistoryResponse> {
+        val userId = authentication.principal as? Long
+            ?: throw IllegalArgumentException("Invalid authenticated principal")
+
+        return ResponseEntity.ok(ChatHistoryResponse.from(chatService.getHistory(userId, uuid)))
+    }
 
     /**
      * Starts a chat response stream for the authenticated user.

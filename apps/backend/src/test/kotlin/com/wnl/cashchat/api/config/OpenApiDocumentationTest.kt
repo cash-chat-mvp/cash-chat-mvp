@@ -19,7 +19,7 @@ class OpenApiDocumentationTest : FunSpec() {
     lateinit var mockMvc: MockMvc
 
     init {
-        test("openapi docs expose chat streaming metadata") {
+        test("openapi docs expose chat streaming and history metadata") {
             val response = mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk)
                 .andReturn()
@@ -30,6 +30,8 @@ class OpenApiDocumentationTest : FunSpec() {
             response.contains("\"version\":\"v1\"") shouldBe true
             response.contains("/api/v1/chat/stream") shouldBe true
             response.contains("Stream a chat completion") shouldBe true
+            response.contains("/api/v1/chat/history/{uuid}") shouldBe true
+            response.contains("Get chat history") shouldBe true
         }
     }
 }
