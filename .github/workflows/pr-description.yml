@@ -113,9 +113,9 @@ jobs:
           if [ -z "${GOOGLE_GEMINI_API_KEY:-}" ] || [ -z "$COMMIT_LIST" ]; then
             NOTES="v${NEW_VERSION} 새 빌드가 배포될 예정입니다."
           else
-            FEAT_COMMITS=$(echo "$COMMIT_LIST" | grep -E '^\[.*?\]\s+feat\s*[:：]|^feat\s*[:：]' | sed 's/^/  /' || echo "  없음")
-            FIX_COMMITS=$(echo "$COMMIT_LIST"  | grep -E '^\[.*?\]\s+fix\s*[:：]|^fix\s*[:：]'   | sed 's/^/  /' || echo "  없음")
-            OTHER_COMMITS=$(echo "$COMMIT_LIST" | grep -vE '^\[.*?\]\s+(feat|fix)\s*[:：]|^(feat|fix)\s*[:：]' | sed 's/^/  /' || echo "  없음")
+            FEAT_COMMITS=$(echo "$COMMIT_LIST" | grep -E '^- \[.*?\]\s+feat\s*[:：]|^- feat\s*[:：]' | sed 's/^- /  /' || echo "  없음")
+            FIX_COMMITS=$(echo "$COMMIT_LIST"  | grep -E '^- \[.*?\]\s+fix\s*[:：]|^- fix\s*[:：]'   | sed 's/^- /  /' || echo "  없음")
+            OTHER_COMMITS=$(echo "$COMMIT_LIST" | grep -vE '^- \[.*?\]\s+(feat|fix)\s*[:：]|^- (feat|fix)\s*[:：]' | sed 's/^- /  /' || echo "  없음")
 
             PROMPT=$(jq -rn \
               --arg ver   "$NEW_VERSION" \
