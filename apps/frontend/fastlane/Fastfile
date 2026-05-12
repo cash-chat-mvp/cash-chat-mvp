@@ -79,7 +79,7 @@ platform :ios do
       changelog:                         ENV.fetch("RELEASE_NOTES", "New build"),
       skip_waiting_for_build_processing: false,
       distribute_external:               false,
-      groups:                            ["testers"],
+      groups:                            ["CashChatTester"],
     )
   end
 end
