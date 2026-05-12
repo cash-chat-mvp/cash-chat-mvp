@@ -16,7 +16,6 @@ jobs:
       name:          ${{ steps.ver.outputs.name }}
       code:          ${{ steps.ver.outputs.code }}
       tag:           ${{ steps.ver.outputs.tag }}
-      prev_tag:      ${{ steps.ver.outputs.prev_tag }}
       release_notes: ${{ steps.ai_notes.outputs.notes }}
 
     steps:
@@ -74,8 +73,8 @@ jobs:
             # 커밋 수 기반 버전 계산 (마지막 릴리즈 이후 커밋만)
             COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" --no-merges 2>/dev/null || echo "")
 
-            FEAT_COUNT=$(echo "$COMMITS" | grep -cE '^\[[^]]+\]\s+feat\s*[:：]|^feat\s*[:：]' 2>/dev/null) || FEAT_COUNT=0
-            FIX_COUNT=$(echo "$COMMITS"  | grep -cE '^\[[^]]+\]\s+fix\s*[:：]|^fix\s*[:：]'   2>/dev/null) || FIX_COUNT=0
+            FEAT_COUNT=$(echo "$COMMITS" | grep -cE '^\[.*?\]\s+feat\s*[:：]|^feat\s*[:：]' 2>/dev/null) || FEAT_COUNT=0
+            FIX_COUNT=$(echo "$COMMITS"  | grep -cE '^\[.*?\]\s+fix\s*[:：]|^fix\s*[:：]'   2>/dev/null) || FIX_COUNT=0
             BREAKING=$(echo "$COMMITS"   | grep -cE 'BREAKING[[:space:]]CHANGE'              2>/dev/null) || BREAKING=0
 
             if [ "$BREAKING" -gt 0 ] || [ "$HAS_MAJOR_LABEL" = "true" ]; then
@@ -117,7 +116,6 @@ jobs:
           echo "name=${NEW_VERSION}"     >> "$GITHUB_OUTPUT"
           echo "code=${VERSION_CODE}"    >> "$GITHUB_OUTPUT"
           echo "tag=v${NEW_VERSION}"     >> "$GITHUB_OUTPUT"
-          echo "prev_tag=${LAST_TAG}"    >> "$GITHUB_OUTPUT"
           echo "✅ ${LAST_TAG} → v${NEW_VERSION} (versionCode=${VERSION_CODE})"
 
       - name: Generate AI Release Notes
@@ -127,60 +125,47 @@ jobs:
         run: |
           set -euo pipefail
 
-          # ver step에서 이미 계산된 prev_tag 사용 (HEAD^ 방식 제거)
-          LAST_TAG="${{ steps.ver.outputs.prev_tag }}"
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null \
+            || git rev-list --max-parents=0 HEAD)
           ALL_COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" --no-merges 2>/dev/null | head -50 || echo "")
 
-          fallback_notes() {
-            local DELIM
-            DELIM=$(uuidgen)
-            { echo "notes<<$DELIM"; echo "$1"; echo "$DELIM"; } >> "$GITHUB_OUTPUT"
-          }
-
           if [ -z "${GOOGLE_GEMINI_API_KEY:-}" ] || [ -z "$ALL_COMMITS" ]; then
-            fallback_notes "v${{ steps.ver.outputs.name }} 새 빌드가 배포되었습니다."
+            {
+              echo 'notes<<__NOTES_EOF__'
+              echo "v${{ steps.ver.outputs.name }} 새 빌드가 배포되었습니다."
+              echo '__NOTES_EOF__'
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           # 커밋을 유형별로 분류해서 AI에게 전달
-          FEAT_COMMITS=$(echo "$ALL_COMMITS" | grep -E '^\[[^]]+\]\s+feat\s*[:：]|^feat\s*[:：]' | sed 's/^/  - /' || echo "  없음")
-          FIX_COMMITS=$(echo "$ALL_COMMITS"  | grep -E '^\[[^]]+\]\s+fix\s*[:：]|^fix\s*[:：]'   | sed 's/^/  - /' || echo "  없음")
-          OTHER_COMMITS=$(echo "$ALL_COMMITS" | grep -vE '^\[[^]]+\]\s+(feat|fix)\s*[:：]|^(feat|fix)\s*[:：]' | sed 's/^/  - /' || echo "  없음")
+          FEAT_COMMITS=$(echo "$ALL_COMMITS" | grep -E '^\[.*?\]\s+feat\s*[:：]|^feat\s*[:：]' | sed 's/^/  - /' || echo "  없음")
+          FIX_COMMITS=$(echo "$ALL_COMMITS"  | grep -E '^\[.*?\]\s+fix\s*[:：]|^fix\s*[:：]'   | sed 's/^/  - /' || echo "  없음")
+          OTHER_COMMITS=$(echo "$ALL_COMMITS" | grep -vE '^\[.*?\]\s+(feat|fix)\s*[:：]|^(feat|fix)\s*[:：]' | sed 's/^/  - /' || echo "  없음")
 
           PROMPT=$(jq -rn \
             --arg ver "${{ steps.ver.outputs.name }}" \
             --arg feat "$FEAT_COMMITS" \
             --arg fix  "$FIX_COMMITS" \
             --arg other "$OTHER_COMMITS" \
-            '"Cash Chat 앱 v\($ver) 한국어 릴리즈 노트를 작성해주세요.\n\n[새 기능 커밋]\n\($feat)\n\n[버그 수정 커밋]\n\($fix)\n\n[기타 변경 커밋]\n\($other)\n\n작성 규칙:\n- 사용자가 직접 느끼는 변화만 작성 (\"~ 개선했습니다\" 형태)\n- 개발자 용어·함수명·파일명 금지\n- QA·리팩토링·코드정리 언급 금지\n- 이모지로 시작하는 불릿 포인트 3~5줄\n- 전체 200자 이내로 간결하게\n- 변경사항 없는 섹션은 생략"')
+            '"Cash Chat 앱 v\($ver) 한국어 릴리즈 노트를 작성해주세요.\n\n[새 기능 커밋]\n\($feat)\n\n[버그 수정 커밋]\n\($fix)\n\n[기타 변경 커밋]\n\($other)\n\n작성 규칙:\n- 사용자 관점에서 실제 체감 변화 중심으로 설명\n- 이모지로 시작하는 불릿 포인트 3~5줄\n- 함수명·파일명 등 기술 내부 상세 제외\n- 전체 200자 이내로 간결하게\n- 변경사항 없는 섹션은 릴리즈 노트에서 생략"')
 
-          HTTP_RESPONSE=$(mktemp)
-          HTTP_CODE=$(curl -s -o "$HTTP_RESPONSE" -w "%{http_code}" \
+          RESPONSE=$(curl -sf \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
             -H "content-type: application/json" \
             --data "$(jq -n --arg p "$PROMPT" '{
-              contents: [{"parts": [{"text": $p}]}],
-              generationConfig: { temperature: 0.4 }
-            }')") || HTTP_CODE="000"
+              contents: [{"parts": [{"text": $p}]}]
+            }')" \
+            || echo '{"candidates":[{"content":{"parts":[{"text":"새로운 빌드가 배포되었습니다."}]}}]}')
 
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "::warning::Gemini API 실패 (HTTP $HTTP_CODE): $(head -c 300 "$HTTP_RESPONSE")"
-            fallback_notes "v${{ steps.ver.outputs.name }} 새 빌드가 배포되었습니다."
-            exit 0
-          fi
+          NOTES=$(echo "$RESPONSE" \
+            | jq -r '.candidates[0].content.parts[0].text // "새로운 빌드가 배포되었습니다."')
 
-          NOTES=$(jq -r '.candidates[0].content.parts[0].text // empty' "$HTTP_RESPONSE" 2>/dev/null || echo "")
-          if [ -z "$NOTES" ]; then
-            echo "::warning::Gemini 응답 파싱 실패: $(head -c 300 "$HTTP_RESPONSE")"
-            fallback_notes "v${{ steps.ver.outputs.name }} 새 빌드가 배포되었습니다."
-            exit 0
-          fi
-
-          # 길이 강제 제한 (500자)
-          NOTES="${NOTES:0:500}"
-
-          DELIM=$(uuidgen)
-          { echo "notes<<$DELIM"; echo "$NOTES"; echo "$DELIM"; } >> "$GITHUB_OUTPUT"
+          {
+            echo 'notes<<__NOTES_EOF__'
+            echo "$NOTES"
+            echo '__NOTES_EOF__'
+          } >> "$GITHUB_OUTPUT"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Job 2: Android — Firebase App Distribution
