@@ -111,26 +111,12 @@ jobs:
             FIX_COMMITS=$(echo "$COMMIT_LIST"  | grep -E '^\[.*?\]\s+fix\s*[:：]|^fix\s*[:：]'   | sed 's/^/  /' || echo "  없음")
             OTHER_COMMITS=$(echo "$COMMIT_LIST" | grep -vE '^\[.*?\]\s+(feat|fix)\s*[:：]|^(feat|fix)\s*[:：]' | sed 's/^/  /' || echo "  없음")
 
-            PROMPT=$(cat <<PROMPT_EOF
-Cash Chat 앱 v${NEW_VERSION} 한국어 릴리즈 노트를 작성해주세요.
-
-[새 기능 커밋]
-${FEAT_COMMITS}
-
-[버그 수정 커밋]
-${FIX_COMMITS}
-
-[기타 변경 커밋]
-${OTHER_COMMITS}
-
-작성 규칙:
-- 사용자 관점에서 실제 체감 변화 중심으로 설명
-- 이모지로 시작하는 불릿 포인트 3~5줄
-- 함수명·파일명 등 기술 내부 상세 제외
-- 전체 200자 이내로 간결하게
-- 변경사항 없는 섹션은 릴리즈 노트에서 생략
-PROMPT_EOF
-            )
+            PROMPT=$(jq -rn \
+              --arg ver   "$NEW_VERSION" \
+              --arg feat  "$FEAT_COMMITS" \
+              --arg fix   "$FIX_COMMITS" \
+              --arg other "$OTHER_COMMITS" \
+              '"Cash Chat 앱 v\($ver) 한국어 릴리즈 노트를 작성해주세요.\n\n[새 기능 커밋]\n\($feat)\n\n[버그 수정 커밋]\n\($fix)\n\n[기타 변경 커밋]\n\($other)\n\n작성 규칙:\n- 사용자 관점에서 실제 체감 변화 중심으로 설명\n- 이모지로 시작하는 불릿 포인트 3~5줄\n- 함수명·파일명 등 기술 내부 상세 제외\n- 전체 200자 이내로 간결하게\n- 변경사항 없는 섹션은 릴리즈 노트에서 생략"')
 
             RESPONSE=$(curl -sf \
               "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
