@@ -36,6 +36,14 @@ key.properties
 # ──────────────────────────────────────────────
 shared/build/
 
+# KMM 빌드 캐시
+.kotlin/
+
+# Xcode 사용자 설정 / SwiftPM 캐시
+CashChatIOS/**/*.xcodeproj/xcuserdata/
+CashChatIOS/**/*.xcworkspace/xcuserdata/
+CashChatIOS/**/*.xcworkspace/xcshareddata/swiftpm/
+
 # ──────────────────────────────────────────────
 # 주석
 # ──────────────────────────────────────────────

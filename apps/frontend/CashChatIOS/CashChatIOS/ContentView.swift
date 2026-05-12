@@ -407,6 +407,7 @@ struct OnboardingView: View {
     
     private struct ChatView: View {
         @EnvironmentObject private var appState: AppState
+        @Environment(\.colorScheme) private var colorScheme
         @State private var animateIn = false
         @State private var sessions: [ChatSession] = [
             ChatSession(
@@ -494,8 +495,8 @@ struct OnboardingView: View {
                         .padding(.top, 8)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 10)
-                        .background(.white)
-                        
+                        .background(Color(.systemBackground))
+
                         ScrollView {
                             LazyVStack(spacing: 10) {
                                 ForEach(messages) { row in
@@ -506,7 +507,7 @@ struct OnboardingView: View {
                                             Text(text)
                                                 .padding(.horizontal, 14)
                                                 .padding(.vertical, 10)
-                                                .background(isUser ? Color(red: 0.36, green: 0.42, blue: 0.98) : Color.white)
+                                                .background(isUser ? Color(red: 0.36, green: 0.42, blue: 0.98) : Color(.secondarySystemGroupedBackground))
                                                 .foregroundStyle(isUser ? .white : .primary)
                                                 .clipShape(RoundedRectangle(cornerRadius: 14))
                                             if !isUser { Spacer() }
@@ -562,7 +563,7 @@ struct OnboardingView: View {
                                         }
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(12)
-                                        .background(.white)
+                                        .background(Color(.secondarySystemGroupedBackground))
                                         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.blue.opacity(0.3), lineWidth: 1))
                                         .clipShape(RoundedRectangle(cornerRadius: 16))
                                     }
@@ -579,12 +580,11 @@ struct OnboardingView: View {
                             .padding()
                             .padding(.bottom, 8)
                         }
-                        .background(Color(white: 0.96))
-                        
+                        .background(Color(.systemGroupedBackground))
+
                         HStack(spacing: 8) {
                             TextField("메시지를 입력하세요...", text: $input)
                                 .textFieldStyle(.roundedBorder)
-                                .foregroundStyle(Color(red: 0.12, green: 0.14, blue: 0.18))
                                 .tint(Color(red: 0.36, green: 0.42, blue: 0.98))
                                 .focused($isInputFocused)
                             Button(action: { submit() }) {
@@ -595,13 +595,15 @@ struct OnboardingView: View {
                         .padding(.horizontal, 14)
                         .padding(.top, 10)
                         .padding(.bottom, keyboard.isVisible ? 14 : 10)
-                        .background(.white)
+                        .background(Color(.systemBackground))
                     }
                     
                     if chatIdle {
                         ZStack {
                             LinearGradient(
-                                colors: [Color(red: 0.93, green: 0.94, blue: 1.0), Color(red: 0.97, green: 0.96, blue: 1.0), Color(red: 1.0, green: 0.96, blue: 0.93)],
+                                colors: colorScheme == .dark
+                                    ? [Color(red: 0.08, green: 0.09, blue: 0.18), Color(red: 0.10, green: 0.10, blue: 0.16), Color(red: 0.12, green: 0.10, blue: 0.14)]
+                                    : [Color(red: 0.93, green: 0.94, blue: 1.0), Color(red: 0.97, green: 0.96, blue: 1.0), Color(red: 1.0, green: 0.96, blue: 0.93)],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
@@ -622,7 +624,6 @@ struct OnboardingView: View {
                                 HStack(spacing: 8) {
                                     TextField("질문을 입력해보세요...", text: $input)
                                         .textFieldStyle(.roundedBorder)
-                                        .foregroundStyle(Color(red: 0.12, green: 0.14, blue: 0.18))
                                         .tint(Color(red: 0.36, green: 0.42, blue: 0.98))
                                         .focused($isInputFocused)
                                     Button(action: { submit() }) {
@@ -634,7 +635,7 @@ struct OnboardingView: View {
                                     .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                                 }
                                 .padding(6)
-                                .background(.white.opacity(0.85))
+                                .background(colorScheme == .dark ? Color(.secondarySystemBackground) : .white.opacity(0.85))
                                 .clipShape(RoundedRectangle(cornerRadius: 24))
                                 
                                 HStack(spacing: 8) {
@@ -643,7 +644,7 @@ struct OnboardingView: View {
                                             .font(.caption.weight(.semibold))
                                             .padding(.horizontal, 10)
                                             .padding(.vertical, 8)
-                                            .background(.white.opacity(0.8))
+                                            .background(colorScheme == .dark ? Color(.tertiarySystemGroupedBackground) : .white.opacity(0.8))
                                             .clipShape(Capsule())
                                     }
                                 }
@@ -679,7 +680,7 @@ struct OnboardingView: View {
                                 Image(systemName: sfSymbol("xmark", fallback: "xmark.circle"))
                                     .font(.system(size: 13, weight: .bold))
                                     .padding(8)
-                                    .background(Color(white: 0.94))
+                                    .background(Color(.systemFill))
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
@@ -708,7 +709,7 @@ struct OnboardingView: View {
                                         }
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .padding(10)
-                                        .background(session.id == selectedSessionId ? Color(red: 0.93, green: 0.95, blue: 1.0) : Color.clear)
+                                        .background(session.id == selectedSessionId ? Color(red: 0.36, green: 0.42, blue: 0.98).opacity(0.12) : Color.clear)
                                         .clipShape(RoundedRectangle(cornerRadius: 10))
                                     }
                                     .buttonStyle(.plain)
@@ -722,9 +723,9 @@ struct OnboardingView: View {
                     .padding(.bottom, bottomSafe + 8)
                     .frame(width: sidebarWidth)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .background(Color(white: 0.985))
+                    .background(Color(.systemBackground))
                     .overlay(alignment: .trailing) {
-                        Rectangle().fill(Color.black.opacity(0.06)).frame(width: 0.5)
+                        Rectangle().fill(Color(.separator)).frame(width: 0.5)
                     }
                     .shadow(color: Color.black.opacity(0.12), radius: 10, x: 4, y: 0)
                     .offset(x: showSidebar ? 0 : -sidebarWidth - 24)
@@ -750,7 +751,7 @@ struct OnboardingView: View {
                         .zIndex(5)
                     }
                 }
-                .background(Color(white: 0.96).ignoresSafeArea())
+                .background(Color(.systemGroupedBackground).ignoresSafeArea())
                 .animation(.easeInOut(duration: 0.18), value: chatIdle)
                 .animation(.spring(response: 0.32, dampingFraction: 0.86), value: showSidebar)
                 .opacity(animateIn ? 1 : 0)
@@ -1058,8 +1059,8 @@ struct OnboardingView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                     }
                     .padding(20)
-                    .background(.white)
-                    
+                    .background(Color(.systemBackground))
+
                     ForEach(missions) { mission in
                         let isClaimed = claimedIDs.contains(mission.id)
                         let progress = mission.maxProgress.map { min(appState.messageCount, $0) } ?? 0
@@ -1069,7 +1070,7 @@ struct OnboardingView: View {
                             Image(systemName: sfSymbol(mission.icon, fallback: "star.fill"))
                                 .foregroundStyle(Color(red: 0.36, green: 0.42, blue: 0.98))
                                 .frame(width: 44, height: 44)
-                                .background(Color(red: 0.96, green: 0.97, blue: 0.98))
+                                .background(Color(.tertiarySystemGroupedBackground))
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                             
                             VStack(alignment: .leading, spacing: 8) {
@@ -1100,14 +1101,14 @@ struct OnboardingView: View {
                             }
                         }
                         .padding(18)
-                        .background(.white)
+                        .background(Color(.secondarySystemGroupedBackground))
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                         .padding(.horizontal, 20)
                     }
                 }
                 .padding(.bottom, 16)
             }
-            .background(Color(red: 0.96, green: 0.97, blue: 0.98))
+            .background(Color(.systemGroupedBackground))
             .opacity(animateIn ? 1 : 0)
             .offset(y: animateIn ? 0 : 14)
             .animation(.easeOut(duration: 0.34), value: animateIn)
@@ -1184,12 +1185,12 @@ struct OnboardingView: View {
                     }
                     TextField("상품을 검색하세요", text: $query)
                         .padding(10)
-                        .background(Color(red: 0.95, green: 0.96, blue: 0.98))
+                        .background(Color(.tertiarySystemGroupedBackground))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(20)
-                .background(.white)
-                
+                .background(Color(.systemBackground))
+
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(ShopCategory.allCases, id: \.self) { category in
@@ -1197,22 +1198,22 @@ struct OnboardingView: View {
                                 .font(.caption.weight(.bold))
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
-                                .background(selectedCategory == category ? Color(red: 0.36, green: 0.42, blue: 0.98) : Color(red: 0.94, green: 0.95, blue: 0.97))
-                                .foregroundStyle(selectedCategory == category ? .white : .primary)
+                                .background(selectedCategory == category ? Color(red: 0.36, green: 0.42, blue: 0.98) : Color(.tertiarySystemGroupedBackground))
+                                .foregroundStyle(selectedCategory == category ? .white : Color(.label))
                                 .clipShape(Capsule())
                         }
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 12)
                 }
-                .background(.white)
+                .background(Color(.systemBackground))
                 
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 14) {
                         ForEach(filtered) { item in
                             VStack(alignment: .leading, spacing: 10) {
                                 ZStack {
-                                    LinearGradient(colors: [Color(red: 0.95, green: 0.96, blue: 0.98), Color(red: 0.90, green: 0.92, blue: 0.96)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                    Color(.tertiarySystemGroupedBackground)
                                     Text(item.emoji).font(.system(size: 44))
                                 }
                                 .frame(height: 110)
@@ -1234,13 +1235,13 @@ struct OnboardingView: View {
                                 }
                             }
                             .padding(12)
-                            .background(.white)
+                            .background(Color(.secondarySystemGroupedBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 20))
                         }
                     }
                     .padding(20)
                 }
-                .background(Color(red: 0.96, green: 0.97, blue: 0.98))
+                .background(Color(.systemGroupedBackground))
             }
             .safeAreaInset(edge: .bottom) {
                 if !notice.isEmpty {
@@ -1277,8 +1278,10 @@ struct OnboardingView: View {
     
     private struct MyPageView: View {
         @EnvironmentObject private var appState: AppState
+        @EnvironmentObject private var themeSettings: ThemeSettings
         @State private var animateIn = false
         @State private var showLogoutConfirm = false
+        @State private var showSettings = false
         private let menuItems = [
             MyPageMenuItem(icon: "gift", label: "내 기프티콘 보관함", badge: "2"),
             MyPageMenuItem(icon: "clock.arrow.circlepath", label: "포인트 적립/사용 내역", badge: nil),
@@ -1328,30 +1331,36 @@ struct OnboardingView: View {
                     
                     VStack(spacing: 10) {
                         ForEach(Array(menuItems.enumerated()), id: \.element.id) { index, item in
-                            HStack {
-                                Image(systemName: sfSymbol(item.icon, fallback: "circle.fill"))
-                                    .frame(width: 36, height: 36)
-                                    .background(Color(red: 0.96, green: 0.97, blue: 0.98))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                                    .foregroundStyle(Color(red: 0.36, green: 0.42, blue: 0.98))
-                                Text(item.label)
-                                    .font(.subheadline.weight(.semibold))
-                                Spacer()
-                                if let badge = item.badge {
-                                    Text(badge)
-                                        .font(.caption2.weight(.bold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(.orange)
-                                        .clipShape(Capsule())
+                            Button {
+                                if item.icon == "gearshape" { showSettings = true }
+                            } label: {
+                                HStack {
+                                    Image(systemName: sfSymbol(item.icon, fallback: "circle.fill"))
+                                        .frame(width: 36, height: 36)
+                                        .background(Color(.tertiarySystemGroupedBackground))
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                        .foregroundStyle(Color(red: 0.36, green: 0.42, blue: 0.98))
+                                    Text(item.label)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(Color(.label))
+                                    Spacer()
+                                    if let badge = item.badge {
+                                        Text(badge)
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
+                                            .background(.orange)
+                                            .clipShape(Capsule())
+                                    }
+                                    Image(systemName: sfSymbol("chevron.right", fallback: "arrow.right"))
+                                        .foregroundStyle(.secondary)
                                 }
-                                Image(systemName: sfSymbol("chevron.right", fallback: "arrow.right"))
-                                    .foregroundStyle(.secondary)
+                                .padding(14)
+                                .background(Color(.secondarySystemGroupedBackground))
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
                             }
-                            .padding(14)
-                            .background(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .buttonStyle(.plain)
                             .opacity(animateIn ? 1 : 0)
                             .offset(y: animateIn ? 0 : 16)
                             .animation(.easeOut(duration: 0.24).delay(0.04 * Double(index + 1)), value: animateIn)
@@ -1380,13 +1389,12 @@ struct OnboardingView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(.white)
-                        .foregroundStyle(Color(red: 0.42, green: 0.45, blue: 0.53))
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .foregroundStyle(.secondary)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(white: 0.9), lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color(.separator), lineWidth: 1))
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 40)
                     .opacity(animateIn ? 1 : 0)
                     .offset(y: animateIn ? 0 : 16)
                     .animation(.easeOut(duration: 0.24).delay(0.34), value: animateIn)
@@ -1396,9 +1404,30 @@ struct OnboardingView: View {
                         }
                         Button("취소", role: .cancel) {}
                     }
+
+                    // App info
+                    VStack(spacing: 4) {
+                        Text("Cash Chat  v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
+                            .font(.caption)
+                        Text("wildNomadLab")
+                            .font(.caption.weight(.medium))
+                        Text("© 2026 wildNomadLab. All rights reserved.")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(Color(.tertiaryLabel))
+                    .frame(maxWidth: .infinity)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 12)
+                    .padding(.bottom, 40)
+                    .opacity(animateIn ? 1 : 0)
+                    .animation(.easeOut(duration: 0.24).delay(0.4), value: animateIn)
                 }
             }
-            .background(Color(red: 0.96, green: 0.97, blue: 0.98))
+            .background(Color(.systemGroupedBackground))
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+                    .environmentObject(themeSettings)
+            }
             .onAppear {
                 animateIn = false
                 DispatchQueue.main.async {
@@ -1417,7 +1446,7 @@ struct OnboardingView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
-            .background(.white)
+            .background(Color(.secondarySystemGroupedBackground))
             .clipShape(RoundedRectangle(cornerRadius: 14))
         }
     }
