@@ -22,11 +22,11 @@ jobs:
         run: |
           git fetch --no-tags origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}-head"
 
+          # --first-parent 제거: merge commit으로 들어온 개별 커밋도 포함
           COMMITS=$(git log "origin/${BASE_REF}..pr-${PR_NUMBER}-head" \
             --no-merges \
-            --first-parent \
             --pretty=format:"- %s (%h)" 2>/dev/null || \
-            git log --no-merges --first-parent --pretty=format:"- %s (%h)" -10)
+            git log --no-merges --pretty=format:"- %s (%h)" -20)
 
           if [ -z "$COMMITS" ]; then
             COMMITS="- 커밋 내역 없음"
@@ -101,8 +101,14 @@ jobs:
           echo "ℹ️ 예상 버전: ${LAST_TAG} → v${NEW_VERSION}"
 
           # ── Gemini AI 릴리즈 노트 생성 ──────────────────────────────────
-          COMMIT_LIST=$(git log "${LAST_TAG}..pr-${PR_NUMBER}-head" \
-            --pretty=format:"- %s" --no-merges 2>/dev/null | head -50 || echo "")
+          # NO_RELEASE 시 LAST_TAG(v0.0.0)가 실제 태그 없어 git log 실패 → 전체 커밋 사용
+          if [ "$NO_RELEASE" = "true" ]; then
+            COMMIT_LIST=$(git log "pr-${PR_NUMBER}-head" \
+              --pretty=format:"- %s" --no-merges 2>/dev/null | head -50 || echo "")
+          else
+            COMMIT_LIST=$(git log "${LAST_TAG}..pr-${PR_NUMBER}-head" \
+              --pretty=format:"- %s" --no-merges 2>/dev/null | head -50 || echo "")
+          fi
 
           if [ -z "${GOOGLE_GEMINI_API_KEY:-}" ] || [ -z "$COMMIT_LIST" ]; then
             NOTES="v${NEW_VERSION} 새 빌드가 배포될 예정입니다."
