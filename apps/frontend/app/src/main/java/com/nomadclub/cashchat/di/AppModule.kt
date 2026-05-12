@@ -1,12 +1,14 @@
 package com.nomadclub.cashchat.di
 
 import com.nomadclub.cashchat.BuildConfig
+import com.nomadclub.cashchat.core.data.ThemePreferenceStore
 import com.nomadclub.cashchat.core.data.TokenDataStore
 import com.nomadclub.cashchat.core.network.ApiService
 import com.nomadclub.cashchat.core.network.AuthInterceptor
 import com.nomadclub.cashchat.core.network.TokenAuthenticator
 import com.nomadclub.cashchat.data.repository.AuthRepository
 import com.nomadclub.cashchat.feature.auth.AuthViewModel
+import com.nomadclub.cashchat.feature.settings.SettingsViewModel
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import org.koin.android.ext.koin.androidContext
@@ -18,6 +20,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 val appModule = module {
 
     single { TokenDataStore(androidContext()) }
+
+    single { ThemePreferenceStore(androidContext()) }
 
     single { AuthInterceptor(get()) }
 
@@ -48,4 +52,6 @@ val appModule = module {
     single { AuthRepository(get(), get()) }
 
     viewModel { AuthViewModel(get()) }
+
+    viewModel { SettingsViewModel(get()) }
 }
