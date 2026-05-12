@@ -31,6 +31,21 @@ jobs:
         run: |
           set -euo pipefail
 
+          # ── 현재 버전: GitHub Releases API (실제 마지막 배포 버전 기준) ──────
+          LAST_RELEASE=$(curl -sf \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" \
+            2>/dev/null || echo "{}")
+          LAST_TAG=$(echo "$LAST_RELEASE" | jq -r '.tag_name // ""')
+          # 릴리즈가 없으면 Apple 기준 최소 버전(1.0.0)으로 시작
+          if [ -z "$LAST_TAG" ] || [ "$LAST_TAG" = "null" ]; then
+            LAST_TAG="v1.0.0"
+            echo "ℹ️ GitHub Release 없음 — 기준 버전 v1.0.0 사용"
+          fi
+          LAST_VER="${LAST_TAG#v}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VER"
+          echo "ℹ️ 기준 버전: ${LAST_TAG}"
+
           # ── 머지된 PR 정보 조회 (버전 동기화 + major 라벨 확인) ───────────
           MERGE_MSG=$(git log -1 --pretty=format:"%s")
           PR_NUMBER=$(echo "$MERGE_MSG" | grep -oE '#[0-9]+' | head -1 | tr -d '#' 2>/dev/null || echo "")
@@ -43,18 +58,12 @@ jobs:
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
               2>/dev/null || echo "{}")
             PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // ""')
-            # PR 제목에서 버전 추출 (예: "CashChat - RELEASE : v1.2.3")
             VERSION_FROM_PR=$(echo "$PR_TITLE" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 | tr -d 'v' || echo "")
             PR_LABELS=$(echo "$PR_DATA" | jq -r '[.labels[].name] | join(",")' 2>/dev/null || echo "")
             if echo "$PR_LABELS" | grep -qiE 'version\.major'; then
               HAS_MAJOR_LABEL="true"
             fi
           fi
-
-          # 마지막 릴리즈 태그 조회
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          LAST_VER="${LAST_TAG#v}"
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VER"
 
           if [ -n "$VERSION_FROM_PR" ]; then
             # PR 제목에 버전이 있으면 그대로 사용 → MR↔배포 버전 동기화
@@ -63,11 +72,7 @@ jobs:
           else
             # 커밋 수 기반 버전 계산
             # feat 커밋 수 → MINOR 증가량 / fix 커밋 수 → PATCH 증가량
-            if [ "$LAST_TAG" = "v0.0.0" ]; then
-              COMMITS=$(git log --pretty=format:"%s" --no-merges)
-            else
-              COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" --no-merges)
-            fi
+            COMMITS=$(git log --pretty=format:"%s" --no-merges -100)
 
             FEAT_COUNT=$(echo "$COMMITS" | grep -cE '^\[.*?\]\s+feat\s*[:：]|^feat\s*[:：]' 2>/dev/null || echo 0)
             FIX_COUNT=$(echo "$COMMITS"  | grep -cE '^\[.*?\]\s+fix\s*[:：]|^fix\s*[:：]'   2>/dev/null || echo 0)

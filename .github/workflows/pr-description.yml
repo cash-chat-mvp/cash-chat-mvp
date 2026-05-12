@@ -42,6 +42,7 @@ jobs:
         if: github.head_ref == 'dev' && github.base_ref == 'release-fe'
         id: release
         env:
+          GITHUB_TOKEN:    ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           PR_TITLE:        ${{ github.event.pull_request.title }}
           PR_NUMBER:       ${{ github.event.pull_request.number }}
@@ -54,10 +55,17 @@ jobs:
           echo "issue_key=${ISSUE_KEY}" >> "$GITHUB_OUTPUT"
 
           # ── Semantic version 계산 ────────────────────────────────────────
-          # PR head(dev)의 커밋을 기준으로 계산
           git fetch --no-tags origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}-head" 2>/dev/null || true
 
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          # 현재 버전: GitHub Releases API (실제 마지막 배포 버전 기준)
+          LAST_RELEASE=$(curl -sf \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" \
+            2>/dev/null || echo "{}")
+          LAST_TAG=$(echo "$LAST_RELEASE" | jq -r '.tag_name // ""')
+          if [ -z "$LAST_TAG" ] || [ "$LAST_TAG" = "null" ]; then
+            LAST_TAG="v1.0.0"
+          fi
           LAST_VER="${LAST_TAG#v}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VER"
 
