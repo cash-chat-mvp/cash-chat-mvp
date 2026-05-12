@@ -71,6 +71,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -268,14 +269,14 @@ fun ChatScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF4F6F8))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // 상단 바
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.White)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -328,7 +329,7 @@ fun ChatScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.White)
+                    .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -367,8 +368,8 @@ fun ChatScreen(
                 modifier = Modifier
                     .padding(horizontal = 24.dp)
                     .clip(RoundedCornerShape(32.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(32.dp)),
-                color = Color.White.copy(alpha = 0.95f),
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(32.dp)),
+                color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 8.dp
             ) {
                 Row(
@@ -492,10 +493,10 @@ private fun TextBubble(message: ChatMessage.Text) {
                         if (message.isUser) RoundedCornerShape(18.dp, 2.dp, 18.dp, 18.dp)
                         else RoundedCornerShape(2.dp, 18.dp, 18.dp, 18.dp)
                     )
-                    .background(if (message.isUser) Color(0xFF5C6BFA) else Color.White)
+                    .background(if (message.isUser) Color(0xFF5C6BFA) else MaterialTheme.colorScheme.surface)
                     .border(
                         width = 1.dp,
-                        color = if (message.isUser) Color.Transparent else Color.Black.copy(alpha = 0.03f),
+                        color = if (message.isUser) Color.Transparent else MaterialTheme.colorScheme.outlineVariant,
                         shape = if (message.isUser) RoundedCornerShape(18.dp, 2.dp, 18.dp, 18.dp)
                                 else RoundedCornerShape(2.dp, 18.dp, 18.dp, 18.dp)
                     )
@@ -503,7 +504,7 @@ private fun TextBubble(message: ChatMessage.Text) {
             ) {
                 Text(
                     text = message.text,
-                    color = if (message.isUser) Color.White else Color(0xFF111827),
+                    color = if (message.isUser) Color.White else MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         lineHeight = 22.sp,
                         letterSpacing = 0.sp
@@ -584,7 +585,7 @@ private fun InlineAdCard(ad: AdInfo) {
                         Text(
                             ad.tagline,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF4B5563),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2
                         )
                     }
@@ -624,7 +625,7 @@ private fun RewardPromptCard(onWatchAd: () -> Unit) {
                 .fillMaxWidth(0.85f)
                 .padding(vertical = 4.dp),
             shape = RoundedCornerShape(20.dp, 2.dp, 20.dp, 20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x335C6BFA)),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
@@ -632,13 +633,13 @@ private fun RewardPromptCard(onWatchAd: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("🤔", style = MaterialTheme.typography.titleMedium)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("AI가 생각을 오래하네요...", fontWeight = FontWeight.Bold, color = Color(0xFF1F2937))
+                    Text("AI가 생각을 오래하네요...", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     "복잡한 질문이라 분석에 시간이 걸리고 있어요.\n짧은 광고를 보고 오시면 바로 답변 드릴게요! 🎁",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF6B7280),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 20.sp
                 )
                 Spacer(modifier = Modifier.height(14.dp))
@@ -693,8 +694,8 @@ private fun LoadingBubble() {
         
         Card(
             shape = RoundedCornerShape(2.dp, 18.dp, 18.dp, 18.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.Black.copy(alpha = 0.03f))
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -732,12 +733,17 @@ private fun IdleOverlay(
     onNavigateTab: (String) -> Unit,
     suggestions: List<String>
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDark = colorScheme.surface.luminance() < 0.5f
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.linearGradient(
-                    colors = listOf(Color(0xFFEEF0FF), Color(0xFFF8F4FF), Color(0xFFFFF4EE)),
+                    colors = if (isDark)
+                        listOf(Color(0xFF13152E), Color(0xFF181520), Color(0xFF1E1512))
+                    else
+                        listOf(Color(0xFFEEF0FF), Color(0xFFF8F4FF), Color(0xFFFFF4EE)),
                     start = androidx.compose.ui.geometry.Offset(0f, 0f),
                     end = androidx.compose.ui.geometry.Offset(1000f, 1000f)
                 )
@@ -800,16 +806,16 @@ private fun IdleOverlay(
             Spacer(modifier = Modifier.height(24.dp))
             
             Text(
-                "CashAI 비서", 
-                style = MaterialTheme.typography.headlineMedium, 
+                "CashAI 비서",
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF111827)
+                color = colorScheme.onBackground
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 "궁금한 것은 무엇이든 물어보세요.\n대화할수록 포인트가 쌓여요!",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF6B7280),
+                color = colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 lineHeight = 24.sp
             )
@@ -821,8 +827,8 @@ private fun IdleOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(28.dp))
-                    .background(Color.White.copy(alpha = 0.8f))
-                    .border(1.dp, Color.White, RoundedCornerShape(28.dp))
+                    .background(colorScheme.surface.copy(alpha = 0.9f))
+                    .border(1.dp, colorScheme.outlineVariant, RoundedCornerShape(28.dp))
                     .padding(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -869,15 +875,15 @@ private fun IdleOverlay(
                     Surface(
                         onClick = { onSuggestionClick(suggestion) },
                         shape = RoundedCornerShape(20.dp),
-                        color = Color.White.copy(alpha = 0.6f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.Black.copy(alpha = 0.05f)),
+                        color = colorScheme.surfaceVariant,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.outlineVariant),
                         modifier = Modifier.padding(4.dp)
                     ) {
                         Text(
                             text = suggestion,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF4B5563),
+                            color = colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                         )
                     }
@@ -891,8 +897,8 @@ private fun IdleOverlay(
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp)
                 .clip(RoundedCornerShape(32.dp))
-                .background(Color.White.copy(alpha = 0.8f))
-                .border(1.dp, Color.White, RoundedCornerShape(32.dp))
+                .background(colorScheme.surface.copy(alpha = 0.92f))
+                .border(1.dp, colorScheme.outlineVariant, RoundedCornerShape(32.dp))
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -924,14 +930,14 @@ private fun IdleNavItem(
             Icon(
                 icon,
                 contentDescription = label,
-                tint = if (active) Color.White else Color(0xFF9CA3AF),
+                tint = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(24.dp)
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = label,
-            color = if (active) Color(0xFF5C6BFA) else Color(0xFF9CA3AF),
+            color = if (active) Color(0xFF5C6BFA) else MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
         )

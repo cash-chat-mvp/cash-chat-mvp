@@ -88,14 +88,14 @@ fun RewardsScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF4F6F8)),
+            .background(MaterialTheme.colorScheme.background),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             // Header Section
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
+                color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 1.dp
             ) {
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
@@ -103,7 +103,7 @@ fun RewardsScreen(
                         text = "리워드 미션",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF111827)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(20.dp))
 
@@ -183,7 +183,7 @@ fun RewardsScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Row(
@@ -196,7 +196,7 @@ fun RewardsScreen(
                             modifier = Modifier
                                 .size(52.dp)
                                 .clip(RoundedCornerShape(16.dp))
-                                .background(Color(0xFFF4F6F8)),
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
@@ -212,13 +212,13 @@ fun RewardsScreen(
                                 text = mission.title,
                                 fontWeight = FontWeight.ExtraBold,
                                 style = MaterialTheme.typography.titleMedium,
-                                color = Color(0xFF111827)
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = mission.description,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF6B7280),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 lineHeight = 18.sp
                             )
                             
@@ -230,7 +230,7 @@ fun RewardsScreen(
                                         .fillMaxWidth()
                                         .height(6.dp)
                                         .clip(RoundedCornerShape(99.dp)),
-                                    trackColor = Color(0xFFF1F5F9),
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
                                     color = Color(0xFF5C6BFA),
                                     strokeCap = StrokeCap.Round
                                 )
@@ -238,7 +238,7 @@ fun RewardsScreen(
                                 Text(
                                     "진행도 $progress/${mission.maxProgress}",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF94A3B8),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -260,20 +260,20 @@ fun RewardsScreen(
                                     Row(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(12.dp))
-                                            .background(Color(0xFFF8FAFC))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant)
                                             .padding(horizontal = 12.dp, vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
                                             Icons.Default.CheckCircle,
                                             contentDescription = null,
-                                            tint = Color(0xFF94A3B8),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(16.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
                                             "완료",
-                                            color = Color(0xFF94A3B8),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -287,8 +287,8 @@ fun RewardsScreen(
                                         enabled = canClaim,
                                         shape = RoundedCornerShape(14.dp),
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = if (canClaim) Color(0xFFFF6B00) else Color(0xFFF1F5F9),
-                                            contentColor = if (canClaim) Color.White else Color(0xFF94A3B8)
+                                            containerColor = if (canClaim) Color(0xFFFF6B00) else MaterialTheme.colorScheme.surfaceVariant,
+                                            contentColor = if (canClaim) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                                         ),
                                         modifier = Modifier.height(40.dp),
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp)

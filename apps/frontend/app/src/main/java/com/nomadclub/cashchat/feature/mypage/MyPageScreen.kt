@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,9 +25,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Redeem
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -50,27 +51,29 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nomadclub.cashchat.BuildConfig
 
 private data class MenuItem(
     val icon: ImageVector,
     val label: String,
-    val badge: String? = null
+    val badge: String? = null,
+    val onClick: () -> Unit = {}
 )
 
 @Composable
 fun MyPageScreen(
     points: Int,
-    onLogout: () -> Unit = {}
+    onLogout: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {}
 ) {
     val menuItems = listOf(
         MenuItem(Icons.Default.Redeem, "내 기프티콘 보관함", "2"),
         MenuItem(Icons.Default.History, "포인트 적립/사용 내역"),
         MenuItem(Icons.Default.Notifications, "공지사항", "N"),
         MenuItem(Icons.AutoMirrored.Filled.Help, "고객센터"),
-        MenuItem(Icons.Default.Settings, "설정")
+        MenuItem(Icons.Default.Settings, "설정", onClick = onNavigateToSettings)
     )
 
     var visible by remember { mutableStateOf(false) }
@@ -81,10 +84,10 @@ fun MyPageScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF4F6F8))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         item {
-            // Profile Section
+            // Profile Section (그라디언트 — 다크모드 무관하게 유지)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -109,20 +112,20 @@ fun MyPageScreen(
                         Spacer(modifier = Modifier.width(20.dp))
                         Column {
                             Text(
-                                "홍길동님", 
-                                color = Color.White, 
-                                style = MaterialTheme.typography.headlineSmall, 
+                                "홍길동님",
+                                color = Color.White,
+                                style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Black
                             )
                             Text(
-                                "gildong@kakao.com", 
-                                color = Color.White.copy(alpha = 0.8f), 
+                                "gildong@kakao.com",
+                                color = Color.White.copy(alpha = 0.8f),
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
                     Spacer(modifier = Modifier.height(28.dp))
-                    
+
                     // Points Card
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -131,31 +134,31 @@ fun MyPageScreen(
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             Text(
-                                "보유 포인트", 
-                                color = Color.White.copy(alpha = 0.9f), 
+                                "보유 포인트",
+                                color = Color.White.copy(alpha = 0.9f),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
-                                    text = String.format("%,d", points), 
-                                    color = Color.White, 
-                                    fontSize = 32.sp, 
+                                    text = String.format("%,d", points),
+                                    color = Color.White,
+                                    fontSize = 32.sp,
                                     fontWeight = FontWeight.Black
                                 )
                                 Text(
-                                    " P", 
-                                    color = Color.White, 
-                                    fontSize = 18.sp, 
+                                    " P",
+                                    color = Color.White,
+                                    fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(bottom = 4.dp, start = 4.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                "누적 획득 포인트: 15,750 P", 
-                                color = Color.White.copy(alpha = 0.6f), 
+                                "누적 획득 포인트: 15,750 P",
+                                color = Color.White.copy(alpha = 0.6f),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -171,15 +174,16 @@ fun MyPageScreen(
         itemsIndexed(menuItems) { index, item ->
             AnimatedVisibility(
                 visible = visible,
-                enter = fadeIn(tween(400, delayMillis = index * 50)) + 
+                enter = fadeIn(tween(400, delayMillis = index * 50)) +
                         slideInHorizontally(tween(400, delayMillis = index * 50)) { -40 }
             ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 6.dp),
+                        .padding(horizontal = 20.dp, vertical = 6.dp)
+                        .clickable { item.onClick() },
                     shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Row(
@@ -194,36 +198,45 @@ fun MyPageScreen(
                                 modifier = Modifier
                                     .size(40.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFFF4F6F8)),
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(item.icon, contentDescription = null, tint = Color(0xFF5C6BFA), modifier = Modifier.size(20.dp))
+                                Icon(
+                                    item.icon,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                             Spacer(modifier = Modifier.width(16.dp))
                             Text(
-                                item.label, 
+                                item.label,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF1F2937),
+                                color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 15.sp
                             )
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             if (item.badge != null) {
                                 Surface(
-                                    color = Color(0xFFFF6B00),
+                                    color = MaterialTheme.colorScheme.secondary,
                                     shape = CircleShape
                                 ) {
                                     Text(
-                                        item.badge, 
-                                        color = Color.White, 
-                                        fontSize = 11.sp, 
+                                        item.badge,
+                                        color = Color.White,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Black,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
                             }
-                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color(0xFFD1D5DB))
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -238,7 +251,7 @@ fun MyPageScreen(
                 modifier = Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF111827)
+                color = MaterialTheme.colorScheme.onBackground
             )
             Spacer(modifier = Modifier.height(12.dp))
             Row(
@@ -251,9 +264,9 @@ fun MyPageScreen(
                 ActivityCard("142", "총 대화수", Color(0xFFFF6B00), Modifier.weight(1f))
                 ActivityCard("3", "교환 상품", Color(0xFF16A34A), Modifier.weight(1f))
             }
-            
+
             Spacer(modifier = Modifier.height(32.dp))
-            
+
             // Logout Button
             Box(modifier = Modifier.padding(horizontal = 24.dp)) {
                 Button(
@@ -261,10 +274,10 @@ fun MyPageScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp)
-                        .border(1.dp, Color(0xFFE5E7EB), RoundedCornerShape(16.dp)),
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp)),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Transparent, 
-                        contentColor = Color(0xFF6B7280)
+                        containerColor = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     elevation = null,
                     shape = RoundedCornerShape(16.dp)
@@ -274,24 +287,33 @@ fun MyPageScreen(
                     Text("로그아웃", fontWeight = FontWeight.Bold)
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(40.dp))
-            
+
             // App Info
             Column(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "AI Chat+ v1.0.0",
-                    color = Color(0xFF9CA3AF),
+                    "Cash Chat  v${BuildConfig.VERSION_NAME}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "© 2026 AI Chat Plus. All rights reserved.",
-                    color = Color(0xFF9CA3AF).copy(alpha = 0.7f),
+                    "wildNomadLab",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    "© 2026 wildNomadLab. All rights reserved.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                     style = MaterialTheme.typography.labelSmall
                 )
             }
@@ -308,24 +330,26 @@ private fun ActivityCard(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                value, 
-                color = accent, 
-                fontWeight = FontWeight.Black, 
+                value,
+                color = accent,
+                fontWeight = FontWeight.Black,
                 fontSize = 24.sp
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                label, 
-                color = Color(0xFF64748B), 
+                label,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )

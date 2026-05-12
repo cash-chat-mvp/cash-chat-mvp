@@ -24,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -40,7 +41,9 @@ import com.nomadclub.cashchat.feature.auth.AuthViewModel
 import com.nomadclub.cashchat.feature.auth.LoginScreen
 import com.nomadclub.cashchat.feature.main.MainScreen
 import com.nomadclub.cashchat.feature.onboarding.OnboardingScreen
+import com.nomadclub.cashchat.feature.settings.SettingsViewModel
 import com.nomadclub.cashchat.ui.theme.CashChatTheme
+import com.nomadclub.cashchat.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -66,9 +69,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            CashChatTheme {
-                CashChatApp()
-            }
+            CashChatApp()
         }
     }
 }
@@ -78,6 +79,21 @@ class MainActivity : ComponentActivity() {
  */
 @Composable
 private fun CashChatApp() {
+    val settingsViewModel: SettingsViewModel = koinViewModel()
+    val themeMode by settingsViewModel.themeMode.collectAsState()
+    val isDark = when (themeMode) {
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    }
+
+    CashChatTheme(darkTheme = isDark) {
+        CashChatAppContent()
+    }
+}
+
+@Composable
+private fun CashChatAppContent() {
     // 앱 시작 시 게스트 세션 자동 초기화 (CC-154, CC-155)
     val authViewModel: AuthViewModel = koinViewModel()
     val authState by authViewModel.authState.collectAsState()

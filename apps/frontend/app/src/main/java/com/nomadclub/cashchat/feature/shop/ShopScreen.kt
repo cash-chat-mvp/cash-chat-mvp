@@ -115,11 +115,11 @@ fun ShopScreen(
         (searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) || it.brand.contains(searchQuery, ignoreCase = true))
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Color(0xFFF4F6F8))) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Header
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             shadowElevation = 1.dp
         ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
@@ -132,7 +132,7 @@ fun ShopScreen(
                         "포인트 상점",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF111827)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Surface(
                         color = Color(0xFF5C6BFA),
@@ -160,9 +160,9 @@ fun ShopScreen(
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8)) },
                     shape = RoundedCornerShape(16.dp),
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFFF1F5F9),
-                        unfocusedContainerColor = Color(0xFFF1F5F9),
-                        disabledContainerColor = Color(0xFFF1F5F9),
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
                     ),
@@ -174,7 +174,7 @@ fun ShopScreen(
         // Categories
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            color = Color.White,
+            color = MaterialTheme.colorScheme.surface,
             shadowElevation = 0.dp
         ) {
             LazyRow(
@@ -186,7 +186,7 @@ fun ShopScreen(
                     val selected = category == selectedCategory
                     Surface(
                         modifier = Modifier.clickable { selectedCategory = category },
-                        color = if (selected) Color(0xFF5C6BFA) else Color(0xFFF1F5F9),
+                        color = if (selected) Color(0xFF5C6BFA) else MaterialTheme.colorScheme.surfaceVariant,
                         shape = RoundedCornerShape(99.dp)
                     ) {
                         Row(
@@ -195,15 +195,15 @@ fun ShopScreen(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                category.icon, 
-                                contentDescription = null, 
+                                category.icon,
+                                contentDescription = null,
                                 modifier = Modifier.size(16.dp),
-                                tint = if (selected) Color.White else Color(0xFF4B5563)
+                                tint = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 category.label,
-                                color = if (selected) Color.White else Color(0xFF4B5563),
+                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -229,7 +229,7 @@ fun ShopScreen(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         Column(modifier = Modifier.fillMaxWidth()) {
@@ -237,11 +237,7 @@ fun ShopScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(1.2f)
-                                    .background(
-                                        Brush.linearGradient(
-                                            listOf(Color(0xFFF1F5F9), Color(0xFFE2E8F0))
-                                        )
-                                    ),
+                                    .background(MaterialTheme.colorScheme.surfaceVariant),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(item.emoji, fontSize = 48.sp)
@@ -250,10 +246,10 @@ fun ShopScreen(
                                 Text(item.brand, style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8), fontWeight = FontWeight.Bold)
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    item.name, 
-                                    style = MaterialTheme.typography.bodyMedium, 
+                                    item.name,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF1F2937),
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.height(40.dp)
@@ -309,35 +305,35 @@ fun ShopScreen(
                         .fillMaxWidth(0.85f)
                         .clickable(enabled = false) {},
                     shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(24.dp)) {
-                        Text("구매 확인", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color(0xFF111827))
+                        Text("구매 확인", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "${item.brand} ${item.name}을(를) 구매하시겠습니까?", 
-                            color = Color(0xFF4B5563),
+                            "${item.brand} ${item.name}을(를) 구매하시겠습니까?",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Spacer(modifier = Modifier.height(24.dp))
                         
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            color = Color(0xFFF8FAFC),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
                             shape = RoundedCornerShape(20.dp)
                         ) {
                             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("현재 포인트", color = Color(0xFF64748B), fontSize = 14.sp)
+                                    Text("현재 포인트", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                                     Text("${String.format("%,d", points)} P", fontWeight = FontWeight.Bold)
                                 }
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("사용 포인트", color = Color(0xFF64748B), fontSize = 14.sp)
+                                    Text("사용 포인트", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                                     Text("-${String.format("%,d", item.points)} P", fontWeight = FontWeight.Bold, color = Color(0xFFFF6B00))
                                 }
                                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFFE2E8F0))
                                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("남은 포인트", fontWeight = FontWeight.Bold, color = Color(0xFF111827))
+                                    Text("남은 포인트", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                     Text("${String.format("%,d", points - item.points)} P", fontWeight = FontWeight.Black, color = Color(0xFF5C6BFA))
                                 }
                             }
@@ -348,7 +344,7 @@ fun ShopScreen(
                             Button(
                                 onClick = { showPurchaseDialog = false },
                                 modifier = Modifier.weight(1f).height(52.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF1F5F9), contentColor = Color(0xFF475569)),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
                                 shape = RoundedCornerShape(16.dp)
                             ) { Text("취소", fontWeight = FontWeight.Bold) }
                             Button(
@@ -390,7 +386,7 @@ fun ShopScreen(
                         .fillMaxWidth(0.85f)
                         .clickable(enabled = false) {},
                     shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(
                         modifier = Modifier.padding(32.dp),
@@ -398,11 +394,11 @@ fun ShopScreen(
                     ) {
                         Text("😢", fontSize = 64.sp)
                         Spacer(modifier = Modifier.height(20.dp))
-                        Text("포인트가 부족해요!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Color(0xFF111827))
+                        Text("포인트가 부족해요!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "10초 광고를 보고 포인트를 더 모으시겠어요?", 
-                            color = Color(0xFF64748B),
+                            "10초 광고를 보고 포인트를 더 모으시겠어요?",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(32.dp))
@@ -410,7 +406,7 @@ fun ShopScreen(
                             Button(
                                 onClick = { showNotEnoughDialog = false },
                                 modifier = Modifier.weight(1f).height(52.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF1F5F9), contentColor = Color(0xFF475569)),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
                                 shape = RoundedCornerShape(16.dp)
                             ) { Text("닫기", fontWeight = FontWeight.Bold) }
                             Button(
