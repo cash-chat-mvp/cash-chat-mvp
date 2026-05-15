@@ -125,16 +125,23 @@ jobs:
               '"Cash Chat 앱 v\($ver) 한국어 릴리즈 노트를 작성해주세요.\n\n[새 기능 커밋]\n\($feat)\n\n[버그 수정 커밋]\n\($fix)\n\n[기타 변경 커밋]\n\($other)\n\n작성 규칙:\n- 사용자가 직접 느끼는 변화만 작성 (\"~ 개선했습니다\" 형태)\n- 개발자 용어·함수명·파일명 금지\n- QA·리팩토링·코드정리 언급 금지\n- 이모지로 시작하는 불릿 포인트 3~5줄\n- 전체 200자 이내로 간결하게\n- 변경사항 없는 섹션은 생략"')
 
             HTTP_RESPONSE=$(mktemp)
-            HTTP_CODE=$(curl -s -o "$HTTP_RESPONSE" -w "%{http_code}" \
-              "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
-              -H "content-type: application/json" \
-              --data "$(jq -n --arg p "$PROMPT" '{
-                contents: [{"parts": [{"text": $p}]}],
-                generationConfig: { temperature: 0.4 }
-              }')") || HTTP_CODE="000"
+            HTTP_CODE="000"
+            for attempt in 1 2 3; do
+              HTTP_CODE=$(curl -s -o "$HTTP_RESPONSE" -w "%{http_code}" \
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
+                -H "content-type: application/json" \
+                --data "$(jq -n --arg p "$PROMPT" '{
+                  contents: [{"parts": [{"text": $p}]}],
+                  generationConfig: { temperature: 0.4 }
+                }')") || HTTP_CODE="000"
+              [ "$HTTP_CODE" != "429" ] && break
+              [ "$attempt" -lt 3 ] && echo "::warning::Gemini 429 — ${attempt}회 재시도 (60초 후)" && sleep 60
+            done
+
+            echo "::notice::Gemini API 응답 (HTTP $HTTP_CODE): $(cat "$HTTP_RESPONSE")"
 
             if [ "$HTTP_CODE" != "200" ]; then
-              echo "::warning::Gemini API 실패 (HTTP $HTTP_CODE): $(head -c 300 "$HTTP_RESPONSE")"
+              echo "::warning::Gemini API 실패 (HTTP $HTTP_CODE)"
               NOTES="v${NEW_VERSION} 새 빌드가 배포될 예정입니다."
             else
               NOTES=$(jq -r '.candidates[0].content.parts[0].text // empty' "$HTTP_RESPONSE" 2>/dev/null || echo "")
