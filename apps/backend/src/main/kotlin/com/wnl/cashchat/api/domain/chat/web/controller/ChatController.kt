@@ -10,6 +10,7 @@ import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
+import io.swagger.v3.oas.annotations.media.ArraySchema
 import io.swagger.v3.oas.annotations.media.Content
 import io.swagger.v3.oas.annotations.media.Schema
 import io.swagger.v3.oas.annotations.parameters.RequestBody as OpenApiRequestBody
@@ -35,7 +36,7 @@ import java.util.UUID
  */
 @RestController
 @RequestMapping("/api/v1/chat")
-@Tag(name = "Chat", description = "Chat streaming endpoints")
+@Tag(name = "Chat", description = "Chat conversation and streaming endpoints")
 class ChatController(
     private val chatService: ChatService,
 ) {
@@ -43,10 +44,29 @@ class ChatController(
     @PostMapping("/conversations")
     @Operation(
         summary = "Create a chat conversation",
-        description = "Creates a new chat room for the authenticated user."
+        description = "Creates a new chat room for the authenticated user. The frontend usually calls this before the first stream request."
+    )
+    @ApiResponses(
+        value = [
+            ApiResponse(
+                responseCode = "200",
+                description = "Conversation created successfully.",
+                content = [Content(schema = Schema(implementation = ConversationResponse::class))]
+            ),
+            ApiResponse(
+                responseCode = "401",
+                description = "Authentication is required.",
+                content = [Content(schema = Schema(implementation = ErrorResponse::class))]
+            )
+        ]
     )
     fun createConversation(
         authentication: Authentication,
+        @OpenApiRequestBody(
+            required = false,
+            description = "Optional conversation title, usually derived from the first user message.",
+            content = [Content(schema = Schema(implementation = CreateConversationRequest::class))]
+        )
         @RequestBody(required = false) request: CreateConversationRequest?,
     ): ConversationResponse =
         chatService.createConversation(
@@ -59,6 +79,24 @@ class ChatController(
         summary = "List chat conversations",
         description = "Returns the authenticated user's chat rooms ordered by most recent activity."
     )
+    @ApiResponses(
+        value = [
+            ApiResponse(
+                responseCode = "200",
+                description = "Conversation list returned successfully.",
+                content = [
+                    Content(
+                        array = ArraySchema(schema = Schema(implementation = ConversationSummaryResponse::class))
+                    )
+                ]
+            ),
+            ApiResponse(
+                responseCode = "401",
+                description = "Authentication is required.",
+                content = [Content(schema = Schema(implementation = ErrorResponse::class))]
+            )
+        ]
+    )
     fun listConversations(authentication: Authentication): List<ConversationSummaryResponse> =
         chatService.listConversations(userId = authentication.userId())
 
@@ -67,9 +105,34 @@ class ChatController(
         summary = "Get conversation messages",
         description = "Returns the selected chat room's persisted message history."
     )
+    @ApiResponses(
+        value = [
+            ApiResponse(
+                responseCode = "200",
+                description = "Conversation messages returned successfully.",
+                content = [
+                    Content(
+                        array = ArraySchema(schema = Schema(implementation = ChatMessageResponse::class))
+                    )
+                ]
+            ),
+            ApiResponse(
+                responseCode = "401",
+                description = "Authentication is required.",
+                content = [Content(schema = Schema(implementation = ErrorResponse::class))]
+            ),
+            ApiResponse(
+                responseCode = "404",
+                description = "Conversation not found, or it belongs to another user.",
+                content = [Content(schema = Schema(implementation = ErrorResponse::class))]
+            )
+        ]
+    )
     fun getMessages(
         authentication: Authentication,
-        @PathVariable conversationId: Long,
+        @PathVariable
+        @Parameter(description = "Conversation identifier.", example = "7")
+        conversationId: Long,
     ): List<ChatMessageResponse> =
         chatService.getMessages(
             userId = authentication.userId(),
@@ -153,7 +216,8 @@ class ChatController(
             ),
             ApiResponse(responseCode = "400", description = "The request body is invalid."),
             ApiResponse(responseCode = "401", description = "Authentication is required."),
-            ApiResponse(responseCode = "402", description = "The user does not have enough points.")
+            ApiResponse(responseCode = "402", description = "The user does not have enough points."),
+            ApiResponse(responseCode = "404", description = "Conversation not found, or it belongs to another user.")
         ]
     )
     fun stream(
