@@ -82,17 +82,17 @@ jobs:
           echo "ℹ️ [${PLATFORM}] 기준 버전: ${LAST_TAG}"
 
           if [ "$HAS_PREV_TAG" = "true" ]; then
-            COMMITS_RAW=$(git log "${LAST_TAG}..pr-${PR_NUMBER}-head" --pretty=format:"%s" --no-merges 2>/dev/null || echo "")
+            COMMITS_RAW=$(git log "${LAST_TAG}..pr-${PR_NUMBER}-head" --pretty=format:"%B" --no-merges 2>/dev/null || echo "")
           else
-            COMMITS_RAW=$(git log "pr-${PR_NUMBER}-head" --pretty=format:"%s" --no-merges 2>/dev/null | head -50 || echo "")
+            COMMITS_RAW=$(git log "pr-${PR_NUMBER}-head" --pretty=format:"%B" --no-merges 2>/dev/null | head -100 || echo "")
           fi
 
           # PR 라벨에서 major 제어 확인
           HAS_MAJOR_LABEL=$(echo "$PR_LABELS_JSON" | jq -r 'if type == "array" then map(select(test("version\\.major"; "i"))) | length > 0 else false end // false')
 
-          FEAT_COUNT=$(echo "$COMMITS_RAW" | grep -cE '^\[[^]]+\]\s+feat\s*[:：]|^feat\s*[:：]' 2>/dev/null) || FEAT_COUNT=0
-          FIX_COUNT=$(echo "$COMMITS_RAW"  | grep -cE '^\[[^]]+\]\s+fix\s*[:：]|^fix\s*[:：]'   2>/dev/null) || FIX_COUNT=0
-          BREAKING=$(echo "$COMMITS_RAW"   | grep -cE 'BREAKING[[:space:]]CHANGE'              2>/dev/null) || BREAKING=0
+          FEAT_COUNT=$(echo "$COMMITS_RAW" | grep -cE '^\[[^]]+\]\s+feat(\([^)]+\))?\s*[:：!]|^feat(\([^)]+\))?\s*[:：!]' 2>/dev/null) || FEAT_COUNT=0
+          FIX_COUNT=$(echo "$COMMITS_RAW"  | grep -cE '^\[[^]]+\]\s+fix(\([^)]+\))?\s*[:：!]|^fix(\([^)]+\))?\s*[:：!]'   2>/dev/null) || FIX_COUNT=0
+          BREAKING=$(echo "$COMMITS_RAW"   | grep -cE 'BREAKING[[:space:]]CHANGE|^feat(\([^)]+\))?!|^fix(\([^)]+\))?!'    2>/dev/null) || BREAKING=0
 
           if [ "$BREAKING" -gt 0 ] || [ "$HAS_MAJOR_LABEL" = "true" ]; then
             NEW_VERSION="$((MAJOR + 1)).0.0"

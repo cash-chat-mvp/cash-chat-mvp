@@ -71,14 +71,14 @@ jobs:
           else
             # 커밋 수 기반 버전 계산 (마지막 ios 태그 이후 커밋만)
             if [ "$HAS_PREV_TAG" = "true" ]; then
-              COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%s" --no-merges 2>/dev/null || echo "")
+              COMMITS=$(git log "${LAST_TAG}..HEAD" --pretty=format:"%B" --no-merges 2>/dev/null || echo "")
             else
-              COMMITS=$(git log --pretty=format:"%s" --no-merges | head -100 || echo "")
+              COMMITS=$(git log --pretty=format:"%B" --no-merges | head -200 || echo "")
             fi
 
-            FEAT_COUNT=$(echo "$COMMITS" | grep -cE '^\[[^]]+\]\s+feat\s*[:：]|^feat\s*[:：]' 2>/dev/null) || FEAT_COUNT=0
-            FIX_COUNT=$(echo "$COMMITS"  | grep -cE '^\[[^]]+\]\s+fix\s*[:：]|^fix\s*[:：]'   2>/dev/null) || FIX_COUNT=0
-            BREAKING=$(echo "$COMMITS"   | grep -cE 'BREAKING[[:space:]]CHANGE'              2>/dev/null) || BREAKING=0
+            FEAT_COUNT=$(echo "$COMMITS" | grep -cE '^\[[^]]+\]\s+feat(\([^)]+\))?\s*[:：!]|^feat(\([^)]+\))?\s*[:：!]' 2>/dev/null) || FEAT_COUNT=0
+            FIX_COUNT=$(echo "$COMMITS"  | grep -cE '^\[[^]]+\]\s+fix(\([^)]+\))?\s*[:：!]|^fix(\([^)]+\))?\s*[:：!]'   2>/dev/null) || FIX_COUNT=0
+            BREAKING=$(echo "$COMMITS"   | grep -cE 'BREAKING[[:space:]]CHANGE|^feat(\([^)]+\))?!|^fix(\([^)]+\))?!' 2>/dev/null) || BREAKING=0
 
             if [ "$BREAKING" -gt 0 ] || [ "$HAS_MAJOR_LABEL" = "true" ]; then
               NEW_VERSION="$((MAJOR + 1)).0.0"
@@ -91,9 +91,9 @@ jobs:
             fi
           fi
 
-          # versionCode: MAJOR*10000 + MINOR*100 + PATCH (Fastfile에서 TestFlight 최신값으로 보정)
+          # versionCode: MAJOR*1000000 + MINOR*1000 + PATCH (각 자리 최대 999까지 허용, Fastfile에서 TestFlight 최신값으로 보정)
           IFS='.' read -r NM NMI NP <<< "$NEW_VERSION"
-          VERSION_CODE=$(( NM * 10000 + NMI * 100 + NP ))
+          VERSION_CODE=$(( NM * 1000000 + NMI * 1000 + NP ))
 
           if [ "$VERSION_CODE" -eq 0 ]; then
             echo "::error::VERSION_CODE 계산 실패 — NEW_VERSION=${NEW_VERSION}"
@@ -110,8 +110,14 @@ jobs:
           else
             git tag -a "${NEW_TAG}" -m "chore: ios release v${NEW_VERSION}"
           fi
-          if git ls-remote --exit-code --tags origin "refs/tags/${NEW_TAG}" >/dev/null; then
-            echo "ℹ️ 원격 태그 ${NEW_TAG} 이미 존재 — 푸시 스킵"
+          HEAD_SHA=$(git rev-parse HEAD)
+          REMOTE_SHA=$(git ls-remote origin "refs/tags/${NEW_TAG}^{}" 2>/dev/null | awk 'NR==1 {print $1}')
+          if [ -n "$REMOTE_SHA" ]; then
+            if [ "$REMOTE_SHA" != "$HEAD_SHA" ]; then
+              echo "::error::원격 태그 ${NEW_TAG}가 다른 커밋(${REMOTE_SHA})을 가리킵니다. 버전 충돌 가능성이 있습니다."
+              exit 1
+            fi
+            echo "ℹ️ 원격 태그 ${NEW_TAG}가 현재 커밋을 가리킴 — 동일 커밋 재실행으로 간주, 푸시 스킵"
           else
             git push origin "${NEW_TAG}"
           fi
