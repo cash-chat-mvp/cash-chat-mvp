@@ -3,6 +3,7 @@ package com.wnl.cashchat.api.domain.chat.service
 import com.wnl.cashchat.api.domain.chat.exception.ConversationAccessDeniedException
 import com.wnl.cashchat.api.domain.chat.exception.ConversationNotFoundException
 import com.wnl.cashchat.api.domain.chat.persistence.entity.ChatMessage
+import com.wnl.cashchat.api.domain.chat.persistence.entity.Conversation
 import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageRole
 import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageStatus
 import com.wnl.cashchat.api.domain.chat.persistence.repository.ChatMessageRepository
@@ -10,13 +11,18 @@ import com.wnl.cashchat.api.domain.chat.persistence.repository.ConversationRepos
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessage
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
+import com.wnl.cashchat.api.domain.chat.web.response.ChatMessageResponse
+import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
+import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
 import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
 import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import reactor.core.publisher.Flux
 import reactor.core.publisher.SignalType
+import java.time.Instant
 import java.util.UUID
 
 /**
@@ -26,21 +32,65 @@ import java.util.UUID
 class ChatService(
     private val conversationRepository: ConversationRepository,
     private val chatMessageRepository: ChatMessageRepository,
+    private val userRepository: UserRepository,
     private val userPointService: UserPointService,
     private val llmProvider: LlmProvider,
     transactionManager: PlatformTransactionManager,
 ) {
     private val transactionTemplate = TransactionTemplate(transactionManager)
 
+    fun createConversation(userId: Long, title: String?): ConversationResponse {
+        val conversation = transactionTemplate.execute {
+            val user = userRepository.findById(userId)
+                .orElseThrow { IllegalArgumentException("User not found") }
+            conversationRepository.save(
+                Conversation(
+                    user = user,
+                    title = title.normalizedTitle()
+                )
+            )
+        } ?: error("Failed to create conversation")
+
+        return conversation.toResponse()
+    }
+
+    fun listConversations(userId: Long): List<ConversationSummaryResponse> {
+        val conversations = conversationRepository.findAllByUserIdOrderByUpdatedAtDesc(userId)
+        val conversationIds = conversations.map { it.id }
+        val latestMessagesByConversationId = if (conversationIds.isEmpty()) {
+            emptyMap()
+        } else {
+            chatMessageRepository.findLatestByConversationIds(conversationIds)
+                .associateBy { it.conversation.id }
+        }
+
+        return conversations.map { conversation ->
+            val latestMessage = latestMessagesByConversationId[conversation.id]
+            ConversationSummaryResponse(
+                conversationId = conversation.id,
+                title = conversation.displayTitle(),
+                lastMessage = latestMessage?.content,
+                createdAt = conversation.createdAt,
+                updatedAt = conversation.updatedAt,
+            )
+        }
+    }
+
+    fun getMessages(userId: Long, conversationId: Long): List<ChatMessageResponse> {
+        conversationRepository.findByIdAndUserId(conversationId, userId)
+            ?: throw ConversationNotFoundException(conversationId)
+
+        return chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
+            .map { it.toResponse() }
+    }
+
     /**
      * Streams an assistant response while persisting the user input and final assistant state.
      */
     fun stream(userId: Long, conversationId: Long, content: String): Flux<String> {
         val streamContext = transactionTemplate.execute {
-            val conversation = conversationRepository.findById(conversationId)
-                .orElseThrow { IllegalArgumentException("Conversation not found") }
-
-            require(conversation.user.id == userId) { "Conversation does not belong to user" }
+            val conversation = conversationRepository.findByIdAndUserId(conversationId, userId)
+                ?: throw ConversationNotFoundException(conversationId)
 
             if (!userPointService.hasEnoughBalance(userId)) {
                 throw InsufficientPointsException()
@@ -54,6 +104,8 @@ class ChatService(
                     status = MessageStatus.COMPLETED
                 )
             )
+            conversation.updatedAt = Instant.now()
+            conversationRepository.save(conversation)
 
             val history = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
             val providerMessages = history
@@ -134,8 +186,34 @@ class ChatService(
             content = content
         )
 
+    private fun ChatMessage.toResponse(): ChatMessageResponse =
+        ChatMessageResponse(
+            messageId = id,
+            role = role.name,
+            content = content,
+            status = status.name,
+            createdAt = createdAt,
+        )
+
+    private fun Conversation.toResponse(): ConversationResponse =
+        ConversationResponse(
+            conversationId = id,
+            title = displayTitle(),
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+        )
+
+    private fun Conversation.displayTitle(): String = title.normalizedTitle()
+
+    private fun String?.normalizedTitle(): String =
+        this?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_CONVERSATION_TITLE
+
     private data class StreamContext(
         val assistantMessageId: Long,
         val providerMessages: List<LlmMessage>,
     )
+
+    private companion object {
+        const val DEFAULT_CONVERSATION_TITLE = "새 채팅"
+    }
 }
