@@ -142,6 +142,109 @@ class AuthControllerTest {
     }
 
     @Test
+    fun `apple callback accepts authorization code and optional fields from json body`() {
+        whenever(
+            authService.loginWithApple(
+                authorizationCode = "apple-authorization-code",
+                identityToken = "apple-identity-token",
+                fullName = "Apple User",
+                deviceToken = "device-token"
+            )
+        ).thenReturn(
+            AuthResponse(
+                userId = 1L,
+                role = Role.MEMBER,
+                accessToken = "access-token",
+                refreshToken = "refresh-token"
+            )
+        )
+
+        mockMvc.perform(
+            post("/api/auth/callback/apple")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {
+                      "authorizationCode": "apple-authorization-code",
+                      "identityToken": "apple-identity-token",
+                      "fullName": "Apple User",
+                      "deviceToken": "device-token"
+                    }
+                    """.trimIndent()
+                )
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.userId").value(1))
+            .andExpect(jsonPath("$.role").value("MEMBER"))
+            .andExpect(jsonPath("$.accessToken").value("access-token"))
+            .andExpect(jsonPath("$.refreshToken").value("refresh-token"))
+
+        verify(authService).loginWithApple(
+            authorizationCode = "apple-authorization-code",
+            identityToken = "apple-identity-token",
+            fullName = "Apple User",
+            deviceToken = "device-token"
+        )
+    }
+
+    @Test
+    fun `apple callback accepts nullable optional fields`() {
+        whenever(
+            authService.loginWithApple(
+                authorizationCode = "apple-authorization-code",
+                identityToken = null,
+                fullName = null,
+                deviceToken = null
+            )
+        ).thenReturn(
+            AuthResponse(
+                userId = 1L,
+                role = Role.MEMBER,
+                accessToken = "access-token",
+                refreshToken = "refresh-token"
+            )
+        )
+
+        mockMvc.perform(
+            post("/api/auth/callback/apple")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"authorizationCode":"apple-authorization-code"}""")
+        )
+            .andExpect(status().isOk)
+
+        verify(authService).loginWithApple(
+            authorizationCode = "apple-authorization-code",
+            identityToken = null,
+            fullName = null,
+            deviceToken = null
+        )
+    }
+
+    @Test
+    fun `apple callback rejects blank authorization code`() {
+        mockMvc.perform(
+            post("/api/auth/callback/apple")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"authorizationCode":" ","deviceToken":"device-token"}""")
+        )
+            .andExpect(status().isBadRequest)
+
+        verifyNoInteractions(authService)
+    }
+
+    @Test
+    fun `apple callback rejects missing authorization code`() {
+        mockMvc.perform(
+            post("/api/auth/callback/apple")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"deviceToken":"device-token"}""")
+        )
+            .andExpect(status().isBadRequest)
+
+        verifyNoInteractions(authService)
+    }
+
+    @Test
     fun `logout deletes the submitted refresh token`() {
         whenever(jwtTokenHandler.validateToken("access-token")).thenReturn(true)
         whenever(jwtTokenHandler.getUserId("access-token")).thenReturn(1L)
