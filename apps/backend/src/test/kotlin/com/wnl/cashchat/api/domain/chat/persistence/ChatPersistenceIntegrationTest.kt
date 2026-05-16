@@ -112,6 +112,64 @@ class ChatPersistenceIntegrationTest : FunSpec() {
             }
             hasUniqueUuidIndex shouldBe true
         }
+
+        test("conversation queries are scoped by user and latest message can be loaded") {
+            val owner = userRepository.save(
+                User(
+                    role = Role.MEMBER,
+                    provider = AuthProviderType.NONE,
+                    name = "owner"
+                )
+            )
+            val other = userRepository.save(
+                User(
+                    role = Role.MEMBER,
+                    provider = AuthProviderType.NONE,
+                    name = "other"
+                )
+            )
+            val ownerConversation = conversationRepository.save(Conversation(user = owner, title = "영어 공부 방법"))
+            val otherConversation = conversationRepository.save(Conversation(user = other, title = "점심 메뉴 추천"))
+
+            chatMessageRepository.save(
+                ChatMessage(
+                    conversation = ownerConversation,
+                    role = MessageRole.USER,
+                    content = "영어 공부 방법",
+                    status = MessageStatus.COMPLETED
+                )
+            )
+            val latest = chatMessageRepository.save(
+                ChatMessage(
+                    conversation = ownerConversation,
+                    role = MessageRole.ASSISTANT,
+                    content = "매일 짧게 공부하세요",
+                    status = MessageStatus.COMPLETED
+                )
+            )
+            chatMessageRepository.save(
+                ChatMessage(
+                    conversation = otherConversation,
+                    role = MessageRole.USER,
+                    content = "파스타 어때요?",
+                    status = MessageStatus.COMPLETED
+                )
+            )
+
+            entityManager.clear()
+
+            val ownerConversations = conversationRepository.findAllByUserIdOrderByUpdatedAtDesc(owner.id)
+            val ownerConversationById = conversationRepository.findByIdAndUserId(ownerConversation.id, owner.id)
+            val foreignConversationById = conversationRepository.findByIdAndUserId(otherConversation.id, owner.id)
+            val latestMessage = chatMessageRepository.findTopByConversationIdOrderByCreatedAtDesc(ownerConversation.id)
+
+            ownerConversations.map { it.id } shouldContain ownerConversation.id
+            ownerConversations.map { it.id }.contains(otherConversation.id) shouldBe false
+            ownerConversationById?.id shouldBe ownerConversation.id
+            foreignConversationById shouldBe null
+            latestMessage?.id shouldBe latest.id
+            latestMessage?.content shouldBe "매일 짧게 공부하세요"
+        }
     }
 
     companion object {

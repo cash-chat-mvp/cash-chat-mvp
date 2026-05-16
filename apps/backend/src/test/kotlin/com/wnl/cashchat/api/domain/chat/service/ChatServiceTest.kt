@@ -16,9 +16,11 @@ import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
 import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
+import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
@@ -38,6 +40,7 @@ import java.util.UUID
 class ChatServiceTest : FunSpec() {
     private lateinit var conversationRepository: ConversationRepository
     private lateinit var chatMessageRepository: ChatMessageRepository
+    private lateinit var userRepository: UserRepository
     private lateinit var userPointService: UserPointService
     private lateinit var llmProvider: LlmProvider
     private lateinit var chatService: ChatService
@@ -49,6 +52,7 @@ class ChatServiceTest : FunSpec() {
         beforeTest {
             conversationRepository = mock()
             chatMessageRepository = mock()
+            userRepository = mock()
             userPointService = mock()
             llmProvider = mock()
             savedMessages = mutableListOf()
@@ -57,29 +61,106 @@ class ChatServiceTest : FunSpec() {
             chatService = ChatService(
                 conversationRepository = conversationRepository,
                 chatMessageRepository = chatMessageRepository,
+                userRepository = userRepository,
                 userPointService = userPointService,
                 llmProvider = llmProvider,
                 transactionManager = NoOpTransactionManager(),
             )
         }
 
-        test("stream rejects conversations owned by another user") {
-            val owner = User(id = 2L, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
-            val conversation = Conversation(id = 1L, user = owner, title = null)
+        test("createConversation saves a conversation for the authenticated user") {
+            val user = User(id = 1L, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
+            val createdAt = java.time.Instant.parse("2026-05-16T00:00:00Z")
 
-            whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
+            whenever(userRepository.findById(1L)).thenReturn(Optional.of(user))
+            whenever(conversationRepository.save(any<Conversation>())).thenAnswer { invocation ->
+                val conversation = invocation.getArgument<Conversation>(0)
+                Conversation(id = 7L, user = conversation.user, title = conversation.title).also {
+                    it.createdAt = createdAt
+                    it.updatedAt = createdAt
+                }
+            }
+
+            val response = chatService.createConversation(userId = 1L, title = "영어 공부 방법")
+
+            response.conversationId shouldBe 7L
+            response.title shouldBe "영어 공부 방법"
+            response.createdAt shouldBe createdAt
+            verify(conversationRepository).save(argThat { user.id == 1L && title == "영어 공부 방법" })
+        }
+
+        test("listConversations returns summaries with latest message preview") {
+            val conversation = conversation(ownerId = 1L)
+            conversation.title = "영어 공부 방법"
+            conversation.updatedAt = java.time.Instant.parse("2026-05-16T00:10:00Z")
+            val latestMessage = ChatMessage(
+                id = 20L,
+                conversation = conversation,
+                role = MessageRole.ASSISTANT,
+                content = "매일 짧게 공부하세요",
+                status = MessageStatus.COMPLETED,
+            )
+
+            whenever(conversationRepository.findAllByUserIdOrderByUpdatedAtDesc(1L)).thenReturn(listOf(conversation))
+            whenever(chatMessageRepository.findTopByConversationIdOrderByCreatedAtDesc(1L)).thenReturn(latestMessage)
+
+            val summaries = chatService.listConversations(userId = 1L)
+
+            summaries shouldHaveSize 1
+            summaries[0].conversationId shouldBe 1L
+            summaries[0].title shouldBe "영어 공부 방법"
+            summaries[0].lastMessage shouldBe "매일 짧게 공부하세요"
+        }
+
+        test("getMessages returns only messages from a conversation owned by the user") {
+            val conversation = conversation(ownerId = 1L)
+            val createdAt = java.time.Instant.parse("2026-05-16T00:01:00Z")
+            val message = ChatMessage(
+                id = 10L,
+                conversation = conversation,
+                role = MessageRole.USER,
+                content = "영어 공부 방법",
+                status = MessageStatus.COMPLETED,
+            ).also { it.createdAt = createdAt }
+
+            whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
+            whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(listOf(message))
+
+            val messages = chatService.getMessages(userId = 1L, conversationId = 1L)
+
+            messages shouldHaveSize 1
+            messages[0].messageId shouldBe 10L
+            messages[0].role shouldBe "USER"
+            messages[0].content shouldBe "영어 공부 방법"
+            messages[0].status shouldBe "COMPLETED"
+            messages[0].createdAt shouldBe createdAt
+        }
+
+        test("getMessages rejects a conversation not owned by the user") {
+            whenever(conversationRepository.findByIdAndUserId(1L, 99L)).thenReturn(null)
+
+            val error = shouldThrow<IllegalArgumentException> {
+                chatService.getMessages(userId = 99L, conversationId = 1L)
+            }
+
+            error.message shouldBe "Conversation not found"
+            verify(chatMessageRepository, never()).findAllByConversationIdOrderByCreatedAtAsc(any())
+        }
+
+        test("stream rejects conversations owned by another user") {
+            whenever(conversationRepository.findByIdAndUserId(1L, 99L)).thenReturn(null)
 
             val error = shouldThrow<IllegalArgumentException> {
                 chatService.stream(userId = 99L, conversationId = 1L, content = "hello").blockLast()
             }
 
-            error.message shouldBe "Conversation does not belong to user"
+            error.message shouldBe "Conversation not found"
         }
 
         test("stream rejects insufficient point balance before persisting messages") {
             val conversation = conversation(ownerId = 1L)
 
-            whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
+            whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
             whenever(userPointService.hasEnoughBalance(1L)).thenReturn(false)
 
             shouldThrow<InsufficientPointsException> {
@@ -123,7 +204,7 @@ class ChatServiceTest : FunSpec() {
                 ),
             )
 
-            whenever(conversationRepository.findById(1L)).thenReturn(Optional.of(conversation))
+            whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
             whenever(userPointService.hasEnoughBalance(1L)).thenReturn(true)
             whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(history)
             stubMessagePersistence()
@@ -270,7 +351,7 @@ class ChatServiceTest : FunSpec() {
     }
 
     private fun stubConversation(conversation: Conversation) {
-        whenever(conversationRepository.findById(conversation.id)).thenReturn(Optional.of(conversation))
+        whenever(conversationRepository.findByIdAndUserId(conversation.id, conversation.user.id)).thenReturn(conversation)
         whenever(userPointService.hasEnoughBalance(conversation.user.id)).thenReturn(true)
         whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.id)).thenReturn(emptyList())
         stubMessagePersistence()

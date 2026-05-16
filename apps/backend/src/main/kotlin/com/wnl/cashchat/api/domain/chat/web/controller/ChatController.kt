@@ -2,8 +2,12 @@ package com.wnl.cashchat.api.domain.chat.web.controller
 
 import com.wnl.cashchat.api.common.web.response.ErrorResponse
 import com.wnl.cashchat.api.domain.chat.service.ChatService
+import com.wnl.cashchat.api.domain.chat.web.request.CreateConversationRequest
 import com.wnl.cashchat.api.domain.chat.web.request.ChatStreamRequest
 import com.wnl.cashchat.api.domain.chat.web.response.ChatHistoryResponse
+import com.wnl.cashchat.api.domain.chat.web.response.ChatMessageResponse
+import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
+import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.Parameter
 import io.swagger.v3.oas.annotations.media.Content
@@ -16,9 +20,9 @@ import jakarta.validation.Valid
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.http.codec.ServerSentEvent
+import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
-import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -35,6 +39,42 @@ import java.util.UUID
 class ChatController(
     private val chatService: ChatService,
 ) {
+
+    @PostMapping("/conversations")
+    @Operation(
+        summary = "Create a chat conversation",
+        description = "Creates a new chat room for the authenticated user."
+    )
+    fun createConversation(
+        authentication: Authentication,
+        @RequestBody(required = false) request: CreateConversationRequest?,
+    ): ConversationResponse =
+        chatService.createConversation(
+            userId = authentication.userId(),
+            title = request?.title,
+        )
+
+    @GetMapping("/conversations")
+    @Operation(
+        summary = "List chat conversations",
+        description = "Returns the authenticated user's chat rooms ordered by most recent activity."
+    )
+    fun listConversations(authentication: Authentication): List<ConversationSummaryResponse> =
+        chatService.listConversations(userId = authentication.userId())
+
+    @GetMapping("/conversations/{conversationId}/messages")
+    @Operation(
+        summary = "Get conversation messages",
+        description = "Returns the selected chat room's persisted message history."
+    )
+    fun getMessages(
+        authentication: Authentication,
+        @PathVariable conversationId: Long,
+    ): List<ChatMessageResponse> =
+        chatService.getMessages(
+            userId = authentication.userId(),
+            conversationId = conversationId,
+        )
 
     /**
      * Returns persisted chat history for the authenticated user's conversation.
@@ -125,11 +165,8 @@ class ChatController(
         )
         @Valid @RequestBody request: ChatStreamRequest,
     ): Flux<ServerSentEvent<String>> {
-        val userId = authentication.principal as? Long
-            ?: throw IllegalArgumentException("Invalid authenticated principal")
-
         return chatService.stream(
-            userId = userId,
+            userId = authentication.userId(),
             conversationId = request.conversationId!!,
             content = request.message,
         )
@@ -144,4 +181,7 @@ class ChatController(
         private const val ERROR_EVENT = "error"
         private const val STREAM_FAILED_MESSAGE = "stream failed"
     }
+
+    private fun Authentication.userId(): Long =
+        principal as? Long ?: throw IllegalArgumentException("Invalid authenticated principal")
 }

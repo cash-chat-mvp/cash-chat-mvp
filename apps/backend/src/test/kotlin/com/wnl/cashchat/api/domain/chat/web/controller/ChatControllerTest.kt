@@ -12,7 +12,9 @@ import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageStatus
 import com.wnl.cashchat.api.domain.chat.service.ChatHistory
 import com.wnl.cashchat.api.domain.chat.service.ChatService
 import com.wnl.cashchat.api.domain.chat.web.exception.ChatExceptionHandler
-import com.wnl.cashchat.api.domain.chat.web.request.ChatStreamRequest
+import com.wnl.cashchat.api.domain.chat.web.response.ChatMessageResponse
+import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
+import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
 import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
 import com.wnl.cashchat.api.domain.point.web.exception.PointExceptionHandler
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
@@ -22,7 +24,6 @@ import io.kotest.extensions.spring.SpringExtension
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
-import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -68,6 +69,81 @@ class ChatControllerWebMvcTest : FunSpec() {
     lateinit var jpaMappingContext: JpaMetamodelMappingContext
 
     init {
+        test("create conversation endpoint returns a new conversation for authenticated user") {
+            whenever(chatService.createConversation(1L, "English study tips")).thenReturn(
+                ConversationResponse(
+                    conversationId = 7L,
+                    title = "English study tips",
+                    createdAt = Instant.parse("2026-05-16T00:00:00Z"),
+                    updatedAt = Instant.parse("2026-05-16T00:00:00Z"),
+                )
+            )
+
+            mockMvc.perform(
+                post("/api/v1/chat/conversations")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(mapOf("title" to "English study tips")))
+            )
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.conversationId").value(7))
+                .andExpect(jsonPath("$.title").value("English study tips"))
+
+            verify(chatService).createConversation(eq(1L), eq("English study tips"))
+        }
+
+        test("conversation list endpoint returns current user's rooms") {
+            whenever(chatService.listConversations(1L)).thenReturn(
+                listOf(
+                    ConversationSummaryResponse(
+                        conversationId = 7L,
+                        title = "English study tips",
+                        lastMessage = "Study a little every day",
+                        createdAt = Instant.parse("2026-05-16T00:00:00Z"),
+                        updatedAt = Instant.parse("2026-05-16T00:10:00Z"),
+                    )
+                )
+            )
+
+            mockMvc.perform(
+                get("/api/v1/chat/conversations")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .accept(MediaType.APPLICATION_JSON)
+            )
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$[0].conversationId").value(7))
+                .andExpect(jsonPath("$[0].title").value("English study tips"))
+                .andExpect(jsonPath("$[0].lastMessage").value("Study a little every day"))
+
+            verify(chatService).listConversations(eq(1L))
+        }
+
+        test("conversation messages endpoint returns selected room history") {
+            whenever(chatService.getMessages(1L, 7L)).thenReturn(
+                listOf(
+                    ChatMessageResponse(
+                        messageId = 10L,
+                        role = "USER",
+                        content = "English study tips",
+                        status = "COMPLETED",
+                        createdAt = Instant.parse("2026-05-16T00:01:00Z"),
+                    )
+                )
+            )
+
+            mockMvc.perform(
+                get("/api/v1/chat/conversations/7/messages")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .accept(MediaType.APPLICATION_JSON)
+            )
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$[0].messageId").value(10))
+                .andExpect(jsonPath("$[0].role").value("USER"))
+                .andExpect(jsonPath("$[0].content").value("English study tips"))
+
+            verify(chatService).getMessages(eq(1L), eq(7L))
+        }
+
         test("chat stream endpoint returns text event stream for authenticated user") {
             whenever(chatService.stream(1L, 7L, "hello")).thenReturn(Flux.just("hi there"))
 
