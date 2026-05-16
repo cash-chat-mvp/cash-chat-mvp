@@ -6,4 +6,8 @@ import java.util.UUID
 
 interface ConversationRepository : JpaRepository<Conversation, Long> {
     fun findByUuid(uuid: UUID): Conversation?
+
+    fun findAllByUserIdOrderByUpdatedAtDesc(userId: Long): List<Conversation>
+
+    fun findByIdAndUserId(id: Long, userId: Long): Conversation?
 }
