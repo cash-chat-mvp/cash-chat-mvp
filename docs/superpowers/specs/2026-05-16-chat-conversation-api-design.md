@@ -8,11 +8,11 @@ CC-161 changes chat history from a raw message dump into GPT-style conversations
 
 - `POST /api/v1/chat/conversations`
   - Creates a conversation for the authenticated user.
-  - Request: `{ "title": "영어 공부 방법" }`
-  - Response: `{ "conversationId": 7, "title": "영어 공부 방법", "createdAt": "...", "updatedAt": "..." }`
+  - Request: `{ "title": "English study tips" }`
+  - Response: `{ "conversationId": 7, "title": "English study tips", "createdAt": "...", "updatedAt": "..." }`
 - `GET /api/v1/chat/conversations`
   - Returns the authenticated user's conversation list ordered by most recently updated first.
-  - Response item: `{ "conversationId": 7, "title": "영어 공부 방법", "lastMessage": "영어 공부는 매일...", "createdAt": "...", "updatedAt": "..." }`
+  - Response item: `{ "conversationId": 7, "title": "English study tips", "lastMessage": "Study a little every day", "createdAt": "...", "updatedAt": "..." }`
 - `GET /api/v1/chat/conversations/{conversationId}/messages`
   - Returns only the selected room's messages, ordered oldest to newest.
   - Response item: `{ "messageId": 10, "role": "USER", "content": "...", "status": "COMPLETED", "createdAt": "..." }`
@@ -26,9 +26,9 @@ When the user starts from the idle chat screen, the frontend creates a room firs
 
 1. `POST /api/v1/chat/conversations` with the first prompt as the title.
 2. Save `conversationId` on the client.
-3. `POST /api/v1/chat/stream` with `{ "conversationId": 7, "message": "영어 공부 방법" }`.
+3. `POST /api/v1/chat/stream` with `{ "conversationId": 7, "message": "English study tips" }`.
 
-This avoids empty rooms because a new room is created only when the first message is actually sent.
+This avoids rooms created by merely opening the screen, but a stream failure after room creation can still leave an empty room. Cleanup or atomic create-and-send can be added later if the frontend needs strict empty-room prevention.
 
 ## Existing Chat Flow
 
@@ -42,7 +42,7 @@ This avoids empty rooms because a new room is created only when the first messag
 - All conversation endpoints use the authenticated principal.
 - A user cannot list, open, or stream into another user's conversation.
 - Missing `conversationId` on stream remains `400 Bad Request`.
-- Unknown or foreign `conversationId` returns a client error rather than leaking data.
+- Unknown or foreign `conversationId` values MUST return `404 Not Found`; fetch and authorization checks treat inaccessible conversations as not found to avoid leaking room existence.
 
 ## Testing
 

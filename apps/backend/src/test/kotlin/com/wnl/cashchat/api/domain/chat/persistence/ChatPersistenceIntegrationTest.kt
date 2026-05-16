@@ -162,6 +162,9 @@ class ChatPersistenceIntegrationTest : FunSpec() {
             val ownerConversationById = conversationRepository.findByIdAndUserId(ownerConversation.id, owner.id)
             val foreignConversationById = conversationRepository.findByIdAndUserId(otherConversation.id, owner.id)
             val latestMessage = chatMessageRepository.findTopByConversationIdOrderByCreatedAtDesc(ownerConversation.id)
+            val latestMessages = chatMessageRepository.findLatestByConversationIds(
+                listOf(ownerConversation.id, otherConversation.id)
+            )
 
             ownerConversations.map { it.id } shouldContain ownerConversation.id
             ownerConversations.map { it.id }.contains(otherConversation.id) shouldBe false
@@ -169,6 +172,8 @@ class ChatPersistenceIntegrationTest : FunSpec() {
             foreignConversationById shouldBe null
             latestMessage?.id shouldBe latest.id
             latestMessage?.content shouldBe "매일 짧게 공부하세요"
+            latestMessages.map { it.id } shouldContain latest.id
+            latestMessages.map { it.conversation.id } shouldContain otherConversation.id
         }
     }
 

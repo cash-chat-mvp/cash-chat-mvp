@@ -89,7 +89,7 @@ class ChatServiceTest : FunSpec() {
             verify(conversationRepository).save(argThat { user.id == 1L && title == "영어 공부 방법" })
         }
 
-        test("listConversations returns summaries with latest message preview") {
+        test("listConversations returns summaries with latest message preview using one batch lookup") {
             val conversation = conversation(ownerId = 1L)
             conversation.title = "영어 공부 방법"
             conversation.updatedAt = java.time.Instant.parse("2026-05-16T00:10:00Z")
@@ -102,7 +102,7 @@ class ChatServiceTest : FunSpec() {
             )
 
             whenever(conversationRepository.findAllByUserIdOrderByUpdatedAtDesc(1L)).thenReturn(listOf(conversation))
-            whenever(chatMessageRepository.findTopByConversationIdOrderByCreatedAtDesc(1L)).thenReturn(latestMessage)
+            whenever(chatMessageRepository.findLatestByConversationIds(listOf(1L))).thenReturn(listOf(latestMessage))
 
             val summaries = chatService.listConversations(userId = 1L)
 
@@ -110,6 +110,8 @@ class ChatServiceTest : FunSpec() {
             summaries[0].conversationId shouldBe 1L
             summaries[0].title shouldBe "영어 공부 방법"
             summaries[0].lastMessage shouldBe "매일 짧게 공부하세요"
+            verify(chatMessageRepository).findLatestByConversationIds(listOf(1L))
+            verify(chatMessageRepository, never()).findTopByConversationIdOrderByCreatedAtDesc(any())
         }
 
         test("getMessages returns only messages from a conversation owned by the user") {
@@ -139,22 +141,19 @@ class ChatServiceTest : FunSpec() {
         test("getMessages rejects a conversation not owned by the user") {
             whenever(conversationRepository.findByIdAndUserId(1L, 99L)).thenReturn(null)
 
-            val error = shouldThrow<IllegalArgumentException> {
+            shouldThrow<ConversationNotFoundException> {
                 chatService.getMessages(userId = 99L, conversationId = 1L)
             }
 
-            error.message shouldBe "Conversation not found"
             verify(chatMessageRepository, never()).findAllByConversationIdOrderByCreatedAtAsc(any())
         }
 
         test("stream rejects conversations owned by another user") {
             whenever(conversationRepository.findByIdAndUserId(1L, 99L)).thenReturn(null)
 
-            val error = shouldThrow<IllegalArgumentException> {
+            shouldThrow<ConversationNotFoundException> {
                 chatService.stream(userId = 99L, conversationId = 1L, content = "hello").blockLast()
             }
-
-            error.message shouldBe "Conversation not found"
         }
 
         test("stream rejects insufficient point balance before persisting messages") {

@@ -54,22 +54,31 @@ class ChatService(
         return conversation.toResponse()
     }
 
-    fun listConversations(userId: Long): List<ConversationSummaryResponse> =
-        conversationRepository.findAllByUserIdOrderByUpdatedAtDesc(userId)
-            .map { conversation ->
-                val latestMessage = chatMessageRepository.findTopByConversationIdOrderByCreatedAtDesc(conversation.id)
-                ConversationSummaryResponse(
-                    conversationId = conversation.id,
-                    title = conversation.displayTitle(),
-                    lastMessage = latestMessage?.content,
-                    createdAt = conversation.createdAt,
-                    updatedAt = conversation.updatedAt,
-                )
-            }
+    fun listConversations(userId: Long): List<ConversationSummaryResponse> {
+        val conversations = conversationRepository.findAllByUserIdOrderByUpdatedAtDesc(userId)
+        val conversationIds = conversations.map { it.id }
+        val latestMessagesByConversationId = if (conversationIds.isEmpty()) {
+            emptyMap()
+        } else {
+            chatMessageRepository.findLatestByConversationIds(conversationIds)
+                .associateBy { it.conversation.id }
+        }
+
+        return conversations.map { conversation ->
+            val latestMessage = latestMessagesByConversationId[conversation.id]
+            ConversationSummaryResponse(
+                conversationId = conversation.id,
+                title = conversation.displayTitle(),
+                lastMessage = latestMessage?.content,
+                createdAt = conversation.createdAt,
+                updatedAt = conversation.updatedAt,
+            )
+        }
+    }
 
     fun getMessages(userId: Long, conversationId: Long): List<ChatMessageResponse> {
         conversationRepository.findByIdAndUserId(conversationId, userId)
-            ?: throw IllegalArgumentException("Conversation not found")
+            ?: throw ConversationNotFoundException(conversationId)
 
         return chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
             .map { it.toResponse() }
@@ -81,7 +90,7 @@ class ChatService(
     fun stream(userId: Long, conversationId: Long, content: String): Flux<String> {
         val streamContext = transactionTemplate.execute {
             val conversation = conversationRepository.findByIdAndUserId(conversationId, userId)
-                ?: throw IllegalArgumentException("Conversation not found")
+                ?: throw ConversationNotFoundException(conversationId)
 
             if (!userPointService.hasEnoughBalance(userId)) {
                 throw InsufficientPointsException()

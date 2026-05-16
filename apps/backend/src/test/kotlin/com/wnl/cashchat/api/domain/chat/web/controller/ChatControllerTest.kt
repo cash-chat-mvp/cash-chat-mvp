@@ -144,6 +144,18 @@ class ChatControllerWebMvcTest : FunSpec() {
             verify(chatService).getMessages(eq(1L), eq(7L))
         }
 
+        test("conversation messages endpoint returns not found for unknown or foreign room") {
+            whenever(chatService.getMessages(1L, 7L)).thenThrow(ConversationNotFoundException(7L))
+
+            mockMvc.perform(
+                get("/api/v1/chat/conversations/7/messages")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .accept(MediaType.APPLICATION_JSON)
+            )
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.code").value("CONVERSATION_NOT_FOUND"))
+        }
+
         test("chat stream endpoint returns text event stream for authenticated user") {
             whenever(chatService.stream(1L, 7L, "hello")).thenReturn(Flux.just("hi there"))
 

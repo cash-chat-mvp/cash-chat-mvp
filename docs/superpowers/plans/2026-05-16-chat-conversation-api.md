@@ -20,7 +20,7 @@
 - Create: `apps/backend/src/main/kotlin/com/wnl/cashchat/api/domain/chat/web/response/ConversationResponse.kt`
 - Create: `apps/backend/src/main/kotlin/com/wnl/cashchat/api/domain/chat/web/response/ConversationSummaryResponse.kt`
 - Create: `apps/backend/src/main/kotlin/com/wnl/cashchat/api/domain/chat/web/response/ChatMessageResponse.kt`
-- Modify: `apps/backend/src/test/kotlin/com/wnl/cashchat/api/domain/chat/web/controller/ChatControllerTest.kt`
+- Modify: `apps/backend/src/test/kotlin/com/wnl/cashchat/api/domain/chat/web/controller/ChatControllerTest.kt` (`ChatControllerWebMvcTest`)
 - Modify: `apps/backend/src/test/kotlin/com/wnl/cashchat/api/domain/chat/service/ChatServiceTest.kt`
 - Modify: `apps/backend/src/test/kotlin/com/wnl/cashchat/api/domain/chat/persistence/ChatPersistenceIntegrationTest.kt`
 
@@ -28,7 +28,7 @@
 
 - [ ] Add MockMvc tests for `POST /api/v1/chat/conversations`, `GET /api/v1/chat/conversations`, and `GET /api/v1/chat/conversations/{id}/messages`.
 - [ ] Verify each endpoint passes the authenticated user id into `ChatService`.
-- [ ] Run `.\gradlew.bat test --tests "*ChatControllerWebMvcTest"` from `apps/backend`; expect new tests to fail before implementation.
+- [ ] Run `.\gradlew.bat test --tests "*ChatControllerWebMvcTest"` from `apps/backend`; the pattern targets the test class declared inside `ChatControllerTest.kt`.
 
 ## Task 2: Service And Repository Tests
 
