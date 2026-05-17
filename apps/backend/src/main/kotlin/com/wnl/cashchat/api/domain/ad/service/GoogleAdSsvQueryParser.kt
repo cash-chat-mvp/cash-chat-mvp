@@ -9,6 +9,7 @@ class GoogleAdSsvQueryParser {
         val rawQuery = rawQueryString?.takeIf { it.isNotBlank() }
             ?: throw InvalidGoogleAdSsvCallbackException("Google Ad SSV query string must not be blank")
         val parts = rawQuery.split("&")
+        validateNoDuplicateKeys(parts)
         validateSignaturePosition(parts)
 
         val parameters = parts.associate { part ->
@@ -38,6 +39,16 @@ class GoogleAdSsvQueryParser {
         )
     }
 
+    private fun validateNoDuplicateKeys(parts: List<String>) {
+        val keys = mutableSetOf<String>()
+        parts.forEach { part ->
+            val key = parameterKey(part)
+            if (!keys.add(key)) {
+                throw InvalidGoogleAdSsvCallbackException("Google Ad SSV query string has duplicate $key")
+            }
+        }
+    }
+
     private fun validateSignaturePosition(parts: List<String>) {
         if (parts.size < 2 ||
             parameterKey(parts[parts.lastIndex - 1]) != "signature" ||
@@ -59,5 +70,13 @@ class GoogleAdSsvQueryParser {
 
     private fun parameterValue(part: String): String = part.substringAfter("=", "")
 
-    private fun decode(value: String): String = URLDecoder.decode(value, StandardCharsets.UTF_8)
+    private fun decode(value: String): String =
+        try {
+            URLDecoder.decode(value.replace("+", "%2B"), StandardCharsets.UTF_8)
+        } catch (exception: IllegalArgumentException) {
+            throw InvalidGoogleAdSsvCallbackException(
+                message = "Google Ad SSV query string contains malformed percent encoding",
+                cause = exception,
+            )
+        }
 }

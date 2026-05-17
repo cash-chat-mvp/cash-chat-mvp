@@ -78,4 +78,54 @@ class GoogleAdSsvQueryParserTest : FunSpec({
             parser.parse(rawQuery)
         }
     }
+
+    test("duplicate parameter key is rejected before trusting signature position") {
+        val rawQuery =
+            "ad_unit=ad-unit" +
+                "&signature=earlier-sig" +
+                "&reward_amount=10" +
+                "&reward_item=coin" +
+                "&timestamp=1710000000123" +
+                "&transaction_id=txn-123" +
+                "&user_id=user-42" +
+                "&signature=final-sig" +
+                "&key_id=12345"
+
+        shouldThrow<InvalidGoogleAdSsvCallbackException> {
+            parser.parse(rawQuery)
+        }
+    }
+
+    test("malformed percent escape is rejected with invalid callback exception") {
+        val rawQuery =
+            "ad_unit=ad%ZZunit" +
+                "&reward_amount=10" +
+                "&reward_item=coin" +
+                "&timestamp=1710000000123" +
+                "&transaction_id=txn-123" +
+                "&user_id=user-42" +
+                "&signature=sig" +
+                "&key_id=12345"
+
+        shouldThrow<InvalidGoogleAdSsvCallbackException> {
+            parser.parse(rawQuery)
+        }
+    }
+
+    test("literal plus sign in decoded field remains plus") {
+        val signedPayload =
+            "ad_unit=ad-unit" +
+                "&reward_amount=10" +
+                "&reward_item=coin+pack" +
+                "&timestamp=1710000000123" +
+                "&transaction_id=txn-123" +
+                "&user_id=user+42"
+        val rawQuery = "$signedPayload&signature=sig&key_id=12345"
+
+        val callback = parser.parse(rawQuery)
+
+        callback.rewardItem shouldBe "coin+pack"
+        callback.userId shouldBe "user+42"
+        callback.signedPayload shouldBe signedPayload
+    }
 })
