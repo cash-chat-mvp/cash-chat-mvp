@@ -11,8 +11,7 @@ data class OAuthProperties(
     @field:Valid
     val registration: Map<String, RegistrationProperties> = emptyMap(),
     @field:Valid
-    val provider: Map<String, ProviderProperties> = emptyMap(),
-    val apple: AppleProperties = AppleProperties()
+    val provider: Map<String, ProviderProperties> = emptyMap()
 ) {
 
     data class RegistrationProperties(
@@ -29,19 +28,6 @@ data class OAuthProperties(
         @field:NotBlank val tokenUri: String,
         @field:NotBlank val userInfoUri: String
     )
-
-    data class AppleProperties(
-        val clientId: String? = null,
-        val teamId: String? = null,
-        val keyId: String? = null,
-        val privateKey: String? = null,
-        val tokenUri: String = "https://appleid.apple.com/auth/token",
-        val jwksUri: String = "https://appleid.apple.com/auth/keys",
-        val redirectUri: String? = null
-    ) {
-        override fun toString(): String =
-            "AppleProperties(clientId=$clientId, teamId=$teamId, keyId=$keyId, privateKey=****, tokenUri=$tokenUri, jwksUri=$jwksUri, redirectUri=$redirectUri)"
-    }
 
     fun getRegistration(name: String): RegistrationProperties =
         registration[name]

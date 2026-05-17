@@ -2,7 +2,6 @@ package com.wnl.cashchat.api.domain.auth.web.controller
 
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.auth.service.AuthService
-import com.wnl.cashchat.api.domain.auth.web.request.AppleOAuthCallbackRequest
 import com.wnl.cashchat.api.domain.auth.web.request.GoogleOAuthCallbackRequest
 import com.wnl.cashchat.api.domain.auth.web.request.LogoutRequest
 import com.wnl.cashchat.api.domain.auth.web.request.TokenRefreshRequest
@@ -33,19 +32,6 @@ class AuthController(
             AuthProviderType.GOOGLE,
             request.code,
             request.deviceToken
-        )
-        return ResponseEntity.ok(response)
-    }
-
-    @PostMapping("/callback/apple")
-    fun loginWithApple(
-        @Valid @RequestBody request: AppleOAuthCallbackRequest
-    ): ResponseEntity<AuthResponse> {
-        val response = authService.loginWithApple(
-            authorizationCode = request.authorizationCode,
-            identityToken = request.identityToken,
-            fullName = request.fullName,
-            deviceToken = request.deviceToken
         )
         return ResponseEntity.ok(response)
     }

@@ -56,7 +56,6 @@ class SecurityConfig(
                 val publicPaths = mutableListOf(
                     "/api/auth/guest",
                     "/api/auth/callback/google",
-                    "/api/auth/callback/apple",
                     "/api/auth/refresh",
                     "/favicon.ico"
                 )
