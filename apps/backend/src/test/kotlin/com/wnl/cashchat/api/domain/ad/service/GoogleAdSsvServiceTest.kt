@@ -7,13 +7,18 @@ import com.wnl.cashchat.api.domain.ad.properties.GoogleAdSsvProperties
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
+import org.mockito.kotlin.times
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 
 class GoogleAdSsvServiceTest : FunSpec({
     val rawQuery = "ad_unit=rewarded-ad-unit&reward_amount=10&reward_item=coin&timestamp=1710000000123" +
@@ -92,7 +97,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         eventCaptor.firstValue.rawQueryString shouldBe rawQuery
     }
 
-    test("existing transaction id returns success without verifier or save") {
+    test("existing transaction id validates signature before returning success without save") {
         val parser = mock<GoogleAdSsvQueryParser>()
         val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
         val repository = mock<GoogleAdSsvEventRepository>()
@@ -102,6 +107,61 @@ class GoogleAdSsvServiceTest : FunSpec({
         val service = service(parser, signatureVerifier, repository)
 
         service.verifyAndStore(rawQuery)
+
+        verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
+        verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
+    }
+
+    test("existing transaction id with invalid signature is rejected without save") {
+        val parser = mock<GoogleAdSsvQueryParser>()
+        val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
+        val repository = mock<GoogleAdSsvEventRepository>()
+        val callback = callback()
+        whenever(parser.parse(rawQuery)).thenReturn(callback)
+        whenever(repository.findByTransactionId(callback.transactionId)).thenReturn(event())
+        doThrow(InvalidGoogleAdSsvCallbackException("Invalid Google AdMob SSV signature"))
+            .whenever(signatureVerifier)
+            .verify(callback.signedPayload, callback.signature, callback.keyId)
+        val service = service(parser, signatureVerifier, repository)
+
+        shouldThrow<InvalidGoogleAdSsvCallbackException> {
+            service.verifyAndStore(rawQuery)
+        }
+
+        verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
+    }
+
+    test("existing transaction id with wrong key is rejected without save") {
+        val parser = mock<GoogleAdSsvQueryParser>()
+        val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
+        val repository = mock<GoogleAdSsvEventRepository>()
+        val callback = callback(keyId = 99999L)
+        whenever(parser.parse(rawQuery)).thenReturn(callback)
+        whenever(repository.findByTransactionId(callback.transactionId)).thenReturn(event())
+        doThrow(InvalidGoogleAdSsvCallbackException("Failed to verify Google AdMob SSV signature"))
+            .whenever(signatureVerifier)
+            .verify(callback.signedPayload, callback.signature, callback.keyId)
+        val service = service(parser, signatureVerifier, repository)
+
+        shouldThrow<InvalidGoogleAdSsvCallbackException> {
+            service.verifyAndStore(rawQuery)
+        }
+
+        verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
+    }
+
+    test("existing transaction id with ad unit mismatch is rejected before verifier and save") {
+        val parser = mock<GoogleAdSsvQueryParser>()
+        val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
+        val repository = mock<GoogleAdSsvEventRepository>()
+        val callback = callback(adUnit = "unexpected-ad-unit")
+        whenever(parser.parse(rawQuery)).thenReturn(callback)
+        whenever(repository.findByTransactionId(callback.transactionId)).thenReturn(event())
+        val service = service(parser, signatureVerifier, repository)
+
+        shouldThrow<InvalidGoogleAdSsvCallbackException> {
+            service.verifyAndStore(rawQuery)
+        }
 
         verify(signatureVerifier, never()).verify(any(), any(), any())
         verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
@@ -160,5 +220,18 @@ class GoogleAdSsvServiceTest : FunSpec({
 
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
         verify(repository).saveAndFlush(any<GoogleAdSsvEvent>())
+        verify(repository, times(2)).findByTransactionId(callback.transactionId)
+    }
+
+    test("verify and store does not open an outer transaction around duplicate recovery") {
+        val annotation = GoogleAdSsvService::class.java
+            .getMethod("verifyAndStore", String::class.java)
+            .getAnnotation(Transactional::class.java)
+
+        annotation.propagation shouldBe Propagation.NOT_SUPPORTED
+    }
+
+    test("query parser is registered as a spring component") {
+        (GoogleAdSsvQueryParser::class.java.getAnnotation(Component::class.java) != null) shouldBe true
     }
 })

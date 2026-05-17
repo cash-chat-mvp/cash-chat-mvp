@@ -7,6 +7,7 @@ import com.wnl.cashchat.api.domain.ad.properties.GoogleAdSsvProperties
 import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 
 @Service
@@ -16,17 +17,17 @@ class GoogleAdSsvService(
     private val repository: GoogleAdSsvEventRepository,
     private val properties: GoogleAdSsvProperties,
 ) {
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     fun verifyAndStore(rawQueryString: String?) {
         val callback = parser.parse(rawQueryString)
+        validateAdUnit(callback)
+        signatureVerifier.verify(callback.signedPayload, callback.signature, callback.keyId)
+
         val existingEvent = repository.findByTransactionId(callback.transactionId)
         if (existingEvent != null) {
             logIfCoreFieldsDiffer(callback, existingEvent)
             return
         }
-
-        validateAdUnit(callback)
-        signatureVerifier.verify(callback.signedPayload, callback.signature, callback.keyId)
 
         try {
             repository.saveAndFlush(callback.toEntity())

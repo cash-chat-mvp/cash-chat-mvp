@@ -1,9 +1,11 @@
 package com.wnl.cashchat.api.domain.ad.service
 
 import com.wnl.cashchat.api.domain.ad.exception.InvalidGoogleAdSsvCallbackException
+import org.springframework.stereotype.Component
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
+@Component
 class GoogleAdSsvQueryParser {
     fun parse(rawQueryString: String?): GoogleAdSsvCallback {
         val rawQuery = rawQueryString?.takeIf { it.isNotBlank() }
