@@ -58,6 +58,7 @@ class SecurityConfig(
                     "/api/auth/callback/google",
                     "/api/auth/callback/apple",
                     "/api/auth/refresh",
+                    "/api/ads/google/ssv",
                     "/favicon.ico"
                 )
                 if (isSwaggerEnabled) {
