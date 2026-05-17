@@ -10,7 +10,7 @@ permissions:
 jobs:
   extract:
     runs-on: ubuntu-latest
-    if: github.head_ref != 'dev' || github.base_ref != 'release-fe'
+    if: "!(github.head_ref == 'dev' && startsWith(github.base_ref, 'release/'))"
     env:
       REVIEW_ON_PULL_REQUEST_OPENED: IN REVIEW
       REVIEW_ON_PULL_REQUEST_REOPENED: IN REVIEW

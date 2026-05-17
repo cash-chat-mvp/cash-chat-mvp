@@ -10,7 +10,7 @@ on:
 jobs:
   update-release-draft:
     runs-on: ubuntu-latest
-    if: github.head_ref != 'dev' || github.base_ref != 'release-fe'
+    if: "!(github.head_ref == 'dev' && startsWith(github.base_ref, 'release/'))"
     permissions:
       contents: write
       pull-requests: write
