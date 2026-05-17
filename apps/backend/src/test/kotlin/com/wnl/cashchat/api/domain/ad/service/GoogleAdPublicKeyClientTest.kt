@@ -59,17 +59,40 @@ class GoogleAdPublicKeyClientTest : FunSpec({
         shouldThrow<GoogleAdSsvTransientException> {
             fixture.client.getPublicKey(1)
         }
+
+        fixture.server.verify()
     }
 
     test("rejects missing key id after fetching keys") {
         val fixture = fixture()
-        val keyBase64 = base64PublicKey()
+        val firstKey = base64PublicKey()
+        val secondKey = base64PublicKey()
         fixture.server.expect(requestTo("https://keys.example.test"))
-            .andRespond(withSuccess("""{"keys":[{"keyId":2,"base64":"$keyBase64"}]}""", MediaType.APPLICATION_JSON))
+            .andRespond(withSuccess("""{"keys":[{"keyId":2,"base64":"$firstKey"}]}""", MediaType.APPLICATION_JSON))
+        fixture.server.expect(requestTo("https://keys.example.test"))
+            .andRespond(withSuccess("""{"keys":[{"keyId":2,"base64":"$secondKey"}]}""", MediaType.APPLICATION_JSON))
 
         shouldThrow<GoogleAdSsvTransientException> {
             fixture.client.getPublicKey(1)
         }
+
+        fixture.server.verify()
+    }
+
+    test("refreshes valid cache once when requested key id is missing") {
+        val fixture = fixture()
+        val firstKey = base64PublicKey()
+        val secondKey = base64PublicKey()
+        fixture.server.expect(requestTo("https://keys.example.test"))
+            .andRespond(withSuccess("""{"keys":[{"keyId":1,"base64":"$firstKey"}]}""", MediaType.APPLICATION_JSON))
+        fixture.server.expect(requestTo("https://keys.example.test"))
+            .andRespond(withSuccess("""{"keys":[{"keyId":2,"base64":"$secondKey"}]}""", MediaType.APPLICATION_JSON))
+
+        fixture.client.getPublicKey(1)
+        val refreshedKey = fixture.client.getPublicKey(2)
+
+        refreshedKey shouldBe fixture.client.getPublicKey(2)
+        fixture.server.verify()
     }
 })
 
