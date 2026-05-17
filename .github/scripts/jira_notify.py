@@ -1,10 +1,13 @@
-import json, os, urllib.request, urllib.error
+import json, os, urllib.request, urllib.error, datetime
 from typing import Dict
 
 JIRA_BASE_URL = os.environ['JIRA_BASE_URL']
 TODAY         = os.environ['TODAY']
 D1            = os.environ['D1']
+D2            = os.environ['D2']
 D3            = os.environ['D3']
+SPRINT_NAME   = os.environ.get('SPRINT_NAME', '활성 스프린트 없음')
+SPRINT_END    = os.environ.get('SPRINT_END', '')
 
 with open('/tmp/all_issues.json') as f:
     all_data = json.load(f)
@@ -16,15 +19,38 @@ if 'errorMessages' in all_data or 'errorMessages' in due_data:
     exit(1)
 
 # ────────────────────────────────────────────
+# 스프린트 D-day 계산
+# ────────────────────────────────────────────
+if SPRINT_END:
+    end_date    = datetime.date.fromisoformat(SPRINT_END)
+    today_date  = datetime.date.fromisoformat(TODAY)
+    days_left   = (end_date - today_date).days
+    if days_left < 0:
+        sprint_countdown = f'⚠️ 스프린트 종료 **{abs(days_left)}일 초과**'
+        sprint_color     = 15158332  # red
+    elif days_left == 0:
+        sprint_countdown = '🔴 **오늘 스프린트 종료**'
+        sprint_color     = 15158332
+    elif days_left <= 3:
+        sprint_countdown = f'🟠 스프린트 종료까지 **D-{days_left}**  ({SPRINT_END})'
+        sprint_color     = 15105570  # orange
+    else:
+        sprint_countdown = f'🟢 스프린트 종료까지 **{days_left}일**  ({SPRINT_END})'
+        sprint_color     = 5793266   # blue-green
+else:
+    sprint_countdown = '종료일 미설정'
+    sprint_color     = 5793266
+
+# ────────────────────────────────────────────
 # 1. 전체 현황 통계
 # ────────────────────────────────────────────
 TARGET_LABELS  = ['FE', 'BE', '기획', 'infra']
 STATUS_KEYS    = ['todo', 'in_progress', 'in_review', 'done']
 STATUS_DISPLAY = {'todo': '📋 대기', 'in_progress': '🔄 진행', 'in_review': '👀 리뷰', 'done': '✅ 완료'}
 
-status_counts: Dict[str, int]             = {k: 0 for k in STATUS_KEYS}
-label_stats:   Dict[str, Dict[str, int]] = {lbl: {k: 0 for k in STATUS_KEYS} for lbl in TARGET_LABELS}
-user_stats:    Dict[str, Dict[str, int]] = {}
+status_counts: Dict[str, int]            = {k: 0 for k in STATUS_KEYS}
+label_stats:  Dict[str, Dict[str, int]] = {lbl: {k: 0 for k in STATUS_KEYS} for lbl in TARGET_LABELS}
+user_stats:   Dict[str, Dict[str, int]] = {}
 
 def classify_status(fields):
     cat_key     = fields['status']['statusCategory']['key']
@@ -54,13 +80,11 @@ progress   = int(done_count / total * 100) if total > 0 else 0
 bar_filled = progress // 10
 prog_bar   = '█' * bar_filled + '░' * (10 - bar_filled)
 
-# ── 상태별 텍스트 ──
 status_text = '  |  '.join(
     f"{STATUS_DISPLAY[k]} **{status_counts[k]}**개"
     for k in STATUS_KEYS
 )
 
-# ── 레이블별 텍스트 ──
 label_lines = []
 for lbl in TARGET_LABELS:
     s = label_stats[lbl]
@@ -74,7 +98,6 @@ for lbl in TARGET_LABELS:
 
 label_text = '\n'.join(label_lines) if label_lines else '레이블 없음'
 
-# ── 담당자별 텍스트 ──
 user_lines = []
 for name, s in sorted(user_stats.items(), key=lambda x: -sum(x[1].values())):
     if name == '미배정' and sum(s.values()) == 0:
@@ -87,11 +110,15 @@ for name, s in sorted(user_stats.items(), key=lambda x: -sum(x[1].values())):
 
 user_text = '\n'.join(user_lines) if user_lines else '담당자 없음'
 
-# ── 요약 embed ──
 summary_embed = {
-    'color': 5793266,
-    'title': '📊 Cash Chat 프로젝트 현황',
+    'color': sprint_color,
+    'title': f'📊 {SPRINT_NAME}  현황',
     'fields': [
+        {
+            'name': '스프린트',
+            'value': sprint_countdown,
+            'inline': False,
+        },
         {
             'name': f'진척률  {progress}%  ({done_count} / {total})',
             'value': f'`{prog_bar}`',
@@ -125,7 +152,7 @@ DUE_DISPLAY = {
     'overdue': '🚨 초과',
     'today':   '🔴 오늘',
     'd1':      '🟠 D-1',
-    'd3':      '🟡 D-3',
+    'd3':      '🟡 D-3 이내',
 }
 
 due_issues:    list                      = due_data.get('issues', [])
@@ -144,14 +171,13 @@ for issue in due_issues:
     elif duedate == D1:
         slot = 'd1'
     else:
-        slot = 'd3'
+        slot = 'd3'  # D-2, D-3 모두 포함
 
     total_by_slot[slot] += 1
     if assignee not in due_by_user:
         due_by_user[assignee] = {s: 0 for s in DUE_SLOTS}
     due_by_user[assignee][slot] += 1
 
-# ── 마감 현황 embed ──
 if due_by_user:
     header_parts = [
         f"{DUE_DISPLAY[s]} **{total_by_slot[s]}**건"
@@ -188,12 +214,9 @@ if due_by_user:
         ],
         'footer': {'text': 'Cash Chat · Jira 자동 알림'},
     }
-    all_embeds = [summary_embed, due_embed]
-else:
-    all_embeds = [summary_embed]
 
 # ────────────────────────────────────────────
-# 3. 메시지 분리 구성
+# 3. 메시지 구성
 # ────────────────────────────────────────────
 overdue_count = total_by_slot['overdue']
 upcoming      = len(due_issues) - overdue_count
@@ -205,14 +228,11 @@ if upcoming:
     due_parts.append(f'⏰ **마감 임박 {upcoming}건**')
 due_summary = '  |  '.join(due_parts) if due_parts else '✅ 마감 이슈 없음'
 
-# 메시지 1: 프로젝트 현황 대시보드
 msg1 = {'embeds': [summary_embed]}
-
-# 메시지 2: 마감 현황 (마감 이슈 있을 때만)
 msg2 = {'content': f'> {due_summary}', 'embeds': [due_embed]} if due_by_user else None
 
 # ────────────────────────────────────────────
-# 4. Discord 전송 (헬퍼 함수)
+# 4. Discord 전송
 # ────────────────────────────────────────────
 webhook_url = os.environ.get('DISCORD_WEBHOOK', '')
 if not webhook_url:
