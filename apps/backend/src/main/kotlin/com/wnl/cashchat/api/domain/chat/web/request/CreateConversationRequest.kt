@@ -7,6 +7,9 @@ import io.swagger.v3.oas.annotations.media.Schema
 @Schema(description = "Request payload for creating a chat conversation.")
 data class CreateConversationRequest @JsonCreator constructor(
     @JsonProperty("title")
-    @field:Schema(description = "Initial conversation title, usually derived from the first user message.", example = "영어 공부 방법")
+    @field:Schema(
+        description = "Initial conversation title, usually derived from the first user message.",
+        example = "English study tips"
+    )
     val title: String? = null,
 )

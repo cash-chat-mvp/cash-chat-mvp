@@ -21,15 +21,25 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_REDIRECT_URI`: Google OAuth redirect URI, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APPLE_CLIENT_ID`: Apple Services ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APPLE_TEAM_ID`: Apple Developer Team ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APPLE_KEY_ID`: Sign in with Apple key ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APPLE_PRIVATE_KEY`: Sign in with Apple P8 private key, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 
 ## Optional GitHub Secrets
 
 - `BACKEND_SPRING_PROFILES_ACTIVE`: backend Spring profile, defaults to `prod`
+- `APPLE_REDIRECT_URI`: Apple redirect URI; native iOS Sign in with Apple can leave this empty
 - `APP_SWAGGER_ENABLED`: set to a Spring boolean true value, for example `true`, to expose Swagger in `prod`; missing or non-true values keep Swagger blocked
 
 Keep production deployments on `BACKEND_SPRING_PROFILES_ACTIVE=prod`. Use `APP_SWAGGER_ENABLED=true` only when production Swagger access is intentionally needed.
 
 Secret values are written into a Docker Compose env file as single-quoted values. Newlines and single quotes are rejected during deployment.
+Store `APPLE_PRIVATE_KEY` as one line by replacing real PEM newlines with the two-character `\n` sequence, for example:
+
+```text
+-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49...\n-----END PRIVATE KEY-----
+```
 
 ## First-time Server Setup
 
@@ -61,6 +71,11 @@ Local env values:
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID for local callback testing
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret for local callback testing
 - `GOOGLE_REDIRECT_URI`: local Google OAuth callback URI, defaults to `http://localhost:8080/api/auth/callback/google`
+- `APPLE_CLIENT_ID`: Apple Services ID for local iOS callback testing
+- `APPLE_TEAM_ID`: Apple Developer Team ID for local iOS callback testing
+- `APPLE_KEY_ID`: Sign in with Apple key ID for local iOS callback testing
+- `APPLE_PRIVATE_KEY`: escaped one-line P8 private key for local iOS callback testing
+- `APPLE_REDIRECT_URI`: optional Apple redirect URI, defaults to empty
 - `APP_SWAGGER_ENABLED`: local Swagger toggle, defaults to `true`
 
 Notes:

@@ -34,6 +34,9 @@ oauth:
     google:
       token-uri: https://oauth2.googleapis.com/token
       user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+  apple:
+    token-uri: ${APPLE_TOKEN_URI:https://appleid.apple.com/auth/token}
+    jwks-uri: ${APPLE_JWKS_URI:https://appleid.apple.com/auth/keys}
 
 
 # JWT (JSON Web Token)

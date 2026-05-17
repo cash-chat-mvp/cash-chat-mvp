@@ -4,6 +4,9 @@ import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
 import com.wnl.cashchat.api.domain.auth.exception.AlreadyOAuthUserException
 import com.wnl.cashchat.api.domain.auth.exception.InvalidTokenException
 import com.wnl.cashchat.api.domain.auth.exception.OAuthException
+import com.wnl.cashchat.api.domain.auth.oauth.apple.AppleIdTokenValidator
+import com.wnl.cashchat.api.domain.auth.oauth.apple.AppleTokenClient
+import com.wnl.cashchat.api.domain.auth.oauth.apple.AppleUserInfoExtractor
 import com.wnl.cashchat.api.domain.auth.oauth.model.OAuthUserInfo
 import com.wnl.cashchat.api.domain.auth.oauth.properties.OAuthProperties
 import com.wnl.cashchat.api.domain.auth.oauth.util.OAuthUserInfoExtractor
@@ -34,6 +37,9 @@ class AuthService(
     private val oAuthProperties: OAuthProperties,
     private val restClient: RestClient,
     private val userPointService: UserPointService,
+    private val appleTokenClient: AppleTokenClient,
+    private val appleIdTokenValidator: AppleIdTokenValidator,
+    private val appleUserInfoExtractor: AppleUserInfoExtractor,
     oAuthUserInfoExtractors: List<OAuthUserInfoExtractor>
 ) {
 
@@ -83,6 +89,23 @@ class AuthService(
         val userInfo = extractor.extract(rawUserInfo)
 
         val user = lookupOrRegisterUser(userInfo, providerType, deviceToken)
+
+        return buildAuthResponse(user)
+    }
+
+    @Transactional
+    fun loginWithApple(
+        authorizationCode: String,
+        identityToken: String?,
+        fullName: String?,
+        deviceToken: String?
+    ): AuthResponse {
+        val tokenResponse = appleTokenClient.exchangeAuthorizationCode(authorizationCode)
+        val idToken = tokenResponse.idToken?.takeIf { it.isNotBlank() }
+            ?: throw OAuthException("Missing id_token in Apple response")
+        val claims = appleIdTokenValidator.validate(idToken)
+        val userInfo = appleUserInfoExtractor.extract(claims, fullName)
+        val user = lookupOrRegisterUser(userInfo, AuthProviderType.APPLE, deviceToken)
 
         return buildAuthResponse(user)
     }
