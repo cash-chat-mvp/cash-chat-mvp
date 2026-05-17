@@ -214,10 +214,46 @@ class ChatController(
                     )
                 ]
             ),
-            ApiResponse(responseCode = "400", description = "The request body is invalid."),
-            ApiResponse(responseCode = "401", description = "Authentication is required."),
-            ApiResponse(responseCode = "402", description = "The user does not have enough points."),
-            ApiResponse(responseCode = "404", description = "Conversation not found, or it belongs to another user.")
+            ApiResponse(
+                responseCode = "400",
+                description = "The request body is invalid.",
+                content = [
+                    Content(
+                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                        schema = Schema(implementation = ErrorResponse::class)
+                    )
+                ]
+            ),
+            ApiResponse(
+                responseCode = "401",
+                description = "Authentication is required.",
+                content = [
+                    Content(
+                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                        schema = Schema(implementation = ErrorResponse::class)
+                    )
+                ]
+            ),
+            ApiResponse(
+                responseCode = "402",
+                description = "The user does not have enough points.",
+                content = [
+                    Content(
+                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                        schema = Schema(implementation = ErrorResponse::class)
+                    )
+                ]
+            ),
+            ApiResponse(
+                responseCode = "404",
+                description = "Conversation not found, or it belongs to another user.",
+                content = [
+                    Content(
+                        mediaType = MediaType.APPLICATION_JSON_VALUE,
+                        schema = Schema(implementation = ErrorResponse::class)
+                    )
+                ]
+            )
         ]
     )
     fun stream(

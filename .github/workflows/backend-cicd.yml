@@ -123,6 +123,7 @@ jobs:
             if [ -z "${APPLE_TEAM_ID}" ]; then missing_vars+=("APPLE_TEAM_ID"); fi
             if [ -z "${APPLE_KEY_ID}" ]; then missing_vars+=("APPLE_KEY_ID"); fi
             if [ -z "${APPLE_PRIVATE_KEY}" ]; then missing_vars+=("APPLE_PRIVATE_KEY"); fi
+            # APPLE_REDIRECT_URI is optional for the native iOS Sign in with Apple flow.
 
             if [ "${#missing_vars[@]}" -gt 0 ]; then
               echo "Missing required prod secrets: ${missing_vars[*]}" >&2

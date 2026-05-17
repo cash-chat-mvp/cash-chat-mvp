@@ -299,11 +299,11 @@ const [isStreaming, setIsStreaming] = useState(false);
 ## 프론트 구현 체크리스트
 
 - [ ] 채팅 탭 첫 진입 시 빈 화면 표시
-- [ ] 첫 메시지 전송 시 `POST /conversations` 먼저 호출
+- [ ] 첫 메시지 전송 시 `POST /api/v1/chat/conversations` 먼저 호출
 - [ ] 생성된 `conversationId` 저장
-- [ ] `/stream` 요청에 `conversationId` 포함
-- [ ] 채팅 내역 메뉴에서 `GET /conversations` 호출
-- [ ] 대화방 선택 시 `GET /conversations/{id}/messages` 호출
+- [ ] `POST /api/v1/chat/stream` 요청에 `conversationId` 포함
+- [ ] 채팅 내역 메뉴에서 `GET /api/v1/chat/conversations` 호출
+- [ ] 대화방 선택 시 `GET /api/v1/chat/conversations/{id}/messages` 호출
 - [ ] 스트리밍 중 중복 전송 방지
 - [ ] `402` 수신 시 포인트 부족 UI 표시
 - [ ] `404` 수신 시 삭제되었거나 접근 불가한 방으로 안내하고 목록 새로고침
