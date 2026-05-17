@@ -4,7 +4,9 @@ import com.wnl.cashchat.api.domain.ad.exception.GoogleAdSsvTransientException
 import com.wnl.cashchat.api.domain.ad.exception.InvalidGoogleAdSsvCallbackException
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
+import org.mockito.kotlin.never
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -44,6 +46,18 @@ class GoogleAdSsvSignatureVerifierTest : FunSpec({
         shouldThrow<InvalidGoogleAdSsvCallbackException> {
             verifier.verify("payload=one", "not base64!", 1L)
         }
+    }
+
+    test("invalid base64 signature is rejected before public key lookup") {
+        val publicKeyClient = mock<GoogleAdPublicKeyClient>()
+        whenever(publicKeyClient.getPublicKey(1L))
+            .thenThrow(GoogleAdSsvTransientException("key server unavailable"))
+        val verifier = GoogleAdSsvSignatureVerifier(publicKeyClient)
+
+        shouldThrow<InvalidGoogleAdSsvCallbackException> {
+            verifier.verify("payload=one", "not base64!", 1L)
+        }
+        verify(publicKeyClient, never()).getPublicKey(1L)
     }
 
     test("transient public key client failures propagate") {

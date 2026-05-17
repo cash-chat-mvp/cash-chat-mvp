@@ -15,8 +15,8 @@ class GoogleAdSsvSignatureVerifier(
         signature: String,
         keyId: Long,
     ) {
-        val publicKey = publicKeyClient.getPublicKey(keyId)
         val decodedSignature = decodeSignature(signature)
+        val publicKey = publicKeyClient.getPublicKey(keyId)
 
         try {
             val verifier = Signature.getInstance("SHA256withECDSA")
