@@ -8,10 +8,10 @@ data class ConversationSummaryResponse(
     @field:Schema(description = "Conversation identifier.", example = "7")
     val conversationId: Long,
 
-    @field:Schema(description = "Conversation title.", example = "영어 공부 방법")
+    @field:Schema(description = "Conversation title.", example = "English study tips")
     val title: String,
 
-    @field:Schema(description = "Most recent message preview.", example = "매일 짧게 공부하세요")
+    @field:Schema(description = "Most recent message preview.", example = "Study a little every day")
     val lastMessage: String?,
 
     @field:Schema(description = "Creation timestamp.")
