@@ -96,6 +96,11 @@ jobs:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+          APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || secrets.IOS_DEVELOPMENT_TEAM_ID }}
+          APPLE_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
+          APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
+          APPLE_REDIRECT_URI: ${{ secrets.APPLE_REDIRECT_URI }}
           APP_SWAGGER_ENABLED: ${{ secrets.APP_SWAGGER_ENABLED }}
         run: |
           SPRING_PROFILE="${BACKEND_SPRING_PROFILES_ACTIVE}"
@@ -114,6 +119,10 @@ jobs:
             if [ -z "${GOOGLE_CLIENT_ID}" ]; then missing_vars+=("GOOGLE_CLIENT_ID"); fi
             if [ -z "${GOOGLE_CLIENT_SECRET}" ]; then missing_vars+=("GOOGLE_CLIENT_SECRET"); fi
             if [ -z "${GOOGLE_REDIRECT_URI}" ]; then missing_vars+=("GOOGLE_REDIRECT_URI"); fi
+            if [ -z "${APPLE_CLIENT_ID}" ]; then missing_vars+=("APPLE_CLIENT_ID"); fi
+            if [ -z "${APPLE_TEAM_ID}" ]; then missing_vars+=("APPLE_TEAM_ID"); fi
+            if [ -z "${APPLE_KEY_ID}" ]; then missing_vars+=("APPLE_KEY_ID"); fi
+            if [ -z "${APPLE_PRIVATE_KEY}" ]; then missing_vars+=("APPLE_PRIVATE_KEY"); fi
 
             if [ "${#missing_vars[@]}" -gt 0 ]; then
               echo "Missing required prod secrets: ${missing_vars[*]}" >&2
@@ -142,6 +151,11 @@ jobs:
             write_env "GOOGLE_CLIENT_ID" "${GOOGLE_CLIENT_ID}"
             write_env "GOOGLE_CLIENT_SECRET" "${GOOGLE_CLIENT_SECRET}"
             write_env "GOOGLE_REDIRECT_URI" "${GOOGLE_REDIRECT_URI}"
+            write_env "APPLE_CLIENT_ID" "${APPLE_CLIENT_ID}"
+            write_env "APPLE_TEAM_ID" "${APPLE_TEAM_ID}"
+            write_env "APPLE_KEY_ID" "${APPLE_KEY_ID}"
+            write_env "APPLE_PRIVATE_KEY" "${APPLE_PRIVATE_KEY}"
+            write_env "APPLE_REDIRECT_URI" "${APPLE_REDIRECT_URI}"
             write_env "APP_SWAGGER_ENABLED" "${SWAGGER_ENABLED}"
           } > infra/deploy/backend/.deploy.env
 
