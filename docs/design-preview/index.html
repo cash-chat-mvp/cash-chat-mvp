@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cash Chat — Design Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #E8EAF0;
+    font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px;
+    gap: 32px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1B1B2A;
+    letter-spacing: -0.3px;
+  }
+
+  .device-row {
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .device-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .device-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #47465A;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Phone frame */
+  .phone {
+    width: 375px;
+    height: 812px;
+    background: #FAFBFF;
+    border-radius: 44px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.18), 0 0 0 10px #1B1B2A, 0 0 0 12px #2A2A3A;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 44px;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px 0;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+  }
+  .status-bar .time { font-size: 15px; font-weight: 700; color: #1B1B2A; }
+  .status-bar .icons { display: flex; gap: 6px; align-items: center; }
+  .status-bar .icons span { font-size: 12px; color: #1B1B2A; }
+
+  /* Screen content */
+  .screen {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* BottomNav */
+  .bottom-nav {
+    height: 72px;
+    background: #fff;
+    border-top: 1px solid #E8E4F5;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0 8px 8px;
+    flex-shrink: 0;
+  }
+  .nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+    padding: 6px 0;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .nav-item.active { background: #F2EFFF; }
+  .nav-icon { font-size: 22px; }
+  .nav-label { font-size: 11px; font-weight: 500; color: #47465A; }
+  .nav-item.active .nav-label { color: #5C6BFA; font-weight: 700; }
+
+  /* ── SCREEN: CHAT ── */
+  .chat-screen { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+  .char-header {
+    background: #fff;
+    padding: 12px 16px 14px;
+    border-bottom: 1px solid #F0EEF8;
+    box-shadow: 0 2px 8px rgba(92,107,250,0.08);
+    flex-shrink: 0;
+  }
+  .char-header-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .char-avatar {
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    border: 3px solid #5C6BFA;
+    background: linear-gradient(135deg, #a78bfa, #5C6BFA);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    flex-shrink: 0;
+  }
+  .char-info { flex: 1; }
+  .char-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .char-name { font-size: 16px; font-weight: 700; color: #1B1B2A; }
+  .char-lv {
+    font-size: 11px; font-weight: 700;
+    background: #E8E1FF; color: #5C6BFA;
+    padding: 2px 8px; border-radius: 4px;
+  }
+  .exp-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .exp-bar {
+    flex: 1; height: 7px;
+    background: #E8E4F5; border-radius: 99px; overflow: hidden;
+  }
+  .exp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #5C6BFA, #9B7FFF);
+    border-radius: 99px;
+    width: 70%;
+  }
+  .exp-text { font-size: 11px; color: #47465A; white-space: nowrap; }
+  .char-bottom { display: flex; align-items: center; justify-content: space-between; }
+  .coin-chip {
+    display: flex; align-items: center; gap: 4px;
+    background: #FFF0B3; border-radius: 99px;
+    padding: 3px 10px;
+  }
+  .coin-chip span { font-size: 13px; font-weight: 700; color: #B07C00; }
+  .evolve-btn {
+    font-size: 12px; font-weight: 700; color: #5C6BFA;
+    border: 1.5px solid #5C6BFA; border-radius: 6px;
+    padding: 4px 12px; background: transparent; cursor: pointer;
+  }
+
+  /* Message list */
+  .msg-list {
+    flex: 1; overflow-y: auto;
+    padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+    background: #FAFBFF;
+  }
+  .msg-row { display: flex; gap: 8px; align-items: flex-end; }
+  .msg-row.user { flex-direction: row-reverse; }
+  .msg-avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: linear-gradient(135deg, #a78bfa, #5C6BFA);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .bubble {
+    max-width: 72%;
+    padding: 10px 13px;
+    font-size: 14.5px; line-height: 1.5;
+    color: #1B1B2A;
+  }
+  .bubble.ai {
+    background: #F2EFFF;
+    border-radius: 4px 14px 14px 14px;
+  }
+  .bubble.user {
+    background: #5C6BFA;
+    color: #fff;
+    border-radius: 14px 4px 14px 14px;
+  }
+  .msg-time { font-size: 10px; color: #B0ADBE; margin-bottom: 2px; padding: 0 4px; }
+
+  /* Coupang card */
+  .coupang-card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #E8E4F5;
+    padding: 12px;
+    margin-top: 4px;
+    display: flex; gap: 10px; align-items: flex-start;
+    max-width: 78%;
+  }
+  .product-img {
+    width: 52px; height: 52px; border-radius: 8px;
+    background: linear-gradient(135deg, #ffecd2, #fcb69f);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; flex-shrink: 0;
+  }
+  .product-info { flex: 1; }
+  .product-name { font-size: 13px; font-weight: 600; color: #1B1B2A; margin-bottom: 3px; }
+  .product-price { font-size: 14px; font-weight: 700; color: #FF4545; margin-bottom: 2px; }
+  .product-rating { font-size: 11px; color: #47465A; }
+  .product-cta {
+    font-size: 12px; font-weight: 700; color: #00C9B1;
+    margin-top: 4px; cursor: pointer;
+  }
+  .product-disclosure {
+    font-size: 10px; color: #B0ADBE;
+    margin-top: 3px;
+  }
+
+  /* Ad gate blind card */
+  .ad-gate-card {
+    background: #F2EFFF;
+    border-radius: 4px 14px 14px 14px;
+    overflow: hidden;
+    max-width: 78%;
+  }
+  .ad-teaser {
+    padding: 10px 13px 6px;
+    font-size: 14.5px; line-height: 1.5; color: #1B1B2A;
+    position: relative;
+  }
+  .ad-teaser::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0; height: 32px;
+    background: linear-gradient(to bottom, transparent, #F2EFFF);
+  }
+  .ad-blur-zone {
+    padding: 0 13px 12px;
+    position: relative;
+  }
+  .blur-lines { display: flex; flex-direction: column; gap: 5px; padding-bottom: 12px; }
+  .blur-line {
+    height: 11px; border-radius: 4px;
+    background: rgba(92,107,250,0.15);
+    filter: blur(3px);
+  }
+  .ad-gate-cta {
+    background: rgba(255,255,255,0.92);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+  }
+  .gate-title { font-size: 13px; font-weight: 700; color: #1B1B2A; }
+  .gate-subtitle { font-size: 11px; color: #FFB800; font-weight: 600; }
+  .gate-btn {
+    width: 100%;
+    background: #5C6BFA;
+    color: #fff;
+    border: none;
+    border-radius: 99px;
+    padding: 9px;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer;
+    margin-top: 2px;
+  }
+
+  /* Input bar */
+  .input-bar {
+    background: #fff;
+    border-top: 1px solid #F0EEF8;
+    padding: 10px 16px 10px;
+    display: flex; gap: 10px; align-items: center;
+    flex-shrink: 0;
+  }
+  .input-field {
+    flex: 1;
+    background: #F3F3F5;
+    border-radius: 99px;
+    padding: 10px 16px;
+    font-size: 14px; color: #47465A;
+    border: none; outline: none;
+    font-family: inherit;
+  }
+  .send-btn {
+    width: 40px; height: 40px;
+    background: #5C6BFA;
+    border-radius: 50%;
+    border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  /* ── SCREEN: 혜택존 ── */
+  .rewards-screen { flex: 1; overflow-y: auto; padding: 0 0 16px; }
+
+  .top-bar {
+    background: #fff;
+    padding: 12px 16px 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid #F0EEF8;
+    flex-shrink: 0;
+  }
+  .top-bar-title { font-size: 18px; font-weight: 700; color: #1B1B2A; }
+
+  .attend-widget {
+    margin: 16px 16px 0;
+    background: linear-gradient(135deg, #E8E1FF 0%, #FAFBFF 100%);
+    border-radius: 18px;
+    padding: 16px;
+  }
+  .attend-title { font-size: 14px; font-weight: 700; color: #5C6BFA; margin-bottom: 12px; }
+  .attend-dots { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .attend-dot {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600;
+    background: #E0DCEF; color: #47465A;
+  }
+  .attend-dot.done { background: #5C6BFA; color: #fff; font-size: 14px; }
+  .attend-dot.today { background: #FFB800; color: #1B1B2A; }
+  .attend-reward { font-size: 13px; color: #1B1B2A; margin-bottom: 10px; }
+  .attend-reward span { font-weight: 700; }
+  .attend-reward .coin-hl { color: #B07C00; }
+  .attend-reward .item-hl { color: #5C6BFA; }
+  .attend-btn {
+    width: 100%; background: #5C6BFA; color: #fff;
+    border: none; border-radius: 99px;
+    padding: 11px; font-size: 14px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+
+  .section-card {
+    margin: 12px 16px 0;
+    background: #fff;
+    border-radius: 18px;
+    padding: 16px;
+    border: 1px solid #F0EEF8;
+  }
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .section-title { font-size: 15px; font-weight: 700; color: #1B1B2A; }
+  .section-refresh { font-size: 12px; color: #5C6BFA; font-weight: 600; cursor: pointer; }
+
+  .mission-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0;
+    border-bottom: 0.5px solid #F0EEF8;
+  }
+  .mission-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .mission-check {
+    width: 20px; height: 20px; border-radius: 6px;
+    border: 2px solid #C8C4D4; background: transparent;
+    flex-shrink: 0;
+  }
+  .mission-check.done { background: #5C6BFA; border-color: #5C6BFA; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; }
+  .mission-text { flex: 1; font-size: 13.5px; color: #1B1B2A; }
+  .mission-text.done { text-decoration: line-through; color: #B0ADBE; }
+  .mission-reward { font-size: 13px; font-weight: 700; color: #FFB800; }
+
+  .reward-ad-card {
+    background: #FFF9E6;
+    border-radius: 14px;
+    padding: 14px;
+    border: 1px solid #FFE8A3;
+  }
+  .rad-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .rad-title { font-size: 14px; font-weight: 700; color: #1B1B2A; }
+  .rad-count { font-size: 12px; color: #B07C00; font-weight: 600; }
+  .rad-reward { font-size: 13px; color: #47465A; margin-bottom: 10px; }
+  .rad-btn {
+    width: 100%; background: #FFB800; color: #1B1B2A;
+    border: none; border-radius: 99px;
+    padding: 10px; font-size: 14px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+  }
+
+  .tnk-section { margin: 12px 16px 0; }
+  .tnk-divider { font-size: 12px; font-weight: 700; color: #B0ADBE; text-align: center; margin-bottom: 12px; letter-spacing: 1px; }
+  .tnk-item {
+    background: #fff;
+    border-radius: 14px;
+    padding: 14px;
+    margin-bottom: 8px;
+    border: 1px solid #F0EEF8;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .tnk-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: #E8E1FF; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+  }
+  .tnk-info { flex: 1; }
+  .tnk-name { font-size: 14px; font-weight: 600; color: #1B1B2A; }
+  .tnk-type { font-size: 11px; color: #47465A; }
+  .tnk-reward { font-size: 14px; font-weight: 700; color: #FFB800; margin-bottom: 4px; text-align: right; }
+  .tnk-cta {
+    font-size: 12px; font-weight: 700; color: #fff;
+    background: #5C6BFA; border: none; border-radius: 8px;
+    padding: 5px 12px; cursor: pointer; font-family: inherit;
+  }
+
+  /* ── SCREEN: 상점 ── */
+  .shop-screen { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .shop-scroll { flex: 1; overflow-y: auto; padding: 16px 16px 0; }
+
+  .seg-tabs {
+    display: flex; gap: 4px;
+    background: #F2EFFF;
+    border-radius: 99px;
+    padding: 4px;
+    margin-bottom: 16px;
+  }
+  .seg-tab {
+    flex: 1; text-align: center;
+    padding: 8px 0;
+    border-radius: 99px;
+    font-size: 13px; font-weight: 600; color: #47465A;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .seg-tab.active { background: #fff; color: #5C6BFA; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .seg-tab.disabled { color: #C8C4D4; cursor: default; }
+
+  .shop-item-card {
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid #F0EEF8;
+    padding: 14px;
+    margin-bottom: 10px;
+    display: flex; gap: 12px; align-items: center;
+  }
+  .shop-item-icon {
+    width: 60px; height: 60px; border-radius: 12px;
+    background: #F2EFFF;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; flex-shrink: 0;
+    position: relative;
+  }
+  .shop-badge {
+    position: absolute; top: -6px; right: -6px;
+    font-size: 9px; font-weight: 700;
+    background: #FF4545; color: #fff;
+    padding: 2px 5px; border-radius: 4px;
+  }
+  .shop-badge.best { background: #FFB800; color: #1B1B2A; }
+  .shop-item-info { flex: 1; }
+  .shop-item-name { font-size: 14px; font-weight: 700; color: #1B1B2A; margin-bottom: 2px; }
+  .shop-item-desc { font-size: 12px; color: #47465A; margin-bottom: 6px; }
+  .shop-item-bottom { display: flex; align-items: center; justify-content: space-between; }
+  .shop-item-price { font-size: 15px; font-weight: 700; color: #5C6BFA; }
+  .shop-item-old { font-size: 11px; color: #B0ADBE; text-decoration: line-through; margin-left: 4px; }
+  .shop-item-hold { font-size: 11px; color: #B0ADBE; }
+  .shop-buy-btn {
+    font-size: 13px; font-weight: 700; color: #5C6BFA;
+    border: 1.5px solid #5C6BFA; border-radius: 8px;
+    padding: 5px 14px; background: transparent; cursor: pointer;
+    font-family: inherit;
+  }
+  .shop-footer {
+    background: #F2EFFF;
+    padding: 12px 16px;
+    text-align: center;
+    border-top: 1px solid #E8E4F5;
+    flex-shrink: 0;
+  }
+  .shop-footer-text {
+    font-size: 13px; color: #5C6BFA; font-weight: 600; cursor: pointer;
+  }
+
+  /* Voucher Tab */
+  .balance-card {
+    background: #5C6BFA;
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 14px;
+    color: #fff;
+  }
+  .balance-label { font-size: 13px; opacity: 0.85; margin-bottom: 4px; }
+  .balance-amount { font-size: 32px; font-weight: 800; margin-bottom: 4px; }
+  .balance-est { font-size: 12px; opacity: 0.75; }
+
+  .voucher-option {
+    border: 1.5px solid #E0DCEF;
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .voucher-option.selected { border-color: #5C6BFA; background: #F2EFFF; }
+  .voucher-check { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #C8C4D4; flex-shrink: 0; }
+  .voucher-option.selected .voucher-check { background: #5C6BFA; border-color: #5C6BFA; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px; }
+  .voucher-main { font-size: 14px; font-weight: 700; color: #1B1B2A; }
+  .voucher-sub { font-size: 12px; color: #00C9B1; }
+  .voucher-note { font-size: 12px; color: #B0ADBE; margin: 8px 0; display: flex; align-items: flex-start; gap: 4px; }
+  .exchange-btn {
+    width: 100%; background: #5C6BFA; color: #fff;
+    border: none; border-radius: 99px;
+    padding: 13px; font-size: 15px; font-weight: 700;
+    cursor: pointer; font-family: inherit; margin-top: 6px;
+  }
+
+  /* ── SCREEN: 마이 ── */
+  .my-screen { flex: 1; overflow-y: auto; }
+
+  .my-profile-header {
+    background: linear-gradient(135deg, #5C6BFA, #4A5AE8);
+    padding: 20px 16px 24px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .my-avatar {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: rgba(255,255,255,0.2);
+    border: 3px solid rgba(255,255,255,0.5);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px;
+  }
+  .my-info { color: #fff; }
+  .my-name { font-size: 18px; font-weight: 700; margin-bottom: 3px; }
+  .my-email { font-size: 13px; opacity: 0.8; margin-bottom: 6px; }
+  .my-lv-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.25);
+    border-radius: 99px;
+    font-size: 12px; font-weight: 700; color: #fff;
+    padding: 3px 10px;
+  }
+
+  .stats-row {
+    background: #fff;
+    margin: 16px 16px 0;
+    border-radius: 18px;
+    border: 1px solid #F0EEF8;
+    padding: 16px;
+    display: flex;
+  }
+  .stat-item {
+    flex: 1; text-align: center;
+    border-right: 1px solid #F0EEF8;
+  }
+  .stat-item:last-child { border-right: none; }
+  .stat-icon { font-size: 20px; margin-bottom: 4px; }
+  .stat-val { font-size: 17px; font-weight: 700; color: #1B1B2A; }
+  .stat-label { font-size: 11px; color: #47465A; }
+
+  .menu-section {
+    margin: 16px 16px 0;
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid #F0EEF8;
+    overflow: hidden;
+  }
+  .menu-section-label { font-size: 12px; font-weight: 700; color: #B0ADBE; padding: 12px 16px 4px; }
+  .menu-row {
+    display: flex; align-items: center;
+    padding: 14px 16px;
+    border-bottom: 0.5px solid #F0EEF8;
+    cursor: pointer;
+  }
+  .menu-row:last-child { border-bottom: none; }
+  .menu-icon { font-size: 18px; margin-right: 12px; }
+  .menu-text { flex: 1; font-size: 14px; color: #1B1B2A; font-weight: 500; }
+  .menu-text.danger { color: #FF4545; }
+  .menu-badge {
+    background: #FF4545; color: #fff;
+    font-size: 10px; font-weight: 700;
+    padding: 2px 6px; border-radius: 99px; margin-right: 6px;
+  }
+  .menu-arrow { font-size: 14px; color: #C8C4D4; }
+
+  /* Tab controller (for demo) */
+  .tab-controller {
+    display: flex; gap: 8px; margin-bottom: 8px;
+  }
+  .tab-ctrl-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px; font-weight: 700;
+    border: 1.5px solid #5C6BFA;
+    background: transparent; color: #5C6BFA;
+    cursor: pointer; font-family: inherit;
+    transition: all 0.15s;
+  }
+  .tab-ctrl-btn.on { background: #5C6BFA; color: #fff; }
+
+  /* Evolution subscreen overlay */
+  .evo-overlay {
+    position: absolute; inset: 0;
+    background: rgba(27,27,42,0.55);
+    z-index: 20;
+    display: flex; align-items: flex-end;
+  }
+  .evo-sheet {
+    background: #FAFBFF;
+    border-radius: 28px 28px 0 0;
+    width: 100%;
+    padding: 16px 20px 24px;
+    max-height: 90%;
+    overflow-y: auto;
+  }
+  .evo-handle {
+    width: 40px; height: 4px; background: #C8C4D4;
+    border-radius: 99px; margin: 0 auto 16px;
+  }
+  .evo-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .evo-title { font-size: 18px; font-weight: 800; color: #1B1B2A; }
+  .evo-close { font-size: 22px; color: #47465A; cursor: pointer; }
+  .evo-char-area {
+    display: flex; flex-direction: column; align-items: center; margin-bottom: 20px;
+  }
+  .evo-char-img {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: linear-gradient(135deg, #c4b5fd, #5C6BFA);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 56px; margin-bottom: 12px;
+    box-shadow: 0 0 0 8px rgba(92,107,250,0.12);
+  }
+  .evo-steps { display: flex; align-items: center; gap: 0; }
+  .evo-step-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #E0DCEF; position: relative;
+  }
+  .evo-step-dot.done { background: #5C6BFA; }
+  .evo-step-dot.current {
+    width: 14px; height: 14px; background: #5C6BFA;
+    box-shadow: 0 0 0 4px rgba(92,107,250,0.2);
+  }
+  .evo-step-line { width: 22px; height: 2px; background: #E0DCEF; }
+  .evo-step-line.done { background: #5C6BFA; }
+  .evo-stats {
+    background: #F2EFFF; border-radius: 14px; padding: 14px; margin-bottom: 14px;
+  }
+  .evo-stat-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .evo-stat-row:last-child { margin-bottom: 0; }
+  .evo-stat-label { font-size: 13px; color: #47465A; }
+  .evo-stat-val { font-size: 13px; font-weight: 700; color: #1B1B2A; }
+  .evo-attempt-card {
+    background: #fff; border-radius: 14px;
+    border: 1px solid #E8E4F5; padding: 14px;
+    margin-bottom: 14px;
+  }
+  .evo-prob { font-size: 22px; font-weight: 800; color: #5C6BFA; margin-bottom: 8px; }
+  .evo-prob-label { font-size: 12px; color: #47465A; }
+  .evo-divider { border: none; border-top: 1px solid #F0EEF8; margin: 10px 0; }
+  .evo-cost { font-size: 13px; color: #47465A; margin-bottom: 10px; }
+  .evo-chips { display: flex; gap: 8px; margin-bottom: 12px; }
+  .evo-chip {
+    font-size: 12px; font-weight: 700; color: #5C6BFA;
+    border: 1.5px solid #5C6BFA; border-radius: 8px;
+    padding: 5px 12px; background: transparent; cursor: pointer;
+    font-family: inherit;
+  }
+  .evo-try-btn {
+    width: 100%; background: linear-gradient(90deg, #5C6BFA, #9B7FFF); color: #fff;
+    border: none; border-radius: 99px;
+    padding: 14px; font-size: 16px; font-weight: 800;
+    cursor: pointer; font-family: inherit;
+  }
+  .evo-links { display: flex; gap: 10px; margin-top: 8px; }
+  .evo-link {
+    flex: 1; font-size: 13px; font-weight: 700; color: #5C6BFA;
+    border: 1.5px solid #E8E4F5; border-radius: 10px;
+    padding: 10px; text-align: center; cursor: pointer;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+
+<h1>Cash Chat — UI Design Preview</h1>
+
+<div class="device-row">
+
+  <!-- ── PHONE 1: Chat Tab ── -->
+  <div class="device-wrap">
+    <div class="device-label">Chat 탭 (Ad Gate 활성)</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">9:41</span>
+        <div class="icons"><span>●●●●</span><span>WiFi</span><span>🔋</span></div>
+      </div>
+      <div class="screen">
+        <div class="chat-screen">
+          <!-- Character Header -->
+          <div class="char-header">
+            <div class="char-header-inner">
+              <div class="char-avatar">🐣</div>
+              <div class="char-info">
+                <div class="char-name-row">
+                  <span class="char-name">미래</span>
+                  <span class="char-lv">Lv.3</span>
+                </div>
+                <div class="exp-row">
+                  <div class="exp-bar"><div class="exp-fill"></div></div>
+                  <span class="exp-text">420 / 600</span>
+                </div>
+                <div class="char-bottom">
+                  <div class="coin-chip">🪙 <span>1,250</span></div>
+                  <button class="evolve-btn">강화하기 →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Messages -->
+          <div class="msg-list">
+            <!-- AI msg -->
+            <div class="msg-row">
+              <div class="msg-avatar">🐣</div>
+              <div>
+                <div class="bubble ai">안녕하세요! 무엇이든 물어보세요 😊</div>
+                <div class="msg-time">10:32</div>
+              </div>
+            </div>
+            <!-- User msg -->
+            <div class="msg-row user">
+              <div>
+                <div class="bubble user">요즘 블루투스 이어폰 좋은 거 있어?</div>
+                <div class="msg-time" style="text-align:right">10:33</div>
+              </div>
+            </div>
+            <!-- AI + Coupang card -->
+            <div class="msg-row">
+              <div class="msg-avatar">🐣</div>
+              <div>
+                <div class="bubble ai">삼성 갤럭시 버즈3 Pro가 요즘 인기예요!</div>
+                <div class="coupang-card">
+                  <div class="product-img">🎧</div>
+                  <div class="product-info">
+                    <div class="product-name">삼성 갤럭시 버즈3 Pro</div>
+                    <div class="product-price">₩149,000</div>
+                    <div class="product-rating">★4.7 · 리뷰 3.2만개</div>
+                    <div class="product-cta">쿠팡에서 보기 →</div>
+                    <div class="product-disclosure">ⓘ 파트너스 활동으로 수수료 지급</div>
+                  </div>
+                </div>
+                <div class="msg-time">10:33</div>
+              </div>
+            </div>
+            <!-- User msg 2 -->
+            <div class="msg-row user">
+              <div>
+                <div class="bubble user">가성비 좋은 건? 예산 7만원</div>
+                <div class="msg-time" style="text-align:right">10:35</div>
+              </div>
+            </div>
+            <!-- Ad Gate Blind -->
+            <div class="msg-row">
+              <div class="msg-avatar">🐣</div>
+              <div>
+                <div class="ad-gate-card">
+                  <div class="ad-teaser">7만원 예산이면 QCY T13 ANC가 최고의 선택이에요. 노이즈 캔슬링 성능이...</div>
+                  <div class="ad-blur-zone">
+                    <div class="blur-lines">
+                      <div class="blur-line" style="width:100%"></div>
+                      <div class="blur-line" style="width:85%"></div>
+                      <div class="blur-line" style="width:92%"></div>
+                      <div class="blur-line" style="width:60%"></div>
+                    </div>
+                    <div class="ad-gate-cta">
+                      <div class="gate-title">🔓 답변 전체 보기</div>
+                      <div class="gate-subtitle">광고 시청 후 🪙+30 코인 획득</div>
+                      <button class="gate-btn">▶ 광고 보기</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="msg-time">10:35</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Input -->
+          <div class="input-bar">
+            <input class="input-field" placeholder="메시지를 입력하세요..." />
+            <button class="send-btn">↑</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item active">
+          <span class="nav-icon">💬</span>
+          <span class="nav-label">채팅</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">🎁</span>
+          <span class="nav-label">혜택존</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">🛒</span>
+          <span class="nav-label">상점</span>
+        </div>
+        <div class="nav-item">
+          <span class="nav-icon">👤</span>
+          <span class="nav-label">MY</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PHONE 2: 진화 서브스크린 ── -->
+  <div class="device-wrap">
+    <div class="device-label">진화 서브스크린</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">9:41</span>
+        <div class="icons"><span>●●●●</span><span>WiFi</span><span>🔋</span></div>
+      </div>
+      <div class="screen" style="position:relative">
+        <!-- Dimmed chat behind -->
+        <div class="chat-screen" style="filter:brightness(0.4)">
+          <div class="char-header">
+            <div class="char-header-inner">
+              <div class="char-avatar">🐣</div>
+              <div class="char-info">
+                <div class="char-name-row">
+                  <span class="char-name">미래</span>
+                  <span class="char-lv">Lv.3</span>
+                </div>
+                <div class="exp-row">
+                  <div class="exp-bar"><div class="exp-fill"></div></div>
+                  <span class="exp-text">420 / 600</span>
+                </div>
+                <div class="char-bottom">
+                  <div class="coin-chip">🪙 <span>1,250</span></div>
+                  <button class="evolve-btn">강화하기 →</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="msg-list">
+            <div class="msg-row"><div class="msg-avatar">🐣</div><div class="bubble ai">안녕하세요!</div></div>
+          </div>
+        </div>
+        <!-- Evolution Sheet Overlay -->
+        <div class="evo-overlay">
+          <div class="evo-sheet">
+            <div class="evo-handle"></div>
+            <div class="evo-header">
+              <span class="evo-title">강화 · 진화</span>
+              <span class="evo-close">✕</span>
+            </div>
+            <div class="evo-char-area">
+              <div class="evo-char-img">🐣</div>
+              <div class="evo-steps">
+                <div class="evo-step-dot done"></div>
+                <div class="evo-step-line done"></div>
+                <div class="evo-step-dot done"></div>
+                <div class="evo-step-line done"></div>
+                <div class="evo-step-dot current"></div>
+                <div class="evo-step-line"></div>
+                <div class="evo-step-dot"></div>
+                <div class="evo-step-line"></div>
+                <div class="evo-step-dot"></div>
+              </div>
+              <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:#47465A">
+                <span>알</span><span>병아리</span><span style="color:#5C6BFA;font-weight:700">청년</span><span>성인</span><span>궁극</span>
+              </div>
+            </div>
+            <div class="evo-stats">
+              <div class="evo-stat-row">
+                <span class="evo-stat-label">📊 EXP</span>
+                <span class="evo-stat-val">420 / 600</span>
+              </div>
+              <div class="evo-stat-row">
+                <span class="evo-stat-label">🪙 보유 코인</span>
+                <span class="evo-stat-val">1,250</span>
+              </div>
+              <div class="evo-stat-row">
+                <span class="evo-stat-label">📦 진화석</span>
+                <span class="evo-stat-val">2개 보유</span>
+              </div>
+            </div>
+            <div class="evo-attempt-card">
+              <div class="evo-prob">성공 확률 55% <span class="evo-prob-label" style="font-size:14px"></span></div>
+              <hr class="evo-divider">
+              <div class="evo-cost">진화석 1개 소모 (200코인 상당)</div>
+              <div class="evo-chips">
+                <button class="evo-chip">확률 부적 사용 +10%p</button>
+                <button class="evo-chip">보호권 사용</button>
+              </div>
+              <button class="evo-try-btn">🎰 진화 시도하기</button>
+            </div>
+            <div class="evo-links">
+              <button class="evo-link">🛒 재료 구하기</button>
+              <button class="evo-link">⚡ 코인 충전</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav" style="filter:brightness(0.4)">
+        <div class="nav-item active"><span class="nav-icon">💬</span><span class="nav-label">채팅</span></div>
+        <div class="nav-item"><span class="nav-icon">🎁</span><span class="nav-label">혜택존</span></div>
+        <div class="nav-item"><span class="nav-icon">🛒</span><span class="nav-label">상점</span></div>
+        <div class="nav-item"><span class="nav-icon">👤</span><span class="nav-label">MY</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PHONE 3: 혜택존 ── -->
+  <div class="device-wrap">
+    <div class="device-label">혜택존 탭</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">9:41</span>
+        <div class="icons"><span>●●●●</span><span>WiFi</span><span>🔋</span></div>
+      </div>
+      <div class="screen" style="display:flex;flex-direction:column;overflow:hidden">
+        <div class="top-bar">
+          <span class="top-bar-title">혜택존</span>
+          <div class="coin-chip">🪙 <span style="color:#B07C00;font-weight:700">1,250</span></div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding-bottom:16px">
+          <!-- Attendance -->
+          <div class="attend-widget">
+            <div class="attend-title">5월 출석체크</div>
+            <div class="attend-dots">
+              <div class="attend-dot done">✓</div>
+              <div class="attend-dot done">✓</div>
+              <div class="attend-dot done">✓</div>
+              <div class="attend-dot done">✓</div>
+              <div class="attend-dot done">✓</div>
+              <div class="attend-dot done">✓</div>
+              <div class="attend-dot today">17</div>
+              <div class="attend-dot">18</div>
+              <div class="attend-dot">19</div>
+              <div class="attend-dot">20</div>
+              <div class="attend-dot">21</div>
+              <div class="attend-dot">22</div>
+              <div class="attend-dot">23</div>
+              <div class="attend-dot">24</div>
+            </div>
+            <div class="attend-reward">오늘 보상: <span class="coin-hl">🪙+30</span> &nbsp; <span class="item-hl">📦 진화석 1개</span></div>
+            <button class="attend-btn">출석 도장 찍기</button>
+          </div>
+
+          <!-- Daily Missions -->
+          <div class="section-card">
+            <div class="section-header">
+              <span class="section-title">데일리 미션</span>
+              <span class="section-refresh">🔄 새로고침</span>
+            </div>
+            <div class="mission-row">
+              <div class="mission-check"></div>
+              <span class="mission-text">채팅 10회 보내기 (3/10)</span>
+              <span class="mission-reward">+50🪙</span>
+            </div>
+            <div class="mission-row">
+              <div class="mission-check"></div>
+              <span class="mission-text">친구 1명 초대하기</span>
+              <span class="mission-reward">+200🪙</span>
+            </div>
+            <div class="mission-row">
+              <div class="mission-check done">✓</div>
+              <span class="mission-text done">진화 시도 1회</span>
+              <span class="mission-reward" style="color:#B0ADBE">+30🪙</span>
+            </div>
+          </div>
+
+          <!-- Reward Ad -->
+          <div style="margin:12px 16px 0">
+            <div class="reward-ad-card">
+              <div class="rad-row">
+                <span class="rad-title">리워드 광고</span>
+                <span class="rad-count">오늘 8/10 남음</span>
+              </div>
+              <div class="rad-reward">광고 1회 시청 → 🪙+40 코인</div>
+              <button class="rad-btn">▶ 지금 시청하기</button>
+            </div>
+          </div>
+
+          <!-- TNK Offerwall -->
+          <div class="tnk-section">
+            <div class="tnk-divider">── TNK Factory 오퍼월 ──</div>
+            <div class="tnk-item">
+              <div class="tnk-icon">🎮</div>
+              <div class="tnk-info">
+                <div class="tnk-name">신규 게임 설치</div>
+                <div class="tnk-type">앱 설치 미션</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                <div class="tnk-reward">+1,500🪙</div>
+                <button class="tnk-cta">참여</button>
+              </div>
+            </div>
+            <div class="tnk-item">
+              <div class="tnk-icon">📋</div>
+              <div class="tnk-info">
+                <div class="tnk-name">소비자 설문 참여</div>
+                <div class="tnk-type">설문 미션</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                <div class="tnk-reward">+300🪙</div>
+                <button class="tnk-cta">참여</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item"><span class="nav-icon">💬</span><span class="nav-label">채팅</span></div>
+        <div class="nav-item active"><span class="nav-icon">🎁</span><span class="nav-label">혜택존</span></div>
+        <div class="nav-item"><span class="nav-icon">🛒</span><span class="nav-label">상점</span></div>
+        <div class="nav-item"><span class="nav-icon">👤</span><span class="nav-label">MY</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Row 2 -->
+<div class="device-row">
+
+  <!-- ── PHONE 4: 상점 — 강화재료 ── -->
+  <div class="device-wrap">
+    <div class="device-label">상점 — 강화재료</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">9:41</span>
+        <div class="icons"><span>●●●●</span><span>WiFi</span><span>🔋</span></div>
+      </div>
+      <div class="screen" style="display:flex;flex-direction:column;overflow:hidden">
+        <div class="top-bar">
+          <span class="top-bar-title">상점</span>
+          <div class="coin-chip">🪙 <span style="color:#B07C00;font-weight:700">1,250</span></div>
+        </div>
+        <div class="shop-screen">
+          <div class="shop-scroll">
+            <div class="seg-tabs">
+              <div class="seg-tab active">강화재료</div>
+              <div class="seg-tab">외형</div>
+              <div class="seg-tab">교환권</div>
+            </div>
+            <!-- Items -->
+            <div class="shop-item-card">
+              <div class="shop-item-icon">
+                💎
+                <div class="shop-badge">⏰ 24H</div>
+              </div>
+              <div class="shop-item-info">
+                <div class="shop-item-name">강화 패키지</div>
+                <div class="shop-item-desc">진화석 5개 + 확률 부적 1개</div>
+                <div class="shop-item-bottom">
+                  <div>
+                    <span class="shop-item-price">🪙 1,200</span>
+                    <span class="shop-item-old">1,500</span>
+                  </div>
+                  <button class="shop-buy-btn">구매</button>
+                </div>
+              </div>
+            </div>
+            <div class="shop-item-card">
+              <div class="shop-item-icon">🔮</div>
+              <div class="shop-item-info">
+                <div class="shop-item-name">진화석 ×1</div>
+                <div class="shop-item-desc">진화 시도 1회에 필요</div>
+                <div class="shop-item-bottom">
+                  <div>
+                    <span class="shop-item-price">🪙 200</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                    <span class="shop-item-hold">보유 2개</span>
+                    <button class="shop-buy-btn">구매</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="shop-item-card">
+              <div class="shop-item-icon">
+                🔮
+                <div class="shop-badge best">BEST</div>
+              </div>
+              <div class="shop-item-info">
+                <div class="shop-item-name">진화석 ×5</div>
+                <div class="shop-item-desc">묶음 10% 할인</div>
+                <div class="shop-item-bottom">
+                  <div>
+                    <span class="shop-item-price">🪙 900</span>
+                    <span class="shop-item-old">1,000</span>
+                  </div>
+                  <button class="shop-buy-btn">구매</button>
+                </div>
+              </div>
+            </div>
+            <div class="shop-item-card">
+              <div class="shop-item-icon">🍀</div>
+              <div class="shop-item-info">
+                <div class="shop-item-name">확률 부적</div>
+                <div class="shop-item-desc">다음 시도 성공률 +10%p</div>
+                <div class="shop-item-bottom">
+                  <div><span class="shop-item-price">🪙 500</span></div>
+                  <button class="shop-buy-btn">구매</button>
+                </div>
+              </div>
+            </div>
+            <div class="shop-item-card">
+              <div class="shop-item-icon">🛡️</div>
+              <div class="shop-item-info">
+                <div class="shop-item-name">보호권</div>
+                <div class="shop-item-desc">실패 시 코인 50% 반환</div>
+                <div class="shop-item-bottom">
+                  <div><span class="shop-item-price">🪙 800</span></div>
+                  <button class="shop-buy-btn">구매</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="shop-footer">
+            <span class="shop-footer-text">🎁 코인이 부족하세요? 혜택존에서 코인 벌기 →</span>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item"><span class="nav-icon">💬</span><span class="nav-label">채팅</span></div>
+        <div class="nav-item"><span class="nav-icon">🎁</span><span class="nav-label">혜택존</span></div>
+        <div class="nav-item active"><span class="nav-icon">🛒</span><span class="nav-label">상점</span></div>
+        <div class="nav-item"><span class="nav-icon">👤</span><span class="nav-label">MY</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PHONE 5: 상점 — 교환권 ── -->
+  <div class="device-wrap">
+    <div class="device-label">상점 — 네이버페이 교환권</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">9:41</span>
+        <div class="icons"><span>●●●●</span><span>WiFi</span><span>🔋</span></div>
+      </div>
+      <div class="screen" style="display:flex;flex-direction:column;overflow:hidden">
+        <div class="top-bar">
+          <span class="top-bar-title">상점</span>
+          <div class="coin-chip">🪙 <span style="color:#B07C00;font-weight:700">12,500</span></div>
+        </div>
+        <div class="shop-screen">
+          <div class="shop-scroll">
+            <div class="seg-tabs">
+              <div class="seg-tab">강화재료</div>
+              <div class="seg-tab">외형</div>
+              <div class="seg-tab active">교환권</div>
+            </div>
+            <div class="balance-card">
+              <div class="balance-label">현재 보유 코인</div>
+              <div class="balance-amount">🪙 12,500</div>
+              <div class="balance-est">≈ 11,250 ~ 11,875원 예상</div>
+            </div>
+            <div style="font-size:14px;font-weight:700;color:#1B1B2A;margin-bottom:10px">교환 단위 선택</div>
+            <div class="voucher-option selected">
+              <div class="voucher-check">✓</div>
+              <div>
+                <div class="voucher-main">5,000코인 → 네이버페이 4,500원</div>
+                <div class="voucher-sub">수수료 10% 적용</div>
+              </div>
+            </div>
+            <div class="voucher-option">
+              <div class="voucher-check"></div>
+              <div>
+                <div class="voucher-main">10,000코인 → 9,500원</div>
+                <div class="voucher-sub">할증 혜택 적용</div>
+              </div>
+            </div>
+            <div class="voucher-option">
+              <div class="voucher-check"></div>
+              <div>
+                <div class="voucher-main">30,000코인 → 29,000원</div>
+                <div class="voucher-sub">최대 혜택</div>
+              </div>
+            </div>
+            <div class="voucher-note">ⓘ 최초 교환 시 본인인증 1회 필요</div>
+            <div class="voucher-note">ⓘ 일 1만원 / 월 5만원 한도 적용</div>
+            <button class="exchange-btn">교환 신청하기</button>
+            <div style="margin-top:20px">
+              <div style="font-size:13px;font-weight:700;color:#B0ADBE;margin-bottom:8px">교환 내역</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:0.5px solid #F0EEF8">
+                <div>
+                  <div style="font-size:13px;color:#1B1B2A">5,000코인 → 4,500원</div>
+                  <div style="font-size:11px;color:#B0ADBE">2026-05-15</div>
+                </div>
+                <span style="font-size:12px;font-weight:700;color:#00C9B1">완료 ✓</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0">
+                <div>
+                  <div style="font-size:13px;color:#1B1B2A">5,000코인 → 4,500원</div>
+                  <div style="font-size:11px;color:#B0ADBE">2026-05-01</div>
+                </div>
+                <span style="font-size:12px;font-weight:700;color:#00C9B1">완료 ✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item"><span class="nav-icon">💬</span><span class="nav-label">채팅</span></div>
+        <div class="nav-item"><span class="nav-icon">🎁</span><span class="nav-label">혜택존</span></div>
+        <div class="nav-item active"><span class="nav-icon">🛒</span><span class="nav-label">상점</span></div>
+        <div class="nav-item"><span class="nav-icon">👤</span><span class="nav-label">MY</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PHONE 6: 마이 ── -->
+  <div class="device-wrap">
+    <div class="device-label">마이페이지</div>
+    <div class="phone">
+      <div class="status-bar" style="position:absolute;top:0;left:0;right:0;z-index:5">
+        <span class="time" style="color:#fff">9:41</span>
+        <div class="icons"><span style="color:#fff">●●●●</span><span style="color:#fff">WiFi</span><span style="color:#fff">🔋</span></div>
+      </div>
+      <div class="screen" style="display:flex;flex-direction:column;overflow:hidden">
+        <div style="flex:1;overflow-y:auto">
+          <div class="my-profile-header" style="padding-top:52px">
+            <div class="my-avatar">👤</div>
+            <div class="my-info">
+              <div class="my-name">홍길동님</div>
+              <div class="my-email">gildong@kakao.com</div>
+              <div class="my-lv-badge">✨ Lv.3 미래</div>
+            </div>
+          </div>
+          <div class="stats-row">
+            <div class="stat-item">
+              <div class="stat-icon">🪙</div>
+              <div class="stat-val">48,200</div>
+              <div class="stat-label">누적 코인</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-icon">💬</div>
+              <div class="stat-val">1,240</div>
+              <div class="stat-label">총 대화</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-icon">🎯</div>
+              <div class="stat-val">7일</div>
+              <div class="stat-label">연속 출석</div>
+            </div>
+          </div>
+          <div class="menu-section">
+            <div class="menu-section-label">계정</div>
+            <div class="menu-row">
+              <span class="menu-icon">📜</span>
+              <span class="menu-text">교환 내역</span>
+              <span class="menu-arrow">›</span>
+            </div>
+            <div class="menu-row">
+              <span class="menu-icon">🔔</span>
+              <span class="menu-text">알림 설정</span>
+              <span class="menu-arrow">›</span>
+            </div>
+            <div class="menu-row">
+              <span class="menu-icon">🔗</span>
+              <span class="menu-text">계정 연결 (Google)</span>
+              <span class="menu-arrow">›</span>
+            </div>
+          </div>
+          <div class="menu-section" style="margin-top:10px">
+            <div class="menu-section-label">고객지원</div>
+            <div class="menu-row">
+              <span class="menu-icon">🎫</span>
+              <span class="menu-text">내 기프티콘</span>
+              <span class="menu-badge">2</span>
+              <span class="menu-arrow">›</span>
+            </div>
+            <div class="menu-row">
+              <span class="menu-icon">📣</span>
+              <span class="menu-text">공지사항</span>
+              <span class="menu-badge" style="background:#5C6BFA">N</span>
+              <span class="menu-arrow">›</span>
+            </div>
+            <div class="menu-row">
+              <span class="menu-icon">💬</span>
+              <span class="menu-text">고객센터</span>
+              <span class="menu-arrow">›</span>
+            </div>
+          </div>
+          <div class="menu-section" style="margin-top:10px;margin-bottom:20px">
+            <div class="menu-row">
+              <span class="menu-icon">📄</span>
+              <span class="menu-text">이용약관</span>
+              <span class="menu-arrow">›</span>
+            </div>
+            <div class="menu-row">
+              <span class="menu-icon">🔒</span>
+              <span class="menu-text">개인정보처리방침</span>
+              <span class="menu-arrow">›</span>
+            </div>
+            <div class="menu-row">
+              <span class="menu-icon">🚪</span>
+              <span class="menu-text danger">로그아웃</span>
+            </div>
+          </div>
+          <div style="text-align:center;font-size:11px;color:#C8C4D4;padding-bottom:20px">
+            Cash Chat v1.0.0<br>© 2026 Nomad Club
+          </div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="nav-item"><span class="nav-icon">💬</span><span class="nav-label">채팅</span></div>
+        <div class="nav-item"><span class="nav-icon">🎁</span><span class="nav-label">혜택존</span></div>
+        <div class="nav-item"><span class="nav-icon">🛒</span><span class="nav-label">상점</span></div>
+        <div class="nav-item active"><span class="nav-icon">👤</span><span class="nav-label">MY</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
