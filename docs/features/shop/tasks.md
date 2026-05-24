@@ -1,0 +1,112 @@
+# 상점(Shop) Phase 1 — 작업 체크리스트
+
+> Source spec: `docs/features/shop/spec.md`
+> 선결 조건: `docs/features/reward/tasks.md`의 `BE-1 포인트 멱등성 확장` 완료
+
+## Back-End
+
+### BE-1. 도메인 모델 (`domain/shop/`, `domain/inventory/`)
+
+- [ ] `ShopItem` 엔티티 (`itemCode` PK, `name`, `category`, `priceCoin`, `isActive`, `displayOrder`)
+- [ ] `ShopItemGrant` 조인 엔티티 (`itemCode`, `grantItemCode`, `grantQty`) — 패키지 지원
+- [ ] `PurchaseOrder` 엔티티 (`idempotencyKey` unique, `status`, `snapshotPrice`, `createdAt`)
+- [ ] `UserInventory` 엔티티 (`userId`, `itemCode`, `qty`) — composite unique
+- [ ] Repository: JPA + 동시성 안전 UPSERT (MySQL `ON DUPLICATE KEY UPDATE` / H2 `MERGE`)
+- [ ] Inventory read API와 후속 `consume` 확장 지점을 위한 인터페이스 분리
+
+### BE-2. 서비스 / 트랜잭션
+
+- [ ] `ShopCatalogService.listItems(category)` — `isActive=true` 필터 + `displayOrder` 정렬
+- [ ] `ShopPurchaseService.purchase(userId, itemCode, qty, idempotencyKey)`
+  - [ ] 멱등성 키 선조회 → 기존 `COMPLETED` 주문이면 그대로 결과 반환
+  - [ ] `@Transactional` 안에서 `UserPointService.recordTransaction(delta=-price*qty, key="shop:purchase:{idem}")` 호출
+  - [ ] `INSUFFICIENT_COIN`, `ITEM_INACTIVE`, `ITEM_NOT_FOUND` 도메인 에러 분리
+  - [ ] `shop_item_grant` 다건 적재 (`ENHANCE_PACK` 같은 패키지)
+- [ ] `InventoryService.getMine(userId)`
+- [ ] Kotest + TestContainers 테스트: 정상 / 잔액 부족 / 비활성 / 멱등성 재호출 / 패키지 다건 grant / 동시 구매 경합
+
+### BE-3. Controller
+
+- [ ] `ShopController` (`GET /api/shop/items`, `POST /api/shop/purchase`)
+- [ ] `InventoryController` (`GET /api/inventory/me`)
+- [ ] Request 검증: `qty >= 1`, `idempotencyKey` UUID 형식, `category` enum
+- [ ] Phase 1 비대상 카테고리 처리 (`COSMETIC`, `VOUCHER` → 빈 배열 + `phase1Active:false`)
+- [ ] Web 테스트: 200 / 400 / 도메인 에러 매핑
+
+### BE-4. 마이그레이션 / 시드
+
+- [ ] Flyway 마이그레이션 (dev H2 + prod MySQL): `shop_item`, `shop_item_grant`, `purchase_order`, `user_inventory`
+- [ ] Phase 1 시드 SQL: 5종 ENHANCE 아이템 + `shop_item_grant` 6행 (spec 부록 표)
+
+## Front-End
+
+### FE-1. KMM 공유 모듈
+
+- [ ] `shared/shop/` Repository + DTO (Ktor)
+- [ ] `shared/inventory/` Repository + DTO
+- [ ] 공통 `UuidGenerator` (`expect`/`actual`)로 `idempotencyKey` 생성
+
+### FE-2. 상점 화면
+
+- [ ] `feature/shop`을 세그먼트 탭으로 재구성 — [강화재료] active / [외형](disabled) / [교환권](disabled)
+- [ ] `ShopItemCard` Composable (보유 수량 배지, 가격, [구매] 버튼)
+- [ ] 구매 확인 다이얼로그 (현재 → 구매 후 잔액 미리보기)
+- [ ] 코인 부족 시 sticky footer (혜택존 딥링크)
+- [ ] `ShopViewModel`: 카탈로그+인벤토리 병렬 로드, 구매 후 상태 갱신
+- [ ] UI 단위 테스트 + Compose Preview
+
+### FE-3. 에러 / UX
+
+- [ ] `INSUFFICIENT_COIN` → 토스트 + footer 강조
+- [ ] `ITEM_INACTIVE` / `ITEM_NOT_FOUND` → 카탈로그 강제 재로드
+- [ ] 네트워크 실패 시 같은 `idempotencyKey`로 1회 자동 재시도
+- [ ] 사용자가 동일 다이얼로그에서 이중 탭해도 1건만 발송 (debounce + 진행 중 가드)
+
+## Infra
+
+### INF-1. 마이그레이션 운영
+
+- [ ] dev(H2)·prod(MySQL 8) 양쪽 Flyway 적용 검증
+- [ ] 시드 데이터 prod 적용 절차 문서화 (Flyway repeatable vs 별도 seed task)
+- [ ] 시드 변경 시 운영 절차 (rollout/rollback)
+
+### INF-2. 모니터링
+
+- [ ] `purchase_order.status=FAILED` 비율 알람
+- [ ] `INSUFFICIENT_COIN` 누적 분포 대시보드 (가격 정책 튜닝 근거)
+- [ ] `user_inventory.qty` 음수 가드 (스키마 CHECK 또는 배치 점검)
+
+## 작업 흐름 (Workflow)
+
+```mermaid
+graph TD
+    RewardBE1[Reward BE-1<br/>포인트 멱등성 확장]:::ext
+    BE4[BE-4<br/>Flyway/시드]
+    BE1[BE-1<br/>도메인 모델]
+    BE2[BE-2<br/>서비스/트랜잭션]
+    BE3[BE-3<br/>Controller]
+    FE1[FE-1<br/>KMM 공유 모듈]
+    FE2[FE-2<br/>상점 화면]
+    FE3[FE-3<br/>에러/UX]
+    INF1[INF-1<br/>마이그레이션 운영]
+    INF2[INF-2<br/>모니터링]
+
+    RewardBE1 --> BE2
+    BE4 --> BE1
+    BE1 --> BE2
+    BE2 --> BE3
+    BE3 --> FE1
+    FE1 --> FE2
+    FE2 --> FE3
+    BE4 --> INF1
+    INF1 --> BE3
+    BE3 --> INF2
+
+    classDef ext fill:#eef,stroke:#88a,stroke-dasharray: 5 5;
+```
+
+선행 관계 요약:
+
+- **외부 선결**: `Reward BE-1`(포인트 멱등성 확장)이 본 spec의 구매 트랜잭션에 필수 → 혜택존 spec과 코디네이션해서 한 번만 작업.
+- **시드 → 모델 → 서비스 → 컨트롤러** 순서를 지켜야 통합 테스트가 깨지지 않음.
+- 프론트(`FE-2`, `FE-3`)는 백엔드 컨트롤러(`BE-3`)가 dev 환경에 떠 있어야 통합 확인 가능.
