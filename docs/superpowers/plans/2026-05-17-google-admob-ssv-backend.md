@@ -396,6 +396,13 @@ class MaxDurationValidator : ConstraintValidator<MaxDuration, Duration> {
 
 - [ ] **Step 4: Add YAML/env configuration**
 
+Ensure `GoogleAdSsvProperties` is discovered by Spring. The current app uses
+`@ConfigurationPropertiesScan` on `CashChatApiApplication`, which covers the
+`com.wnl.cashchat.api.domain.ad.properties` package. If that annotation is not
+present in the target branch, add `@ConfigurationPropertiesScan` to the main
+Spring Boot application class or register the properties explicitly with
+`@EnableConfigurationProperties(GoogleAdSsvProperties::class)`.
+
 In `application.yaml`, under existing `app:`:
 
 ```yaml
@@ -653,6 +660,13 @@ git commit -m "feat(ad): parse google ssv callbacks"
 **Files:**
 - Create: `apps/backend/src/main/kotlin/com/wnl/cashchat/api/domain/ad/service/GoogleAdPublicKeyClient.kt`
 - Create: `apps/backend/src/test/kotlin/com/wnl/cashchat/api/domain/ad/service/GoogleAdPublicKeyClientTest.kt`
+
+- [ ] **Step 0: Ensure a RestClient bean exists**
+
+`GoogleAdPublicKeyClient` constructor-injects `RestClient`. The current backend
+already provides `RestClientConfig.restClient()`. If that bean is missing in the
+target branch, add a small `@Configuration` class that returns
+`RestClient.builder().build()` or equivalent.
 
 - [ ] **Step 1: Write failing key client tests**
 
@@ -1318,8 +1332,8 @@ class GoogleAdSsvControllerTest {
             .thenThrow(GoogleAdSsvTransientException("key server failed"))
 
         mockMvc.perform(get("/api/v1/ads/google/ssv?ad_unit=ad-unit"))
-            .andExpect(status().isInternalServerError)
-            .andExpect(jsonPath("$.code").value("GOOGLE_AD_SSV_TRANSIENT_ERROR"))
+            .andExpect(status().isServiceUnavailable)
+            .andExpect(jsonPath("$.code").value("GOOGLE_AD_SSV_TEMPORARILY_UNAVAILABLE"))
     }
 
     @Test
@@ -1400,8 +1414,8 @@ class GoogleAdSsvExceptionHandler {
     @ExceptionHandler(GoogleAdSsvTransientException::class)
     fun handleTransientFailure(e: GoogleAdSsvTransientException): ResponseEntity<ErrorResponse> {
         log.error("Google AdMob SSV transient failure: {}", e.message, e)
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-            .body(ErrorResponse("GOOGLE_AD_SSV_TRANSIENT_ERROR", "Google AdMob SSV processing failed"))
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+            .body(ErrorResponse("GOOGLE_AD_SSV_TEMPORARILY_UNAVAILABLE", "Google Ad SSV is temporarily unavailable."))
     }
 }
 ```

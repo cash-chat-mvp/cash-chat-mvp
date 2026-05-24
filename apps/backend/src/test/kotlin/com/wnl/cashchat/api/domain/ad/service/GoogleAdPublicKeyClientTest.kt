@@ -66,11 +66,8 @@ class GoogleAdPublicKeyClientTest : FunSpec({
     test("rejects missing key id after fetching keys") {
         val fixture = fixture()
         val firstKey = base64PublicKey()
-        val secondKey = base64PublicKey()
         fixture.server.expect(requestTo("https://keys.example.test"))
             .andRespond(withSuccess("""{"keys":[{"keyId":2,"base64":"$firstKey"}]}""", MediaType.APPLICATION_JSON))
-        fixture.server.expect(requestTo("https://keys.example.test"))
-            .andRespond(withSuccess("""{"keys":[{"keyId":2,"base64":"$secondKey"}]}""", MediaType.APPLICATION_JSON))
 
         shouldThrow<GoogleAdSsvTransientException> {
             fixture.client.getPublicKey(1)

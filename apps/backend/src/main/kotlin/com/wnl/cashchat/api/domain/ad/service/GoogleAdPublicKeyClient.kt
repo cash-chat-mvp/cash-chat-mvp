@@ -24,35 +24,23 @@ class GoogleAdPublicKeyClient(
     private var cachedKeys: CachedKeys? = null
 
     fun getPublicKey(keyId: Long): PublicKey {
-        val keys = currentKeys()
-        return keys[keyId] ?: refreshedKey(keyId)
-    }
-
-    private fun currentKeys(): Map<Long, PublicKey> {
         val now = clock.instant()
         val cached = cachedKeys
         if (cached != null && now.isBefore(cached.expiresAt)) {
-            return cached.keys
+            cached.keys[keyId]?.let { return it }
         }
 
         synchronized(this) {
             val lockedNow = clock.instant()
             val current = cachedKeys
             if (current != null && lockedNow.isBefore(current.expiresAt)) {
-                return current.keys
+                current.keys[keyId]?.let { return it }
             }
 
-            return fetchAndCache()
-        }
-    }
-
-    private fun refreshedKey(keyId: Long): PublicKey =
-        synchronized(this) {
-            cachedKeys?.keys?.get(keyId)?.let { return it }
-
-            fetchAndCache()[keyId]
+            return fetchAndCache()[keyId]
                 ?: throw GoogleAdSsvTransientException("Google AdMob public key not found for key_id=$keyId")
         }
+    }
 
     private fun fetchAndCache(): Map<Long, PublicKey> {
         val fetched = fetchKeys()
