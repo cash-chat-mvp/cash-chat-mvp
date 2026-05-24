@@ -28,21 +28,25 @@
 ### BE-3. 광고 도메인 (`domain/ad/`)
 
 - [ ] `AdRewardNonce` 엔티티 (`nonce` PK, `userId`, `expiresAt`, `used`) — 서버 발급 nonce ↔ userId 매핑 저장소 (단일 사용, 단기 TTL)
+- [ ] `AdRewardDailyQuota` 엔티티 (`(userId, kstDate)` composite PK, `usedCount`) — 일일 사용량 카운터; SSV 트랜잭션 내 `SELECT ... FOR UPDATE` 락 대상
 - [ ] `AdRewardLedger` 엔티티 (`nonce` unique, status, reason, callback_payload JSON)
 - [ ] `AdRewardNonceService.issueFor(userId)` (TTL·UUID nonce 발급)
 - [ ] `AdMobSsvVerifier`: query string parsing + AdMob 공개키 캐시 + ECDSA 서명 검증
-- [ ] `AdRewardService.grantFromSsv(callback)`
+- [ ] `AdRewardService.grantFromSsv(callback)` — **모든 한도 검사·증가·적립을 단일 `@Transactional` 안에서 수행**
   - [ ] 서명 검증 → `custom_data.nonce`로 `ad_reward_nonce` 조회 → userId 해석 (`custom_data` 내 userId는 신뢰 금지)
-  - [ ] nonce 없음/만료/used → `INVALID_NONCE` REJECTED
-  - [ ] 일일 한도 검사 → `OVER_QUOTA` REJECTED
-  - [ ] 단일 트랜잭션: nonce.used=true UPDATE + recordTransaction(멱등성 키 `admob:reward:{nonce}`)
+  - [ ] nonce 없음/만료/used → `INVALID_NONCE` REJECTED (트랜잭션 진입 전)
+  - [ ] 트랜잭션 진입: `ad_reward_daily_quota` 행 UPSERT 후 `SELECT ... FOR UPDATE` (per-user-per-day 행 락) — TOCTOU 방지
+  - [ ] 락 상태에서 `usedCount >= dailyLimit` → `OVER_QUOTA` REJECTED + COMMIT
+  - [ ] 한도 미만 → `usedCount += 1` UPDATE → nonce.used=true UPDATE → recordTransaction(멱등성 키 `admob:reward:{nonce}`) → ledger GRANTED INSERT → COMMIT
 - [ ] `AdController` (`POST /api/ads/reward/issue-nonce`, `GET /api/ads/ssv/admob`, `GET /api/ads/reward/quota`)
-- [ ] Kotest + TestContainers 테스트: 서명 성공/실패 / nonce 없음·만료·used / 한도 초과 / nonce 중복(이중 방어선) / 알 수 없는 key id / 위조된 userId 무시
+- [ ] Kotest + TestContainers 테스트
+  - [ ] 서명 성공/실패 / nonce 없음·만료·used / 한도 초과 / nonce 중복(이중 방어선) / 알 수 없는 key id / 위조된 userId 무시
+  - [ ] **동시성 테스트**: 한도-1 상태에서 서로 다른 nonce로 두 SSV 콜백 동시 도착 시 정확히 한쪽만 GRANT, 다른 쪽 OVER_QUOTA REJECTED (TOCTOU 회귀 방지)
 
 ### BE-4. 설정 및 마이그레이션
 
 - [ ] `application.yml`에 `reward.admob.daily-limit`, `reward.admob.public-keys-url`, `reward.admob.reward-coin` 추가
-- [ ] Flyway 마이그레이션 (dev H2 + prod MySQL): `point_transaction`, `attendance_log`, `attendance_reward`, `ad_reward_nonce`, `ad_reward_ledger`
+- [ ] Flyway 마이그레이션 (dev H2 + prod MySQL): `point_transaction`, `attendance_log`, `attendance_reward`, `ad_reward_nonce`, `ad_reward_daily_quota`, `ad_reward_ledger`
 - [ ] 시드 데이터 SQL: 출석 보상 테이블 (Phase 1 종자값 — spec 부록 표)
 
 ## Front-End

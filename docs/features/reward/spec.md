@@ -84,7 +84,8 @@ And 본 인수 기준은 누적 1~30일 범위만 정의한다 — 31일 이후 
 
 Given 사용자가 이번 달 출석을 7일 동안 찍었다
 When 사용자가 `GET /api/attendance/me`를 호출한다
-Then 응답은 `{ year, month, checkedDays:[1..7], currentStreak:7, todayChecked:true, nextRewardPreview:{...} }` 형태로 반환된다.
+And 선택 query 파라미터 `year` (형식 `YYYY`)와 `month` (정수 1~12)는 **둘 다 함께 전달하거나 둘 다 생략**한다 — 한쪽만 전달하면 400 거부, 둘 다 생략 시 KST 기준 현재 연·월로 해석한다
+Then 응답은 `{ year, month, checkedDays:[1..7], currentStreak:7, todayChecked:true, nextRewardPreview:{...} }` 형태로 반환되며 `year`/`month`는 요청에 사용된(또는 기본으로 채워진) 값을 그대로 반영한다.
 
 ### nonce 발급 (광고 시청 직전)
 
@@ -97,12 +98,12 @@ And 이 nonce가 AdMob `custom_data`의 `nonce` 필드에만 실려야 하며, �
 ### 광고 일일 한도 내 시청
 
 Given 사용자가 `POST /api/ads/reward/issue-nonce`로 발급받은 nonce가 미사용·미만료 상태이다
-And 사용자의 오늘 광고 시청 횟수가 일일 한도 미만이다
+And `ad_reward_daily_quota`의 `(userId, kstDate)` 행 `usedCount`가 일일 한도 미만이다
 When AdMob이 SSV 콜백을 `GET /api/ads/ssv/admob?...`(query string)으로 보내고, `custom_data`에는 nonce만 포함된다
 And 백엔드가 query string의 `signature`를 AdMob 공개키로 검증한다
 And 백엔드가 `custom_data.nonce`로 `ad_reward_nonce`를 조회해 표준 `userId`를 해석한다 (`custom_data` 안의 다른 식별값은 신뢰하지 않음)
-Then 백엔드는 단일 트랜잭션 안에서 `ad_reward_nonce.used`를 true로 마킹하고 `UserPointService.recordTransaction`을 멱등성 키 `admob:reward:{nonce}`로 호출해 해석된 `userId`에 코인을 적립한다
-And `ad_reward_ledger`에 `status=GRANTED`로 콜백 메타가 저장된다
+Then 백엔드는 **단일 트랜잭션 안에서** 다음을 순서대로 수행한다 — (a) `ad_reward_daily_quota`의 `(userId, kstDate)` 행을 `SELECT ... FOR UPDATE`로 락을 잡아 `usedCount`를 다시 읽고 한도 미만임을 재확인, (b) `usedCount += 1`, (c) `ad_reward_nonce.used=true` UPDATE, (d) `UserPointService.recordTransaction(멱등성 키 "admob:reward:{nonce}")` 호출, (e) `ad_reward_ledger`에 `status=GRANTED`로 INSERT, (f) COMMIT
+And 위 절차는 트랜잭션 내부에서 한도 검사·증가가 원자적으로 일어나 동시 도착하는 SSV 둘이 동일 시점 `usedCount`를 읽고 모두 통과하는 TOCTOU 경합이 발생하지 않는다
 And 같은 사용자의 `GET /api/ads/reward/quota` 응답에 남은 횟수가 감소된 값으로 반영된다.
 
 ### 위조 또는 만료된 nonce 거부
@@ -117,12 +118,13 @@ And AdMob에는 200을 반환한다 (재시도 폭주 방지).
 
 ### 광고 일일 한도 초과
 
-Given 사용자의 오늘 광고 시청 횟수가 일일 한도에 도달했다
-When 새 SSV 콜백이 도착한다
-Then 백엔드는 적립을 거부한다
-And `ad_reward_ledger`에 `status=REJECTED`, `reason=OVER_QUOTA`로 기록한다
-And 코인이 적립되지 않는다
-And AdMob에는 200을 반환한다 (재시도 폭주 방지).
+Given `ad_reward_daily_quota`의 `(userId, kstDate)` 행 `usedCount`가 일일 한도에 도달했다
+When 새 SSV 콜백이 도착하고 서명·nonce 검증을 모두 통과한다
+Then 백엔드는 트랜잭션을 시작해 `ad_reward_daily_quota` 행을 `SELECT ... FOR UPDATE`로 락을 잡고 `usedCount >= 한도`를 확인한 뒤 적립을 거부한다
+And `ad_reward_ledger`에 `status=REJECTED`, `reason=OVER_QUOTA`로 기록하고 COMMIT한다
+And 코인이 적립되지 않으며 `ad_reward_nonce.used`는 변경되지 않는다 (재시도 방지를 위해 nonce는 그대로 미사용으로 두되, 호출 측 동일 nonce 재전송은 어차피 한도 초과로 REJECT)
+And AdMob에는 200을 반환한다 (재시도 폭주 방지)
+And 동시에 도착한 두 콜백이 같은 행에 락 경쟁을 하므로 한쪽만 통과·다른 쪽은 거부되어 TOCTOU 경합이 발생하지 않는다.
 
 ### SSV 서명 검증 실패
 
@@ -151,7 +153,7 @@ Then 응답은 `{ usedToday:3, dailyLimit:10, remaining:7, resetAtKst:"..." }` �
 | Method | Path | 설명 |
 | ------ | ---- | ---- |
 | `POST` | `/api/attendance/check-in` | 오늘 도장 + 보상 응답 |
-| `GET`  | `/api/attendance/me?year&month` | 월간 캘린더 + 연속일 + 오늘 여부 |
+| `GET`  | `/api/attendance/me` | 월간 캘린더 + 연속일 + 오늘 여부. Query: `year=YYYY`·`month=1~12` (둘 다 함께 또는 둘 다 생략; 한쪽만 전달은 400). 둘 다 생략 시 KST 현재 연·월. 상세는 인수 기준 "캘린더 조회" 참조. |
 | `POST` | `/api/ads/reward/issue-nonce` | 인증된 사용자에게 SSV 매핑용 단일 사용·단기 nonce 발급 |
 | `GET`  | `/api/ads/ssv/admob` | AdMob 서버 SSV 콜백 — 모든 파라미터는 query string (AdMob 표준은 GET) |
 | `GET`  | `/api/ads/reward/quota` | 오늘 남은 시청 횟수 |
@@ -246,13 +248,15 @@ sequenceDiagram
             API->>DB: ad_reward_ledger INSERT (REJECTED, INVALID_NONCE)
             API-->>AdMob: 200
         else nonce 유효
-            API->>DB: 오늘 시청 횟수 조회 (해석된 userId)
-            alt 한도 초과
+            Note over API,DB: 아래는 단일 @Transactional + 행 락<br/>한도 검사·증가가 원자적
+            API->>DB: BEGIN TRANSACTION
+            API->>DB: ad_reward_daily_quota UPSERT(userId, kstDate)<br/>+ SELECT ... FOR UPDATE
+            alt usedCount >= dailyLimit
                 API->>DB: ad_reward_ledger INSERT (REJECTED, OVER_QUOTA)
+                API->>DB: COMMIT
                 API-->>AdMob: 200
             else 한도 내
-                Note over API,DB: 아래는 단일 @Transactional
-                API->>DB: BEGIN TRANSACTION
+                API->>DB: ad_reward_daily_quota UPDATE (usedCount += 1)
                 API->>DB: ad_reward_nonce UPDATE (used=true)
                 API->>API: recordTransaction(userId, key="admob:reward:{nonce}")
                 API->>DB: ad_reward_ledger INSERT (GRANTED)
