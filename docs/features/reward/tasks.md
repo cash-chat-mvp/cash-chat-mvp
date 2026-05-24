@@ -22,20 +22,27 @@
   - [ ] `UserPointService.recordTransaction(key="attendance:{userId}:{date}")` 호출
 - [ ] `AttendanceService.getMonthly(userId, year, month)` 구현
 - [ ] `AttendanceController` (`POST /api/attendance/check-in`, `GET /api/attendance/me`)
-- [ ] Kotest 테스트: 첫 출석 / 중복 / 연속 증가 / 끊김 리셋 / 7·14·30일 부가 보상 / 31일+ 재진입
+- [ ] Kotest 테스트: 첫 출석 / 중복 / 연속 증가 / 끊김 리셋 / 7·14·30일 부가 보상
+  - 31일+ 사이클 재진입은 spec에서 Phase 1 범위 외 — 별도 의사결정 후 후속 PR에서 추가
 
 ### BE-3. 광고 도메인 (`domain/ad/`)
 
+- [ ] `AdRewardNonce` 엔티티 (`nonce` PK, `userId`, `expiresAt`, `used`) — 서버 발급 nonce ↔ userId 매핑 저장소 (단일 사용, 단기 TTL)
 - [ ] `AdRewardLedger` 엔티티 (`nonce` unique, status, reason, callback_payload JSON)
+- [ ] `AdRewardNonceService.issueFor(userId)` (TTL·UUID nonce 발급)
 - [ ] `AdMobSsvVerifier`: query string parsing + AdMob 공개키 캐시 + ECDSA 서명 검증
-- [ ] `AdRewardService.grantFromSsv(callback)` (서명 → 한도 → 멱등성 적립)
-- [ ] `AdController` (`POST /api/ads/ssv/admob`, `GET /api/ads/reward/quota`)
-- [ ] Kotest + TestContainers 테스트: 서명 성공/실패 / 한도 초과 / nonce 중복 / 알 수 없는 key id
+- [ ] `AdRewardService.grantFromSsv(callback)`
+  - [ ] 서명 검증 → `custom_data.nonce`로 `ad_reward_nonce` 조회 → userId 해석 (`custom_data` 내 userId는 신뢰 금지)
+  - [ ] nonce 없음/만료/used → `INVALID_NONCE` REJECTED
+  - [ ] 일일 한도 검사 → `OVER_QUOTA` REJECTED
+  - [ ] 단일 트랜잭션: nonce.used=true UPDATE + recordTransaction(멱등성 키 `admob:reward:{nonce}`)
+- [ ] `AdController` (`POST /api/ads/reward/issue-nonce`, `GET /api/ads/ssv/admob`, `GET /api/ads/reward/quota`)
+- [ ] Kotest + TestContainers 테스트: 서명 성공/실패 / nonce 없음·만료·used / 한도 초과 / nonce 중복(이중 방어선) / 알 수 없는 key id / 위조된 userId 무시
 
 ### BE-4. 설정 및 마이그레이션
 
 - [ ] `application.yml`에 `reward.admob.daily-limit`, `reward.admob.public-keys-url`, `reward.admob.reward-coin` 추가
-- [ ] Flyway 마이그레이션 (dev H2 + prod MySQL): `point_transaction`, `attendance_log`, `attendance_reward`, `ad_reward_ledger`
+- [ ] Flyway 마이그레이션 (dev H2 + prod MySQL): `point_transaction`, `attendance_log`, `attendance_reward`, `ad_reward_nonce`, `ad_reward_ledger`
 - [ ] 시드 데이터 SQL: 출석 보상 테이블 (Phase 1 종자값 — spec 부록 표)
 
 ## Front-End
@@ -43,15 +50,15 @@
 ### FE-1. KMM 공유 모듈
 
 - [ ] `shared/rewards/` 모듈 신설: Repository 인터페이스 + DTO
-- [ ] Ktor 클라이언트로 attendance / quota API 바인딩
+- [ ] Ktor 클라이언트로 attendance / issue-nonce / quota API 바인딩
 - [ ] `expect class AdMobRewardedAd` 선언 (commonMain)
-- [ ] `expect class UuidGenerator`로 nonce 생성
+- [ ] 클라이언트는 nonce를 직접 생성하지 않음 — 서버 발급 nonce를 그대로 전달
 
 ### FE-2. AdMob SDK 통합
 
 - [ ] Android: `play-services-ads` 통합 + `AdMobRewardedAd` androidMain 구현
 - [ ] iOS: `Google-Mobile-Ads-SDK` 통합 + `AdMobRewardedAd` iosMain 구현 (CocoaPods 또는 SPM)
-- [ ] `custom_data`에 `{userId, nonce}` JSON 주입
+- [ ] 광고 노출 직전 `issue-nonce` 호출 → 반환된 nonce를 `custom_data`의 `nonce` 필드에만 주입 (userId 등 식별값은 절대 포함 금지)
 - [ ] 광고 종료 후 콜백에서 quota 재조회 트리거
 
 ### FE-3. 혜택존 화면
@@ -104,8 +111,9 @@ graph TD
     BE2 --> INF2
 ```
 
-선행 관계 요약:
+선행 관계 요약 (다이어그램과 일치):
 
-- `BE-1`은 본 spec과 Shop spec 모두의 선결 조건 → 가장 먼저 시작.
+- `BE-4`(Flyway/시드/설정)가 가장 먼저 진행되어 `point_transaction` 등 테이블을 준비한다.
+- 그 위에 `BE-1` 포인트 멱등성 확장이 진행되며, `BE-1`은 본 spec과 Shop spec 모두의 공통 선결 조건이다.
 - `BE-3`(광고)는 AdMob 콘솔 SSV URL이 먼저 잡혀야 통신 검증이 가능 → `INF-1` 선행.
 - 프론트 화면(`FE-3`)은 백엔드 두 도메인(`BE-2`, `BE-3`)과 AdMob SDK(`FE-2`)가 모두 준비된 뒤 결합.
