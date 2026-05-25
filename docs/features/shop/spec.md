@@ -102,16 +102,92 @@ And `GET /api/shop/items?category=ENHANCE` 응답에도 해당 아이템이 포�
 
 Given 사용자가 Phase 1 비대상 카테고리(`COSMETIC`, `VOUCHER`)를 요청한다
 When `GET /api/shop/items?category=COSMETIC`을 호출한다
-Then 응답은 빈 배열을 반환하고 `phase1Active:false` 메타를 함께 내려준다
+Then 응답 본문은 `{ "category": "<요청값>", "phase1Active": false, "items": [] }` 형태로 빈 카탈로그와 `phase1Active=false` 플래그를 함께 반환한다 (정확한 스키마는 "API 계약" 섹션 참조)
 And Phase 1 동안 해당 카테고리 아이템은 카탈로그에 노출되지 않는다.
 
-## API 계약 (요약)
+## API 계약
+
+### 공통 규칙
+
+- **인증**: 모든 endpoint는 `Authorization: Bearer <jwt>` 필수 (기존 `domain/auth` 발급 access token; 추가 scope 요구 없음). 누락·만료 시 `401 UNAUTHORIZED` (기존 Security 필터 응답 형식 그대로).
+- **에러 응답 공통 본문**: `{ "code": "<DOMAIN_ENUM>", "message": "<설명>" }`. 도메인 enum은 인수 기준에 명시된 식별자(`INSUFFICIENT_COIN` 등)와 1:1 일치.
+- **idempotencyKey**: UUID v4 권장 (서버는 형식만 검증). 클라이언트가 같은 요청에 같은 키를 재사용하면 멱등 처리.
+
+### 엔드포인트 요약
 
 | Method | Path | 설명 |
 | ------ | ---- | ---- |
 | `GET`  | `/api/shop/items?category=ENHANCE` | 카탈로그 (Phase 1은 ENHANCE만 활성) |
 | `POST` | `/api/shop/purchase` | `{itemCode, qty, idempotencyKey}` → 트랜잭션 구매 |
 | `GET`  | `/api/inventory/me` | 보유 아이템 수량 리스트 |
+
+### `GET /api/shop/items?category=<CATEGORY>`
+
+ENHANCE (Phase 1 활성):
+
+```json
+{
+  "category": "ENHANCE",
+  "phase1Active": true,
+  "items": [
+    { "itemCode": "ENHANCE_PACK",   "name": "강화 패키지", "priceCoin": 1200, "effectSummary": "진화석 5 + 확률 부적 1 (묶음)", "displayOrder": 5 },
+    { "itemCode": "EVO_STONE",      "name": "진화석",     "priceCoin": 200,  "effectSummary": "진화 시도 1회 필요 재료",       "displayOrder": 10 }
+  ]
+}
+```
+
+COSMETIC / VOUCHER (Phase 1 비활성, "Phase 1 비대상 카테고리 호출" criterion 참조):
+
+```json
+{
+  "category": "COSMETIC",
+  "phase1Active": false,
+  "items": []
+}
+```
+
+| 에러 | HTTP | 비고 |
+| ---- | ---- | ---- |
+| `INVALID_CATEGORY` | 400 | enum 범위 밖 `category` 값 |
+
+### `POST /api/shop/purchase`
+
+Request: `{ "itemCode": "...", "qty": 1, "idempotencyKey": "<uuid>" }`
+
+성공 응답:
+
+```json
+{
+  "purchaseOrderId": 123,
+  "status": "COMPLETED",
+  "coinBalance": 1050,
+  "inventory": [
+    { "itemCode": "EVO_STONE", "qty": 3 }
+  ]
+}
+```
+
+> 멱등성 재호출은 **첫 처리 시점의 결과**(첫 구매 직후 시점의 잔액·인벤토리)를 그대로 반환한다 — 같은 사용자에게 그 사이 다른 거래가 있더라도 본 응답 값은 변하지 않는다. 자세한 시맨틱은 인수 기준 "멱등성 — 동일 키 재호출" 참조.
+
+| 에러 | HTTP | 발생 조건 |
+| ---- | ---- | -------- |
+| `INSUFFICIENT_COIN` | 400 | 잔액 < `priceCoin * qty` |
+| `ITEM_NOT_FOUND` | 400 | 시드에 없는 `itemCode` |
+| `ITEM_INACTIVE` | 400 | `shop_item.isActive=false` |
+| `VALIDATION` | 400 | `qty < 1`, `idempotencyKey` 형식 위반 등 |
+
+### `GET /api/inventory/me`
+
+```json
+{
+  "items": [
+    { "itemCode": "EVO_STONE",      "qty": 2 },
+    { "itemCode": "PROTECT_TICKET", "qty": 1 }
+  ]
+}
+```
+
+에러 없음 (인증 실패만 401).
 
 ## 사용자 흐름 (User Flow)
 
@@ -179,6 +255,17 @@ sequenceDiagram
     FE->>User: 잔액/보유 수량 갱신
 ```
 
+## 도메인 enum 정의
+
+### `PurchaseOrder.status`
+
+| 값 | 의미 |
+| -- | ---- |
+| `COMPLETED` | 트랜잭션 커밋 성공. **Phase 1에서 `purchase_order` 행이 가지는 유일한 값.** 도메인/잔액/inactive 거부는 `purchase_order` 행이 만들어지기 전 `ROLLBACK` 되므로 행이 남지 않는다. |
+| `FAILED` | 예약값. 사후 보상 트랜잭션(예: 다운스트림 grant 적재 실패 → 코인 환불) 실패 시 마킹용. Phase 1 미사용 (별도 spec). 모니터링 훅(`tasks: INF-2`)은 이 값을 0이 정상으로 가정한다. |
+
+> 운영 알람은 이 enum을 단일 source of truth로 참조한다. 신규 status 값 도입은 별도 spec 결정 후 본 표를 갱신한 뒤에만 추가한다.
+
 ## 범위 외 (Out Of Scope)
 
 - **외형 아이템 탭**: 스킨/액세서리/배경, IAP 결제 — Phase 2
@@ -199,7 +286,7 @@ sequenceDiagram
 | ---------------- | ----------- | -------- | --------- | ------------------------------------------ | -------- | ------------ |
 | `ENHANCE_PACK`   | 강화 패키지 | ENHANCE  | 1,200     | 진화석 5 + 확률 부적 1 (묶음)              | true     | 5            |
 | `EVO_STONE`      | 진화석      | ENHANCE  | 200       | 진화 시도 1회 필요 재료                    | true     | 10           |
-| `EVO_STONE_5`    | 진화석 ×5   | ENHANCE  | 900       | 묶음 구매 (10% 할인)                        | true     | 20           |
+| `EVO_STONE_BUNDLE`    | 진화석 ×5   | ENHANCE  | 900       | 묶음 구매 (10% 할인)                        | true     | 20           |
 | `LUCK_CHARM`     | 확률 부적   | ENHANCE  | 500       | 다음 진화 시도 성공 확률 +10%p (1회용)      | true     | 30           |
 | `PROTECT_TICKET` | 보호권      | ENHANCE  | 800       | 실패 시 소비 코인 50% 반환 (1회용)          | true     | 40           |
 
@@ -208,7 +295,7 @@ sequenceDiagram
 | itemCode         | grantItemCode    | grantQty |
 | ---------------- | ---------------- | -------- |
 | `EVO_STONE`      | `EVO_STONE`      | 1        |
-| `EVO_STONE_5`    | `EVO_STONE`      | 5        |
+| `EVO_STONE_BUNDLE`    | `EVO_STONE`      | 5        |
 | `LUCK_CHARM`     | `LUCK_CHARM`     | 1        |
 | `PROTECT_TICKET` | `PROTECT_TICKET` | 1        |
 | `ENHANCE_PACK`   | `EVO_STONE`      | 5        |
@@ -216,3 +303,4 @@ sequenceDiagram
 
 - 단건 아이템도 일관된 처리 경로를 위해 `shop_item_grant`에 자기 자신 grant 1행을 시드한다.
 - `displayOrder`는 작을수록 상단 노출 — 패키지를 최상단에 배치.
+- **itemCode 명명 규칙**: `itemCode`는 식별자일 뿐 수량을 의미하지 않는다 (`EVO_STONE_BUNDLE`은 "묶음"을 뜻하는 라벨이며 실제 지급 수량은 항상 `shop_item_grant.grantQty`가 단일 source of truth). 향후 묶음 수량 조정이 발생하면 시드 행만 수정하고 `itemCode`는 유지한다.

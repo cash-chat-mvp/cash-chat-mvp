@@ -59,7 +59,12 @@
 
 - [ ] `INSUFFICIENT_COIN` → 토스트 + footer 강조
 - [ ] `ITEM_INACTIVE` / `ITEM_NOT_FOUND` → 카탈로그 강제 재로드
-- [ ] 네트워크 실패 시 같은 `idempotencyKey`로 1회 자동 재시도
+- [ ] 멱등성 키 보존 자동 재시도 정책
+  - 재시도 대상: 요청 timeout / DNS·TCP 연결 실패 / HTTP 5xx (응답 본문 무관)
+  - 제외: HTTP 4xx, 도메인 에러(`INSUFFICIENT_COIN`/`ITEM_NOT_FOUND`/`ITEM_INACTIVE`), 200 OK
+  - 최대 재시도 1회 (총 최대 2회 시도) — 동일 `idempotencyKey` 보존
+  - 백오프: 500ms 고정 지연 후 1회 재시도 (Phase 1은 단순화; 추후 지수 백오프 가능)
+  - 관찰: 1차 실패와 재시도 결과를 `idempotencyKey`·HTTP status·소요시간과 함께 클라이언트 로그/이벤트에 기록
 - [ ] 사용자가 동일 다이얼로그에서 이중 탭해도 1건만 발송 (debounce + 진행 중 가드)
 
 ## Infra
@@ -72,7 +77,7 @@
 
 ### INF-2. 모니터링
 
-- [ ] `purchase_order.status=FAILED` 비율 알람
+- [ ] `purchase_order.status=FAILED` 비율 알람 (정상치 = 0; spec "도메인 enum 정의 — `PurchaseOrder.status`" 참조)
 - [ ] `INSUFFICIENT_COIN` 누적 분포 대시보드 (가격 정책 튜닝 근거)
 - [ ] `user_inventory.qty` 음수 가드 (스키마 CHECK 또는 배치 점검)
 
@@ -88,8 +93,9 @@ graph TD
     FE1[FE-1<br/>KMM 공유 모듈]
     FE2[FE-2<br/>상점 화면]
     FE3[FE-3<br/>에러/UX]
-    INF1[INF-1<br/>마이그레이션 운영]
+    INF1[INF-1<br/>마이그레이션 운영 runbook]:::gate
     INF2[INF-2<br/>모니터링]
+    Deploy[배포 / prod 가동]:::gate
 
     RewardBE1 --> BE2
     BE4 --> BE1
@@ -98,11 +104,13 @@ graph TD
     BE3 --> FE1
     FE1 --> FE2
     FE2 --> FE3
-    BE4 --> INF1
-    INF1 --> BE3
     BE3 --> INF2
+    BE3 --> Deploy
+    FE3 --> Deploy
+    INF1 --> Deploy
 
     classDef ext fill:#eef,stroke:#88a,stroke-dasharray: 5 5;
+    classDef gate fill:#fff7e6,stroke:#d49a00;
 ```
 
 선행 관계 요약:
@@ -110,3 +118,4 @@ graph TD
 - **외부 선결**: `Reward BE-1`(포인트 멱등성 확장)이 본 spec의 구매 트랜잭션에 필수 → 혜택존 spec과 코디네이션해서 한 번만 작업.
 - **시드 → 모델 → 서비스 → 컨트롤러** 순서를 지켜야 통합 테스트가 깨지지 않음.
 - 프론트(`FE-2`, `FE-3`)는 백엔드 컨트롤러(`BE-3`)가 dev 환경에 떠 있어야 통합 확인 가능.
+- **INF-1은 배포 게이트**: 컨트롤러 구현·테스트가 INF-1을 기다리지 않는다 (구 다이어그램의 `INF1 → BE3` 의존성 제거). INF-1은 prod 배포 시점에 BE-3·FE-3와 함께 통과되어야 하는 운영 runbook.
