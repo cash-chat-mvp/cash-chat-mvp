@@ -214,12 +214,11 @@ jobs:
           for model in "${MODELS[@]}"; do
             model="${model// /}"
             echo "::notice::OpenAI 모델 시도: $model"
+            # 모델 존재 여부만 확인 (chat 파라미터 호환성 이슈 회피: gpt-5.x는 max_tokens 미지원)
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
               --connect-timeout 5 --max-time 20 \
-              "https://api.openai.com/v1/chat/completions" \
-              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
-              -H "content-type: application/json" \
-              --data "{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1}") || HTTP_CODE="000"
+              "https://api.openai.com/v1/models/${model}" \
+              -H "Authorization: Bearer ${OPENAI_API_KEY}") || HTTP_CODE="000"
             echo "::notice::HTTP $HTTP_CODE ($model)"
             if [ "$HTTP_CODE" = "200" ]; then
               SELECTED="$model"
