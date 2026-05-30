@@ -37,6 +37,7 @@ jobs:
     if: |
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
+       github.event.comment.user.type != 'Bot' &&
        github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '/gemini-review'))
     runs-on: ubuntu-latest
@@ -213,6 +214,7 @@ jobs:
     needs: resolve-gemini-model
     if: |
       github.event_name == 'issue_comment' &&
+      github.event.comment.user.type != 'Bot' &&
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '/gemini-review')
     runs-on: ubuntu-latest
@@ -338,6 +340,7 @@ jobs:
     name: Resolve OpenAI Model
     if: |
       github.event_name == 'issue_comment' &&
+      github.event.comment.user.type != 'Bot' &&
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '/openai-review')
     runs-on: ubuntu-latest
