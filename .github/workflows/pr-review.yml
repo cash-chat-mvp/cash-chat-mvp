@@ -1,0 +1,179 @@
+name: PR Code Review (Qodo / pr-agent)
+
+on:
+  # Gemini: dev 브랜치로 PR이 들어오거나 코드가 업데이트되면 자동 실행
+  # fork PR에서 secrets 접근을 위해 pull_request_target 사용
+  # pr-agent는 GitHub API로 diff를 읽으므로 소스코드 접근 문제 없음
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    branches:
+      - dev
+  # Gemini 또는 OpenAI: PR 코멘트 명령어로 수동 트리거
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  # ----------------------------------------------------
+  # Gemini: 사용 가능한 모델 순차 탐색
+  # ----------------------------------------------------
+  resolve-gemini-model:
+    name: Resolve Gemini Model
+    if: |
+      github.event_name == 'pull_request_target' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '/gemini-review'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      model: ${{ steps.pick.outputs.model }}
+    steps:
+      - name: Pick available Gemini model
+        id: pick
+        env:
+          GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          GEMINI_MODELS: ${{ vars.GEMINI_MODELS }}
+          GEMINI_API_VERSION: ${{ vars.GEMINI_API_VERSION }}
+        run: |
+          set -euo pipefail
+          API_VERSION="${GEMINI_API_VERSION:-v1beta}"
+          MODELS_CSV="${GEMINI_MODELS:-gemini-2.5-flash}"
+          IFS=',' read -ra MODELS <<< "$MODELS_CSV"
+
+          SELECTED=""
+          for model in "${MODELS[@]}"; do
+            model="${model// /}"
+            echo "::notice::Gemini 모델 시도: $model"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --connect-timeout 5 --max-time 20 \
+              "https://generativelanguage.googleapis.com/${API_VERSION}/models/${model}:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
+              -H "content-type: application/json" \
+              --data '{"contents":[{"parts":[{"text":"hi"}]}]}') || HTTP_CODE="000"
+            echo "::notice::HTTP $HTTP_CODE ($model)"
+            if [ "$HTTP_CODE" = "200" ]; then
+              SELECTED="$model"
+              break
+            elif [ "$HTTP_CODE" = "429" ]; then
+              echo "::warning::429 ($model) — 다음 모델로 전환"
+              sleep 5
+            fi
+          done
+
+          if [ -z "$SELECTED" ]; then
+            echo "::error::사용 가능한 Gemini 모델 없음"
+            exit 1
+          fi
+
+          echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
+          echo "::notice::선택된 Gemini 모델: $SELECTED"
+
+  # ----------------------------------------------------
+  # Gemini 리뷰 실행
+  # ----------------------------------------------------
+  review-gemini:
+    name: Gemini Review
+    needs: resolve-gemini-model
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: AI Code Review (Gemini)
+        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONFIG.AI_PROVIDER: "google"
+          CONFIG.OUTPUT_LANGUAGE: "ko-KR"
+          GOOGLE_AI_STUDIO.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          GOOGLE_AI_STUDIO.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
+          GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "true"
+          PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
+          PR_REVIEWER.REQUIRE_SECURITY_REVIEW: "true"
+          PR_REVIEWER.EXTRA_INSTRUCTIONS: "반드시 한국어로 리뷰하세요. 보안 취약점(OWASP Top 10, SQL Injection, XSS, 인증/인가 문제, 민감 정보 노출 등)을 중점적으로 검토하고, 발견 시 심각도(높음/중간/낮음)를 명시해주세요."
+
+  # ----------------------------------------------------
+  # OpenAI: 사용 가능한 모델 순차 탐색
+  # ----------------------------------------------------
+  resolve-openai-model:
+    name: Resolve OpenAI Model
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '/openai-review')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      model: ${{ steps.pick.outputs.model }}
+    steps:
+      - name: Pick available OpenAI model
+        id: pick
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODELS: ${{ vars.OPENAI_MODELS }}
+        run: |
+          set -euo pipefail
+          MODELS_CSV="${OPENAI_MODELS:-gpt-4o}"
+          IFS=',' read -ra MODELS <<< "$MODELS_CSV"
+
+          SELECTED=""
+          for model in "${MODELS[@]}"; do
+            model="${model// /}"
+            echo "::notice::OpenAI 모델 시도: $model"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --connect-timeout 5 --max-time 20 \
+              "https://api.openai.com/v1/chat/completions" \
+              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+              -H "content-type: application/json" \
+              --data "{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1}") || HTTP_CODE="000"
+            echo "::notice::HTTP $HTTP_CODE ($model)"
+            if [ "$HTTP_CODE" = "200" ]; then
+              SELECTED="$model"
+              break
+            elif [ "$HTTP_CODE" = "429" ]; then
+              echo "::warning::429 ($model) — 다음 모델로 전환"
+              sleep 5
+            fi
+          done
+
+          if [ -z "$SELECTED" ]; then
+            echo "::error::사용 가능한 OpenAI 모델 없음"
+            exit 1
+          fi
+
+          echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
+          echo "::notice::선택된 OpenAI 모델: $SELECTED"
+
+  # ----------------------------------------------------
+  # OpenAI 리뷰 실행
+  # ----------------------------------------------------
+  review-openai:
+    name: OpenAI Manual Review
+    needs: resolve-openai-model
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: AI Code Review (OpenAI)
+        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONFIG.AI_PROVIDER: "openai"
+          CONFIG.OUTPUT_LANGUAGE: "ko-KR"
+          OPENAI.KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
+          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
+          GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "true"
+          PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
+          PR_REVIEWER.REQUIRE_SECURITY_REVIEW: "true"
+          PR_REVIEWER.EXTRA_INSTRUCTIONS: "반드시 한국어로 리뷰하세요. 보안 취약점(OWASP Top 10, SQL Injection, XSS, 인증/인가 문제, 민감 정보 노출 등)을 중점적으로 검토하고, 발견 시 심각도(높음/중간/낮음)를 명시해주세요."
