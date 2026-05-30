@@ -327,6 +327,9 @@ ChatMessage
 
 ## 4. 단계별 모델 라우팅 — 백엔드 책임
 
+> CC-283 기준 최신 손익 방어 정책은 [06-ai-chat-profit-guard.md](./06-ai-chat-profit-guard.md)를 따른다.
+> 아래 내용은 초기 컨셉이며, 실제 구현에서는 `displayLevel`, `effectiveLevel`, 포만도, 퀄리티 버젯, Ad Gate 상태를 함께 고려한다.
+
 ```
 ChatService.generate(userId, message):
   user = userRepo.find(userId)
