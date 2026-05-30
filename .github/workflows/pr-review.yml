@@ -14,8 +14,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
 
 jobs:
   # ----------------------------------------------------
@@ -29,6 +27,8 @@ jobs:
        github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '/gemini-review'))
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       model: ${{ steps.pick.outputs.model }}
     steps:
@@ -49,6 +49,7 @@ jobs:
             model="${model// /}"
             echo "::notice::Gemini 모델 시도: $model"
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --connect-timeout 5 --max-time 20 \
               "https://generativelanguage.googleapis.com/${API_VERSION}/models/${model}:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
               -H "content-type: application/json" \
               --data '{"contents":[{"parts":[{"text":"hi"}]}]}') || HTTP_CODE="000"
@@ -77,9 +78,13 @@ jobs:
     name: Gemini Review
     needs: resolve-gemini-model
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
       - name: AI Code Review (Gemini)
-        uses: Codium-ai/pr-agent@main
+        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CONFIG.AI_PROVIDER: "google"
@@ -103,6 +108,8 @@ jobs:
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '/openai-review')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       model: ${{ steps.pick.outputs.model }}
     steps:
@@ -121,6 +128,7 @@ jobs:
             model="${model// /}"
             echo "::notice::OpenAI 모델 시도: $model"
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --connect-timeout 5 --max-time 20 \
               "https://api.openai.com/v1/chat/completions" \
               -H "Authorization: Bearer ${OPENAI_API_KEY}" \
               -H "content-type: application/json" \
@@ -150,9 +158,13 @@ jobs:
     name: OpenAI Manual Review
     needs: resolve-openai-model
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
       - name: AI Code Review (OpenAI)
-        uses: Codium-ai/pr-agent@main
+        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CONFIG.AI_PROVIDER: "openai"
