@@ -2,8 +2,9 @@ name: PR Code Review (Qodo / pr-agent)
 
 on:
   # Gemini: dev 브랜치로 PR이 들어오거나 코드가 업데이트되면 자동 실행
-  # pull_request_target 대신 pull_request 사용 — PR 소스코드를 정확히 읽기 위함
-  pull_request:
+  # fork PR에서 secrets 접근을 위해 pull_request_target 사용
+  # pr-agent는 GitHub API로 diff를 읽으므로 소스코드 접근 문제 없음
+  pull_request_target:
     types: [opened, reopened, synchronize]
     branches:
       - dev
@@ -23,7 +24,7 @@ jobs:
   resolve-gemini-model:
     name: Resolve Gemini Model
     if: |
-      github.event_name == 'pull_request' ||
+      github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '/gemini-review'))
