@@ -123,7 +123,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR") | .id' \
+              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -241,7 +241,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR") | .id' \
+              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -420,7 +420,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR") | .id' \
+              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
