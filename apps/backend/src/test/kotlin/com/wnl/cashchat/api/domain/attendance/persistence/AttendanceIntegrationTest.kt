@@ -49,7 +49,7 @@ class AttendanceIntegrationTest : FunSpec() {
 
             result.streakDayCount shouldBe 1
             result.awardedCoin shouldBe 20L
-            attendanceLogRepository.findByUserIdAndCheckInDateBetween(
+            attendanceLogRepository.findByUserIdAndCheckInDateBetweenOrderByCheckInDateAsc(
                 user.id, LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31)
             ).size shouldBe 1
             userPointRepository.findByUserId(user.id)!!.balance shouldBe 21L

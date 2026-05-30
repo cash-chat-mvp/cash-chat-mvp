@@ -9,7 +9,7 @@ interface AttendanceLogRepository : JpaRepository<AttendanceLog, Long> {
 
     fun findTopByUserIdOrderByCheckInDateDesc(userId: Long): AttendanceLog?
 
-    fun findByUserIdAndCheckInDateBetween(
+    fun findByUserIdAndCheckInDateBetweenOrderByCheckInDateAsc(
         userId: Long,
         start: LocalDate,
         end: LocalDate,

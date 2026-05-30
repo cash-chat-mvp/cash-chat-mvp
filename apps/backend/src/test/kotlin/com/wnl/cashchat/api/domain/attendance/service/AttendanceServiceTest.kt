@@ -19,6 +19,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.dao.DataIntegrityViolationException
 import java.time.LocalDate
 
 class AttendanceServiceTest : FunSpec({
@@ -56,7 +57,7 @@ class AttendanceServiceTest : FunSpec({
         result.streakDayCount shouldBe 1
         result.awardedCoin shouldBe 20L
         result.bonusItems shouldBe emptyList()
-        verify(attendanceLogRepository).save(argThat<AttendanceLog> {
+        verify(attendanceLogRepository).saveAndFlush(argThat<AttendanceLog> {
             this.userId == userId && checkInDate == today && streakDayCount == 1
         })
         verify(userPointService).recordTransaction(
@@ -69,7 +70,19 @@ class AttendanceServiceTest : FunSpec({
 
         shouldThrow<AlreadyCheckedInException> { service.checkIn(userId, today) }
 
-        verify(attendanceLogRepository, never()).save(any())
+        verify(attendanceLogRepository, never()).saveAndFlush(any())
+        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+    }
+
+    test("concurrent check-in losing the unique-constraint race is mapped to AlreadyCheckedInException") {
+        whenever(attendanceLogRepository.existsByUserIdAndCheckInDate(userId, today)).thenReturn(false)
+        whenever(attendanceLogRepository.findTopByUserIdOrderByCheckInDateDesc(userId)).thenReturn(null)
+        whenever(attendanceRewardRepository.findByDayCount(1)).thenReturn(null)
+        whenever(attendanceLogRepository.saveAndFlush(any<AttendanceLog>()))
+            .thenThrow(DataIntegrityViolationException("uq_attendance_log_user_date"))
+
+        shouldThrow<AlreadyCheckedInException> { service.checkIn(userId, today) }
+
         verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
     }
 
@@ -122,7 +135,7 @@ class AttendanceServiceTest : FunSpec({
         val logs = (1..7).map {
             AttendanceLog(userId = userId, checkInDate = LocalDate.of(2026, 5, it), streakDayCount = it)
         }
-        whenever(attendanceLogRepository.findByUserIdAndCheckInDateBetween(userId, LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31)))
+        whenever(attendanceLogRepository.findByUserIdAndCheckInDateBetweenOrderByCheckInDateAsc(userId, LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31)))
             .thenReturn(logs)
         whenever(attendanceLogRepository.findTopByUserIdOrderByCheckInDateDesc(userId)).thenReturn(logs.last())
         whenever(attendanceRewardRepository.findByDayCount(1)).thenReturn(null)
@@ -140,7 +153,7 @@ class AttendanceServiceTest : FunSpec({
 
     test("getMonthly reports active streak and todayChecked when latest log is today") {
         val log = AttendanceLog(userId = userId, checkInDate = today, streakDayCount = 5)
-        whenever(attendanceLogRepository.findByUserIdAndCheckInDateBetween(userId, LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31)))
+        whenever(attendanceLogRepository.findByUserIdAndCheckInDateBetweenOrderByCheckInDateAsc(userId, LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31)))
             .thenReturn(listOf(log))
         whenever(attendanceLogRepository.findTopByUserIdOrderByCheckInDateDesc(userId)).thenReturn(log)
         whenever(attendanceRewardRepository.findByDayCount(6)).thenReturn(null)
@@ -155,7 +168,7 @@ class AttendanceServiceTest : FunSpec({
 
     test("getMonthly keeps the streak alive when latest log is yesterday but today is unchecked") {
         val log = AttendanceLog(userId = userId, checkInDate = today.minusDays(1), streakDayCount = 4)
-        whenever(attendanceLogRepository.findByUserIdAndCheckInDateBetween(userId, LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31)))
+        whenever(attendanceLogRepository.findByUserIdAndCheckInDateBetweenOrderByCheckInDateAsc(userId, LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31)))
             .thenReturn(listOf(log))
         whenever(attendanceLogRepository.findTopByUserIdOrderByCheckInDateDesc(userId)).thenReturn(log)
         whenever(attendanceRewardRepository.findByDayCount(5)).thenReturn(null)

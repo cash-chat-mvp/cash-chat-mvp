@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.Table
+import jakarta.persistence.UniqueConstraint
 
 /**
  * 마일스톤 일차의 부가 보상 아이템 정의. Phase 1에서는 정의·미리보기 용도이며 실제 인벤토리 지급은 하지 않는다.
@@ -14,6 +15,9 @@ import jakarta.persistence.Table
 @Entity
 @Table(
     name = "attendance_reward_bonus",
+    uniqueConstraints = [
+        UniqueConstraint(name = "uq_attendance_reward_bonus_day_item", columnNames = ["day_count", "item_code"])
+    ],
     indexes = [Index(name = "idx_attendance_reward_bonus_day", columnList = "day_count")]
 )
 class AttendanceRewardBonus(

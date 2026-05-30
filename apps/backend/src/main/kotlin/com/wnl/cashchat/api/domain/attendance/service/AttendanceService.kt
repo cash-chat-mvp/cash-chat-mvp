@@ -7,6 +7,7 @@ import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceR
 import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceRewardRepository
 import com.wnl.cashchat.api.domain.point.persistence.entity.PointTransactionReason
 import com.wnl.cashchat.api.domain.point.service.UserPointService
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
@@ -41,9 +42,16 @@ class AttendanceService(
 
         val reward = rewardView(streak)
 
-        attendanceLogRepository.save(
-            AttendanceLog(userId = userId, checkInDate = today, streakDayCount = streak)
-        )
+        // saveAndFlush 로 INSERT 를 즉시 강제해, exists 검사 통과 후 동시에 도착한 다른 요청과
+        // uq_attendance_log_user_date 제약이 충돌하면 여기서 잡아 409(ALREADY_CHECKED_IN)로 변환한다.
+        // (exists 사전 검사는 순차 중복의 fast-path, 이 catch 는 동시성 race 의 방어선)
+        try {
+            attendanceLogRepository.saveAndFlush(
+                AttendanceLog(userId = userId, checkInDate = today, streakDayCount = streak)
+            )
+        } catch (e: DataIntegrityViolationException) {
+            throw AlreadyCheckedInException()
+        }
 
         userPointService.recordTransaction(
             userId = userId,
@@ -73,8 +81,8 @@ class AttendanceService(
         val start = LocalDate.of(year, month, 1)
         val end = start.plusMonths(1).minusDays(1)
 
-        val logs = attendanceLogRepository.findByUserIdAndCheckInDateBetween(userId, start, end)
-        val checkedDays = logs.map { it.checkInDate.dayOfMonth }.sorted()
+        val logs = attendanceLogRepository.findByUserIdAndCheckInDateBetweenOrderByCheckInDateAsc(userId, start, end)
+        val checkedDays = logs.map { it.checkInDate.dayOfMonth }
 
         val latest = attendanceLogRepository.findTopByUserIdOrderByCheckInDateDesc(userId)
         val currentStreak = if (latest != null &&

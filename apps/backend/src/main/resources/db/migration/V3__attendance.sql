@@ -24,6 +24,7 @@ CREATE TABLE attendance_reward_bonus (
     item_code VARCHAR(50) NOT NULL,
     quantity  INT         NOT NULL,
     PRIMARY KEY (id),
+    CONSTRAINT uq_attendance_reward_bonus_day_item UNIQUE (day_count, item_code),
     CONSTRAINT fk_attendance_reward_bonus_day FOREIGN KEY (day_count) REFERENCES attendance_reward (day_count)
 );
 CREATE INDEX idx_attendance_reward_bonus_day ON attendance_reward_bonus (day_count);
