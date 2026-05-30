@@ -116,10 +116,10 @@ jobs:
             -e GITHUB_API_URL="${{ github.api_url }}" \
             -e GITHUB_SERVER_URL="${{ github.server_url }}" \
             -e GITHUB_EVENT_PATH=/github/workflow/event.json \
-            -e "CONFIG.AI_PROVIDER=google" \
-            -e "CONFIG.MODEL=$MODEL" \
-            -e "GOOGLE_AI_STUDIO.KEY=$GEMINI_KEY" \
-            -e "GOOGLE_AI_STUDIO.MODEL=$MODEL" \
+            -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+            -e "CONFIG.MODEL=gemini/$MODEL" \
+            -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
+            -e "GEMINI_API_KEY=$GEMINI_KEY" \
             -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
             -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
             -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=true" \
@@ -171,10 +171,10 @@ jobs:
               -e GITHUB_API_URL="${{ github.api_url }}" \
               -e GITHUB_SERVER_URL="${{ github.server_url }}" \
               -e GITHUB_EVENT_PATH=/github/workflow/event.json \
-              -e "CONFIG.AI_PROVIDER=google" \
-              -e "CONFIG.MODEL=$MODEL" \
-              -e "GOOGLE_AI_STUDIO.KEY=$GEMINI_KEY" \
-              -e "GOOGLE_AI_STUDIO.MODEL=$MODEL" \
+              -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+              -e "CONFIG.MODEL=gemini/$MODEL" \
+              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
+              -e "GEMINI_API_KEY=$GEMINI_KEY" \
               -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
               "$PR_AGENT_IMAGE" 2>&1 | tee "$log"
             if grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
@@ -277,7 +277,7 @@ jobs:
               -e "CONFIG.AI_PROVIDER=openai" \
               -e "CONFIG.MODEL=$MODEL" \
               -e "OPENAI.KEY=$OPENAI_KEY" \
-              -e "OPENAI.MODEL=$MODEL" \
+              -e "OPENAI_API_KEY=$OPENAI_KEY" \
               -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
               "$PR_AGENT_IMAGE" 2>&1 | tee "$log"
             if grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
