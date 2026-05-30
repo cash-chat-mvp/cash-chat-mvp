@@ -6,8 +6,10 @@
 output_language = "ko-KR"
 # pr-agent에 토큰 한도가 등록되지 않은 최신 모델(gemini-3.5-flash 등) 허용
 custom_model_max_tokens = 1048576
-# 기본 fallback(gpt-5.4-mini) 비활성화 — OpenAI 키 없이 동작하도록
-fallback_models = []
+# 주의: fallback_models는 여기에 두지 않는다.
+# pr-agent의 apply_repo_settings가 이 파일을 런타임에 다시 적용하면서
+# 워크플로우 env(CONFIG.FALLBACK_MODELS)를 덮어쓰기 때문.
+# 폴백은 각 리뷰 잡의 docker run env에서 동적으로 주입한다(빈 경우 [] 주입).
 
 [pr_reviewer]
 inline_code_comments = true
