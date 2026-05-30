@@ -130,8 +130,11 @@ ENHANCE (Phase 1 활성):
   "category": "ENHANCE",
   "phase1Active": true,
   "items": [
-    { "itemCode": "ENHANCE_PACK",   "name": "강화 패키지", "priceCoin": 1200, "effectSummary": "진화석 5 + 확률 부적 1 (묶음)", "displayOrder": 5 },
-    { "itemCode": "EVO_STONE",      "name": "진화석",     "priceCoin": 200,  "effectSummary": "진화 시도 1회 필요 재료",       "displayOrder": 10 }
+    { "itemCode": "ENHANCE_PACK",    "name": "강화 패키지", "priceCoin": 1200, "effectSummary": "진화석 5 + 확률 부적 1 (묶음)",     "displayOrder": 5 },
+    { "itemCode": "EVO_STONE",       "name": "진화석",      "priceCoin": 200,  "effectSummary": "진화 시도 1회 필요 재료",          "displayOrder": 10 },
+    { "itemCode": "EVO_STONE_BUNDLE", "name": "진화석 ×5",  "priceCoin": 900,  "effectSummary": "묶음 구매 (10% 할인)",             "displayOrder": 20 },
+    { "itemCode": "LUCK_CHARM",      "name": "확률 부적",   "priceCoin": 500,  "effectSummary": "다음 진화 시도 성공 확률 +10%p (1회용)", "displayOrder": 30 },
+    { "itemCode": "PROTECT_TICKET",  "name": "보호권",      "priceCoin": 800,  "effectSummary": "실패 시 소비 코인 50% 반환 (1회용)",   "displayOrder": 40 }
   ]
 }
 ```
