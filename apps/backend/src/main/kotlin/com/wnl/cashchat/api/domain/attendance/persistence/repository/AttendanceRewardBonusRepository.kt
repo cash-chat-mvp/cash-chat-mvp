@@ -4,5 +4,5 @@ import com.wnl.cashchat.api.domain.attendance.persistence.entity.AttendanceRewar
 import org.springframework.data.jpa.repository.JpaRepository
 
 interface AttendanceRewardBonusRepository : JpaRepository<AttendanceRewardBonus, Long> {
-    fun findByDayCount(dayCount: Int): List<AttendanceRewardBonus>
+    fun findByDayCountOrderByItemCodeAsc(dayCount: Int): List<AttendanceRewardBonus>
 }

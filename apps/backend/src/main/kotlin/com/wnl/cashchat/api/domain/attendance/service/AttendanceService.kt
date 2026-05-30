@@ -123,7 +123,7 @@ class AttendanceService(
         val reward = attendanceRewardRepository.findByDayCount(dayCount)
             ?: attendanceRewardRepository.findByDayCount(BASE_DAY_COUNT)
             ?: throw IllegalStateException("Base attendance reward (day_count=$BASE_DAY_COUNT) is not seeded")
-        val bonuses = attendanceRewardBonusRepository.findByDayCount(dayCount)
+        val bonuses = attendanceRewardBonusRepository.findByDayCountOrderByItemCodeAsc(dayCount)
             .map { BonusItem(itemCode = it.itemCode, quantity = it.quantity) }
         return RewardView(dayCount = dayCount, coin = reward.coin, bonusItems = bonuses)
     }

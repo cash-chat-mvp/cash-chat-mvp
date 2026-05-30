@@ -4,6 +4,7 @@ import com.wnl.cashchat.api.domain.attendance.exception.InvalidAttendanceQueryEx
 import com.wnl.cashchat.api.domain.attendance.service.AttendanceService
 import com.wnl.cashchat.api.domain.attendance.web.response.CheckInResponse
 import com.wnl.cashchat.api.domain.attendance.web.response.MonthlyAttendanceResponse
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException
 import org.springframework.security.core.Authentication
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -44,8 +45,10 @@ class AttendanceController(
         )
     }
 
+    // 인증된 요청은 JwtAuthenticationFilter 가 principal 에 Long userId 를 세팅한다(도달 가능성은 낮은 방어 경로).
+    // principal 이 Long 이 아니면 인증 문제이므로 401 흐름을 타도록 AuthenticationException 을 던진다(500 아님).
     private fun Authentication.userId(): Long =
-        principal as? Long ?: throw IllegalArgumentException("Invalid authenticated principal")
+        principal as? Long ?: throw AuthenticationCredentialsNotFoundException("Invalid authenticated principal")
 
     private companion object {
         private val KST = ZoneId.of("Asia/Seoul")

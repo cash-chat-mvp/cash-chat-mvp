@@ -104,5 +104,13 @@ class AttendanceControllerTest : FunSpec() {
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INVALID_ATTENDANCE_QUERY"))
         }
+
+        test("GET /me with non-numeric month normalizes the type-mismatch to 400 INVALID_ATTENDANCE_QUERY") {
+            mockMvc.perform(
+                get("/api/attendance/me").param("year", "2026").param("month", "foo").principal(principal)
+            )
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_ATTENDANCE_QUERY"))
+        }
     }
 }

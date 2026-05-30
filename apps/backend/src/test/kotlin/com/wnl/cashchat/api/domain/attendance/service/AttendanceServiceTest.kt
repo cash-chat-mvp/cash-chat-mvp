@@ -45,7 +45,7 @@ class AttendanceServiceTest : FunSpec({
             userPointService,
         )
         whenever(attendanceRewardRepository.findByDayCount(0)).thenReturn(AttendanceReward(dayCount = 0, coin = 20))
-        whenever(attendanceRewardBonusRepository.findByDayCount(any())).thenReturn(emptyList())
+        whenever(attendanceRewardBonusRepository.findByDayCountOrderByItemCodeAsc(any())).thenReturn(emptyList())
     }
 
     test("first check-in: streak 1, base 20 coins, log saved, recordTransaction called with KST key") {
@@ -136,7 +136,7 @@ class AttendanceServiceTest : FunSpec({
             AttendanceLog(userId = userId, checkInDate = today.minusDays(1), streakDayCount = 6)
         )
         whenever(attendanceRewardRepository.findByDayCount(7)).thenReturn(AttendanceReward(dayCount = 7, coin = 50))
-        whenever(attendanceRewardBonusRepository.findByDayCount(7)).thenReturn(
+        whenever(attendanceRewardBonusRepository.findByDayCountOrderByItemCodeAsc(7)).thenReturn(
             listOf(AttendanceRewardBonus(dayCount = 7, itemCode = "EVO_STONE", quantity = 1))
         )
 
