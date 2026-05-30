@@ -44,6 +44,8 @@ class AttendanceIntegrationTest : FunSpec() {
         test("first check-in credits 20 base coins atomically with the log") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "att"))
             userPointService.ensureInitialized(user)
+            // 회원가입 시 초기 잔액은 1 (app.points.initial-balance dev 기본값) → 적립 후 1 + 20 = 21
+            userPointRepository.findByUserId(user.id)!!.balance shouldBe 1L
 
             val result = attendanceService.checkIn(user.id, LocalDate.of(2026, 5, 30))
 

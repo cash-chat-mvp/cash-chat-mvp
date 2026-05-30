@@ -23,7 +23,7 @@
 - [x] `AttendanceService.getMonthly(userId, year, month)` 구현 — year/month 둘 다/둘 다 생략, 한쪽만 400
 - [x] `AttendanceController` (`POST /api/attendance/check-in`, `GET /api/attendance/me`)
 - [x] Kotest 테스트: 첫 출석 / 중복 / 연속 증가 / 끊김 리셋 / 7일 부가 보상 (단위) + 컨트롤러 WebMvc + TestContainers 통합(첫 출석·중복·7일 시드값)
-  - 31일+ 사이클 재진입은 Phase 1 범위 외 — 현재 기본 폴백(20코인, 보너스/리셋 없음)으로 임시 처리. 정식 "월간 사이클" 정책은 후속 PR (Confluence 가설 존재)
+  - 31일+ 정식 "월간 사이클" 정책은 후속 PR 예정(Confluence 가설 존재). 현재 구현은 모든 31일+ 일차에 대해 기본 폴백으로 20코인을 지급(보너스/streak 리셋 없음)
   - **부가 보상 아이템(EVO_STONE 등)은 정의·미리보기만 제공, 실제 인벤토리 지급은 미구현** — 인벤토리/아이템 도메인(Shop/Evolution) 등장 시 연결
 
 ### BE-3. 광고 도메인 (`domain/ad/`)

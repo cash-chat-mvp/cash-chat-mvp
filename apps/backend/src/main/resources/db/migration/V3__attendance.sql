@@ -27,7 +27,8 @@ CREATE TABLE attendance_reward_bonus (
     CONSTRAINT uq_attendance_reward_bonus_day_item UNIQUE (day_count, item_code),
     CONSTRAINT fk_attendance_reward_bonus_day FOREIGN KEY (day_count) REFERENCES attendance_reward (day_count)
 );
-CREATE INDEX idx_attendance_reward_bonus_day ON attendance_reward_bonus (day_count);
+-- day_count 단독 인덱스는 uq_attendance_reward_bonus_day_item(day_count, item_code)의
+-- leftmost-prefix 가 findByDayCount 조회와 FK 를 커버하므로 별도로 두지 않는다.
 
 -- 시드: day_count=0 은 기본 일일 보상(코인 20, 보너스 없음). 7/14/30 마일스톤만 오버라이드.
 INSERT INTO attendance_reward (day_count, coin) VALUES (0, 20), (7, 50), (14, 100), (30, 300);

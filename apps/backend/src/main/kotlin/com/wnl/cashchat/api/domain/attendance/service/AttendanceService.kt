@@ -1,6 +1,7 @@
 package com.wnl.cashchat.api.domain.attendance.service
 
 import com.wnl.cashchat.api.domain.attendance.exception.AlreadyCheckedInException
+import com.wnl.cashchat.api.domain.attendance.exception.InvalidAttendanceQueryException
 import com.wnl.cashchat.api.domain.attendance.persistence.entity.AttendanceLog
 import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceLogRepository
 import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceRewardBonusRepository
@@ -10,6 +11,7 @@ import com.wnl.cashchat.api.domain.point.service.UserPointService
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.time.DateTimeException
 import java.time.LocalDate
 
 /**
@@ -50,7 +52,12 @@ class AttendanceService(
                 AttendanceLog(userId = userId, checkInDate = today, streakDayCount = streak)
             )
         } catch (e: DataIntegrityViolationException) {
-            throw AlreadyCheckedInException()
+            // uq_attendance_log_user_date(같은 날 중복) 위반만 409로 변환하고,
+            // FK 등 다른 무결성 오류는 그대로 전파해 가리지 않는다.
+            if (isDuplicateCheckInViolation(e)) {
+                throw AlreadyCheckedInException()
+            }
+            throw e
         }
 
         userPointService.recordTransaction(
@@ -78,7 +85,11 @@ class AttendanceService(
      */
     @Transactional(readOnly = true)
     fun getMonthly(userId: Long, year: Int, month: Int, today: LocalDate): MonthlyAttendance {
-        val start = LocalDate.of(year, month, 1)
+        val start = try {
+            LocalDate.of(year, month, 1)
+        } catch (e: DateTimeException) {
+            throw InvalidAttendanceQueryException("year/month is out of the supported range")
+        }
         val end = start.plusMonths(1).minusDays(1)
 
         val logs = attendanceLogRepository.findByUserIdAndCheckInDateBetweenOrderByCheckInDateAsc(userId, start, end)
@@ -117,7 +128,16 @@ class AttendanceService(
         return RewardView(dayCount = dayCount, coin = reward.coin, bonusItems = bonuses)
     }
 
+    /**
+     * 예외 원인 체인의 메시지에 같은 날 중복 유니크 제약명이 포함되는지 검사한다.
+     * (H2 MySQL 모드·MySQL 8 모두 제약/인덱스명이 메시지에 노출됨)
+     */
+    private fun isDuplicateCheckInViolation(e: DataIntegrityViolationException): Boolean =
+        generateSequence(e as Throwable) { it.cause }
+            .any { it.message?.contains(ATTENDANCE_UNIQUE_CONSTRAINT, ignoreCase = true) == true }
+
     private companion object {
         private const val BASE_DAY_COUNT = 0
+        private const val ATTENDANCE_UNIQUE_CONSTRAINT = "uq_attendance_log_user_date"
     }
 }

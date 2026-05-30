@@ -26,6 +26,11 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 
+/**
+ * 의도적으로 웹 슬라이스(@WebMvcTest) 테스트다 — 라우팅·파라미터 검증·예외 매핑(상태코드/에러코드)만 검증한다.
+ * 코드베이스 관례(ChatControllerTest 와 동일)를 따르며, DB 백엔드 통합(실제 시드·적립·트랜잭션)은
+ * Testcontainers MySQL 기반의 AttendanceIntegrationTest 에서 별도로 다룬다.
+ */
 @WebMvcTest(AttendanceController::class)
 @AutoConfigureMockMvc(addFilters = false)
 @Import(AttendanceExceptionHandler::class)

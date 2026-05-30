@@ -1,6 +1,7 @@
 package com.wnl.cashchat.api.domain.attendance.service
 
 import com.wnl.cashchat.api.domain.attendance.exception.AlreadyCheckedInException
+import com.wnl.cashchat.api.domain.attendance.exception.InvalidAttendanceQueryException
 import com.wnl.cashchat.api.domain.attendance.persistence.entity.AttendanceLog
 import com.wnl.cashchat.api.domain.attendance.persistence.entity.AttendanceReward
 import com.wnl.cashchat.api.domain.attendance.persistence.entity.AttendanceRewardBonus
@@ -84,6 +85,24 @@ class AttendanceServiceTest : FunSpec({
         shouldThrow<AlreadyCheckedInException> { service.checkIn(userId, today) }
 
         verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+    }
+
+    test("a non-duplicate integrity violation is rethrown, not masked as AlreadyCheckedInException") {
+        whenever(attendanceLogRepository.existsByUserIdAndCheckInDate(userId, today)).thenReturn(false)
+        whenever(attendanceLogRepository.findTopByUserIdOrderByCheckInDateDesc(userId)).thenReturn(null)
+        whenever(attendanceRewardRepository.findByDayCount(1)).thenReturn(null)
+        whenever(attendanceLogRepository.saveAndFlush(any<AttendanceLog>()))
+            .thenThrow(DataIntegrityViolationException("could not execute statement [fk_attendance_log_user]"))
+
+        shouldThrow<DataIntegrityViolationException> { service.checkIn(userId, today) }
+
+        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+    }
+
+    test("getMonthly rejects an out-of-range year with InvalidAttendanceQueryException") {
+        shouldThrow<InvalidAttendanceQueryException> {
+            service.getMonthly(userId, 1_000_000_000, 5, today)
+        }
     }
 
     test("consecutive day increments streak") {
