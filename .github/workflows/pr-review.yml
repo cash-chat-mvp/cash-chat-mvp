@@ -44,6 +44,7 @@ jobs:
       contents: read
     outputs:
       model: ${{ steps.pick.outputs.model }}
+      fallbacks: ${{ steps.pick.outputs.fallbacks }}
     steps:
       - name: Pick available Gemini model
         id: pick
@@ -57,32 +58,37 @@ jobs:
           MODELS_CSV="${GEMINI_MODELS:-gemini-2.5-flash}"
           IFS=',' read -ra MODELS <<< "$MODELS_CSV"
 
-          SELECTED=""
+          # 존재 확인은 GET /models/{model} 로 수행 — generateContent와 달리
+          # 무료 등급 일일 생성 할당량(RPD)을 소모하지 않는다.
+          # 실제 rate-limit(429) 회피는 리뷰 시점의 fallback_models가 담당한다.
+          VALID=()
           for model in "${MODELS[@]}"; do
             model="${model// /}"
-            echo "::notice::Gemini 모델 시도: $model"
+            [ -z "$model" ] && continue
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
               --connect-timeout 5 --max-time 20 \
-              "https://generativelanguage.googleapis.com/${API_VERSION}/models/${model}:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
-              -H "content-type: application/json" \
-              --data '{"contents":[{"parts":[{"text":"hi"}]}]}') || HTTP_CODE="000"
+              "https://generativelanguage.googleapis.com/${API_VERSION}/models/${model}?key=${GOOGLE_GEMINI_API_KEY}") || HTTP_CODE="000"
             echo "::notice::HTTP $HTTP_CODE ($model)"
             if [ "$HTTP_CODE" = "200" ]; then
-              SELECTED="$model"
-              break
-            elif [ "$HTTP_CODE" = "429" ]; then
-              echo "::warning::429 ($model) — 다음 모델로 전환"
-              sleep 5
+              VALID+=("$model")
             fi
           done
 
-          if [ -z "$SELECTED" ]; then
+          if [ ${#VALID[@]} -eq 0 ]; then
             echo "::error::사용 가능한 Gemini 모델 없음"
             exit 1
           fi
 
+          SELECTED="${VALID[0]}"
+          # 1순위를 제외한 나머지를 gemini/ 접두어 붙여 폴백 목록(CSV)으로 구성
+          FALLBACKS=""
+          for m in "${VALID[@]:1}"; do
+            if [ -z "$FALLBACKS" ]; then FALLBACKS="gemini/$m"; else FALLBACKS="$FALLBACKS,gemini/$m"; fi
+          done
+
           echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
-          echo "::notice::선택된 Gemini 모델: $SELECTED"
+          echo "fallbacks=${FALLBACKS}" >> "$GITHUB_OUTPUT"
+          echo "::notice::선택된 Gemini 모델: $SELECTED (폴백: ${FALLBACKS:-없음})"
 
   # ====================================================
   # Gemini 자동 리뷰 (PR 생성/커밋 푸시)
@@ -105,9 +111,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+          FALLBACKS: ${{ needs.resolve-gemini-model.outputs.fallbacks }}
           GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RETRY_CMD: "/gemini-review"
         run: |
           set -euo pipefail
+          # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
+          notify_failure() {
+            local log="$1"
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR") | .id' \
+              | while read -r cid; do
+                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    "$api/issues/comments/${cid}" >/dev/null
+                done
+            local msg
+            if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$log"; then
+              msg=$(printf '## ⏳ 오늘의 AI 리뷰 사용량을 모두 사용했어요\n\n무료 등급의 **일일 호출 한도(RPD)** 에 도달해 이번 리뷰를 완료하지 못했습니다.\n\n- **원인:** 일일 요청 할당량 소진 (RESOURCE_EXHAUSTED / 429)\n- **초기화:** 매일 자정(태평양 표준시 PT) 기준으로 자동 초기화됩니다.\n\n👉 **내일 다시 시도되거나, `%s` 로 수동 재요청**해 주세요. 🙏' "$RETRY_CMD")
+            else
+              msg=$(printf '## ⚠️ AI 리뷰를 완료하지 못했어요\n\n일시적인 오류로 리뷰 생성에 실패했습니다. 잠시 후 `%s` 로 다시 시도해 주세요.' "$RETRY_CMD")
+            fi
+            curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments" \
+              -d "$(jq -n --arg b "$msg" '{body: $b}')" >/dev/null
+          }
+          # rate-limit(429) 시 다음 Gemini 모델로 폴백 (목록이 있을 때만 주입)
+          EXTRA_ENV=()
+          if [ -n "${FALLBACKS:-}" ]; then
+            EXTRA_ENV+=(-e "CONFIG.FALLBACK_MODELS=$FALLBACKS")
+          fi
           LOG=$(mktemp)
           docker run --rm \
             -e GITHUB_TOKEN \
@@ -118,6 +153,7 @@ jobs:
             -e GITHUB_EVENT_PATH=/github/workflow/event.json \
             -e "CONFIG.AI_PROVIDER=google_ai_studio" \
             -e "CONFIG.MODEL=gemini/$MODEL" \
+            "${EXTRA_ENV[@]}" \
             -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
             -e "GEMINI_API_KEY=$GEMINI_KEY" \
             -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
@@ -126,8 +162,44 @@ jobs:
             -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
             "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
           if grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; then
+            notify_failure "$LOG"
             echo "::error::Gemini 리뷰 실패 — 로그를 확인하세요"
             exit 1
+          fi
+          # 리뷰 가이드 / 코드 제안 코멘트의 하드코딩 영문 라벨을 한국어로 치환
+          L_API="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          L_COMMENTS=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$L_API/issues/${PR_NUMBER}/comments?per_page=100")
+          L_RID=$(printf '%s' "$L_COMMENTS" | jq -r '[.[] | select(.body | test("PR Reviewer Guide"))] | last | .id // empty')
+          if [ -n "$L_RID" ]; then
+            L_BODY=$(printf '%s' "$L_COMMENTS" | jq -r --argjson id "$L_RID" '.[] | select(.id==$id) | .body' | sed \
+              -e 's/## Incremental PR Reviewer Guide/## 증분 PR 리뷰 가이드/g' \
+              -e 's/## PR Reviewer Guide/## PR 리뷰 가이드/g' \
+              -e 's/Here are some key observations to aid the review process:/리뷰에 참고할 주요 관찰 사항입니다:/g' \
+              -e 's/Estimated effort to review/리뷰 예상 난이도/g' \
+              -e 's/No relevant tests/관련 테스트 없음/g' \
+              -e 's/PR contains tests/테스트 포함됨/g' \
+              -e 's/No security concerns identified/보안 이슈 없음/g' \
+              -e 's/Security concerns/보안 이슈/g' \
+              -e 's/No major issues detected/주요 이슈 없음/g' \
+              -e 's/Recommended focus areas for review/중점 리뷰 영역/g' \
+              -e 's/No TODO sections/TODO 섹션 없음/g' \
+              -e 's/TODO sections/TODO 섹션/g' \
+              -e 's/Contribution time estimate/기여 소요 시간 추정/g' \
+              -e 's/Ticket compliance check/티켓 준수 확인/g' \
+              -e 's/Relevant ticket/관련 티켓/g')
+            curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$L_API/issues/comments/${L_RID}" -d "$(jq -n --arg b "$L_BODY" '{body: $b}')" >/dev/null
+          fi
+          L_SID=$(printf '%s' "$L_COMMENTS" | jq -r '[.[] | select(.body | test("PR Code Suggestions"))] | last | .id // empty')
+          if [ -n "$L_SID" ]; then
+            L_BODY=$(printf '%s' "$L_COMMENTS" | jq -r --argjson id "$L_SID" '.[] | select(.id==$id) | .body' | sed \
+              -e 's/## PR Code Suggestions/## PR 코드 개선 제안/g' \
+              -e 's/No code suggestions found for the PR./이 PR에 대한 코드 개선 제안이 없습니다./g' \
+              -e 's#<strong>Category</strong>#<strong>분류</strong>#g' \
+              -e 's/<strong>Suggestion/<strong>제안/g' \
+              -e 's#<strong>Impact</strong>#<strong>영향도</strong>#g' \
+              -e 's/Suggestion importance\[1-10\]:/제안 중요도[1-10]:/g' \
+              -e 's/Why: /이유: /g')
+            curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$L_API/issues/comments/${L_SID}" -d "$(jq -n --arg b "$L_BODY" '{body: $b}')" >/dev/null
           fi
 
   # ====================================================
@@ -155,9 +227,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+          FALLBACKS: ${{ needs.resolve-gemini-model.outputs.fallbacks }}
           GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          RETRY_CMD: "/gemini-review"
         run: |
           set -euo pipefail
+          # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
+          notify_failure() {
+            local log="$1"
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR") | .id' \
+              | while read -r cid; do
+                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    "$api/issues/comments/${cid}" >/dev/null
+                done
+            local msg
+            if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$log"; then
+              msg=$(printf '## ⏳ 오늘의 AI 리뷰 사용량을 모두 사용했어요\n\n무료 등급의 **일일 호출 한도(RPD)** 에 도달해 이번 리뷰를 완료하지 못했습니다.\n\n- **원인:** 일일 요청 할당량 소진 (RESOURCE_EXHAUSTED / 429)\n- **초기화:** 매일 자정(태평양 표준시 PT) 기준으로 자동 초기화됩니다.\n\n👉 **내일 다시 시도되거나, `%s` 로 수동 재요청**해 주세요. 🙏' "$RETRY_CMD")
+            else
+              msg=$(printf '## ⚠️ AI 리뷰를 완료하지 못했어요\n\n일시적인 오류로 리뷰 생성에 실패했습니다. 잠시 후 `%s` 로 다시 시도해 주세요.' "$RETRY_CMD")
+            fi
+            curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments" \
+              -d "$(jq -n --arg b "$msg" '{body: $b}')" >/dev/null
+          }
+          # rate-limit(429) 시 다음 Gemini 모델로 폴백 (목록이 있을 때만 주입)
+          EXTRA_ENV=()
+          if [ -n "${FALLBACKS:-}" ]; then
+            EXTRA_ENV+=(-e "CONFIG.FALLBACK_MODELS=$FALLBACKS")
+          fi
           run_command() {
             local cmd="$1"
             local tmp; tmp=$(mktemp)
@@ -173,17 +274,58 @@ jobs:
               -e GITHUB_EVENT_PATH=/github/workflow/event.json \
               -e "CONFIG.AI_PROVIDER=google_ai_studio" \
               -e "CONFIG.MODEL=gemini/$MODEL" \
+              "${EXTRA_ENV[@]}" \
               -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
               -e "GEMINI_API_KEY=$GEMINI_KEY" \
               -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
               "$PR_AGENT_IMAGE" 2>&1 | tee "$log"
             if grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
+              notify_failure "$log"
               echo "::error::Gemini $cmd 실패 — 로그를 확인하세요"
               exit 1
             fi
           }
+          # 리뷰 가이드 / 코드 제안 코멘트의 하드코딩 영문 라벨을 한국어로 치환
+          localize_comments() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            local comments rid sid body
+            comments=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments?per_page=100")
+            rid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Reviewer Guide"))] | last | .id // empty')
+            if [ -n "$rid" ]; then
+              body=$(printf '%s' "$comments" | jq -r --argjson id "$rid" '.[] | select(.id==$id) | .body' | sed \
+                -e 's/## Incremental PR Reviewer Guide/## 증분 PR 리뷰 가이드/g' \
+                -e 's/## PR Reviewer Guide/## PR 리뷰 가이드/g' \
+                -e 's/Here are some key observations to aid the review process:/리뷰에 참고할 주요 관찰 사항입니다:/g' \
+                -e 's/Estimated effort to review/리뷰 예상 난이도/g' \
+                -e 's/No relevant tests/관련 테스트 없음/g' \
+                -e 's/PR contains tests/테스트 포함됨/g' \
+                -e 's/No security concerns identified/보안 이슈 없음/g' \
+                -e 's/Security concerns/보안 이슈/g' \
+                -e 's/No major issues detected/주요 이슈 없음/g' \
+                -e 's/Recommended focus areas for review/중점 리뷰 영역/g' \
+                -e 's/No TODO sections/TODO 섹션 없음/g' \
+                -e 's/TODO sections/TODO 섹션/g' \
+                -e 's/Contribution time estimate/기여 소요 시간 추정/g' \
+                -e 's/Ticket compliance check/티켓 준수 확인/g' \
+                -e 's/Relevant ticket/관련 티켓/g')
+              curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${rid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            fi
+            sid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Code Suggestions"))] | last | .id // empty')
+            if [ -n "$sid" ]; then
+              body=$(printf '%s' "$comments" | jq -r --argjson id "$sid" '.[] | select(.id==$id) | .body' | sed \
+                -e 's/## PR Code Suggestions/## PR 코드 개선 제안/g' \
+                -e 's/No code suggestions found for the PR./이 PR에 대한 코드 개선 제안이 없습니다./g' \
+                -e 's#<strong>Category</strong>#<strong>분류</strong>#g' \
+                -e 's/<strong>Suggestion/<strong>제안/g' \
+                -e 's#<strong>Impact</strong>#<strong>영향도</strong>#g' \
+                -e 's/Suggestion importance\[1-10\]:/제안 중요도[1-10]:/g' \
+                -e 's/Why: /이유: /g')
+              curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            fi
+          }
           run_command "/review"
           run_command "/improve"
+          localize_comments
 
   # ====================================================
   # OpenAI: 사용 가능한 모델 순차 탐색 (수동 전용)
@@ -199,6 +341,7 @@ jobs:
       contents: read
     outputs:
       model: ${{ steps.pick.outputs.model }}
+      fallbacks: ${{ steps.pick.outputs.fallbacks }}
     steps:
       - name: Pick available OpenAI model
         id: pick
@@ -210,33 +353,36 @@ jobs:
           MODELS_CSV="${OPENAI_MODELS:-gpt-4o}"
           IFS=',' read -ra MODELS <<< "$MODELS_CSV"
 
-          SELECTED=""
+          # 모델 존재 여부만 확인 (chat 파라미터 호환성 이슈 회피: gpt-5.x는 max_tokens 미지원)
+          VALID=()
           for model in "${MODELS[@]}"; do
             model="${model// /}"
-            echo "::notice::OpenAI 모델 시도: $model"
+            [ -z "$model" ] && continue
             HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
               --connect-timeout 5 --max-time 20 \
-              "https://api.openai.com/v1/chat/completions" \
-              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
-              -H "content-type: application/json" \
-              --data "{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1}") || HTTP_CODE="000"
+              "https://api.openai.com/v1/models/${model}" \
+              -H "Authorization: Bearer ${OPENAI_API_KEY}") || HTTP_CODE="000"
             echo "::notice::HTTP $HTTP_CODE ($model)"
             if [ "$HTTP_CODE" = "200" ]; then
-              SELECTED="$model"
-              break
-            elif [ "$HTTP_CODE" = "429" ]; then
-              echo "::warning::429 ($model) — 다음 모델로 전환"
-              sleep 5
+              VALID+=("$model")
             fi
           done
 
-          if [ -z "$SELECTED" ]; then
+          if [ ${#VALID[@]} -eq 0 ]; then
             echo "::error::사용 가능한 OpenAI 모델 없음"
             exit 1
           fi
 
+          SELECTED="${VALID[0]}"
+          # 1순위를 제외한 나머지를 폴백 목록(CSV)으로 구성 (OpenAI는 접두어 불필요)
+          FALLBACKS=""
+          for m in "${VALID[@]:1}"; do
+            if [ -z "$FALLBACKS" ]; then FALLBACKS="$m"; else FALLBACKS="$FALLBACKS,$m"; fi
+          done
+
           echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
-          echo "::notice::선택된 OpenAI 모델: $SELECTED"
+          echo "fallbacks=${FALLBACKS}" >> "$GITHUB_OUTPUT"
+          echo "::notice::선택된 OpenAI 모델: $SELECTED (폴백: ${FALLBACKS:-없음})"
 
   # ====================================================
   # OpenAI 수동 리뷰 (/openai-review 코멘트)
@@ -258,9 +404,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL: ${{ needs.resolve-openai-model.outputs.model }}
+          FALLBACKS: ${{ needs.resolve-openai-model.outputs.fallbacks }}
           OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          RETRY_CMD: "/openai-review"
         run: |
           set -euo pipefail
+          # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
+          notify_failure() {
+            local log="$1"
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR") | .id' \
+              | while read -r cid; do
+                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    "$api/issues/comments/${cid}" >/dev/null
+                done
+            local msg
+            if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429|insufficient_quota" "$log"; then
+              msg=$(printf '## ⏳ 오늘의 AI 리뷰 사용량을 모두 사용했어요\n\nOpenAI API 호출 한도에 도달해 이번 리뷰를 완료하지 못했습니다.\n\n- **원인:** 요청 할당량 소진 (rate limit / insufficient_quota / 429)\n- **해결:** 잠시 후 한도가 회복되면 `%s` 로 다시 시도해 주세요. 🙏' "$RETRY_CMD")
+            else
+              msg=$(printf '## ⚠️ AI 리뷰를 완료하지 못했어요\n\n일시적인 오류로 리뷰 생성에 실패했습니다. 잠시 후 `%s` 로 다시 시도해 주세요.' "$RETRY_CMD")
+            fi
+            curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments" \
+              -d "$(jq -n --arg b "$msg" '{body: $b}')" >/dev/null
+          }
+          # rate-limit(429) 시 다음 OpenAI 모델로 폴백 (목록이 있을 때만 주입)
+          EXTRA_ENV=()
+          if [ -n "${FALLBACKS:-}" ]; then
+            EXTRA_ENV+=(-e "CONFIG.FALLBACK_MODELS=$FALLBACKS")
+          fi
           run_command() {
             local cmd="$1"
             local tmp; tmp=$(mktemp)
@@ -276,14 +451,55 @@ jobs:
               -e GITHUB_EVENT_PATH=/github/workflow/event.json \
               -e "CONFIG.AI_PROVIDER=openai" \
               -e "CONFIG.MODEL=$MODEL" \
+              "${EXTRA_ENV[@]}" \
               -e "OPENAI.KEY=$OPENAI_KEY" \
               -e "OPENAI_API_KEY=$OPENAI_KEY" \
               -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
               "$PR_AGENT_IMAGE" 2>&1 | tee "$log"
             if grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
+              notify_failure "$log"
               echo "::error::OpenAI $cmd 실패 — 로그를 확인하세요"
               exit 1
             fi
           }
+          # 리뷰 가이드 / 코드 제안 코멘트의 하드코딩 영문 라벨을 한국어로 치환
+          localize_comments() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            local comments rid sid body
+            comments=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments?per_page=100")
+            rid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Reviewer Guide"))] | last | .id // empty')
+            if [ -n "$rid" ]; then
+              body=$(printf '%s' "$comments" | jq -r --argjson id "$rid" '.[] | select(.id==$id) | .body' | sed \
+                -e 's/## Incremental PR Reviewer Guide/## 증분 PR 리뷰 가이드/g' \
+                -e 's/## PR Reviewer Guide/## PR 리뷰 가이드/g' \
+                -e 's/Here are some key observations to aid the review process:/리뷰에 참고할 주요 관찰 사항입니다:/g' \
+                -e 's/Estimated effort to review/리뷰 예상 난이도/g' \
+                -e 's/No relevant tests/관련 테스트 없음/g' \
+                -e 's/PR contains tests/테스트 포함됨/g' \
+                -e 's/No security concerns identified/보안 이슈 없음/g' \
+                -e 's/Security concerns/보안 이슈/g' \
+                -e 's/No major issues detected/주요 이슈 없음/g' \
+                -e 's/Recommended focus areas for review/중점 리뷰 영역/g' \
+                -e 's/No TODO sections/TODO 섹션 없음/g' \
+                -e 's/TODO sections/TODO 섹션/g' \
+                -e 's/Contribution time estimate/기여 소요 시간 추정/g' \
+                -e 's/Ticket compliance check/티켓 준수 확인/g' \
+                -e 's/Relevant ticket/관련 티켓/g')
+              curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${rid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            fi
+            sid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Code Suggestions"))] | last | .id // empty')
+            if [ -n "$sid" ]; then
+              body=$(printf '%s' "$comments" | jq -r --argjson id "$sid" '.[] | select(.id==$id) | .body' | sed \
+                -e 's/## PR Code Suggestions/## PR 코드 개선 제안/g' \
+                -e 's/No code suggestions found for the PR./이 PR에 대한 코드 개선 제안이 없습니다./g' \
+                -e 's#<strong>Category</strong>#<strong>분류</strong>#g' \
+                -e 's/<strong>Suggestion/<strong>제안/g' \
+                -e 's#<strong>Impact</strong>#<strong>영향도</strong>#g' \
+                -e 's/Suggestion importance\[1-10\]:/제안 중요도[1-10]:/g' \
+                -e 's/Why: /이유: /g')
+              curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            fi
+          }
           run_command "/review"
           run_command "/improve"
+          localize_comments
