@@ -6,7 +6,7 @@ on:
     types: [opened, reopened, synchronize]
     branches:
       - dev
-  # OpenAI: PR 코멘트로 수동 트리거 (/openai-review)
+  # Gemini·OpenAI: PR 코멘트로 수동 트리거
   issue_comment:
     types: [created]
 
@@ -16,13 +16,58 @@ permissions:
   issues: write
 
 jobs:
-  review-gemini:
-    name: Gemini Auto Review
+  resolve-gemini-model:
+    name: Resolve Gemini Model
     if: |
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '/gemini-review'))
+    runs-on: ubuntu-latest
+    outputs:
+      model: ${{ steps.pick.outputs.model }}
+    steps:
+      - name: Pick available Gemini model
+        id: pick
+        env:
+          GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          GEMINI_MODELS: ${{ vars.GEMINI_MODELS }}
+          GEMINI_API_VERSION: ${{ vars.GEMINI_API_VERSION }}
+        run: |
+          set -euo pipefail
+          API_VERSION="${GEMINI_API_VERSION:-v1beta}"
+          MODELS_CSV="${GEMINI_MODELS:-gemini-2.5-flash}"
+          IFS=',' read -ra MODELS <<< "$MODELS_CSV"
+
+          SELECTED=""
+          for model in "${MODELS[@]}"; do
+            model="${model// /}"
+            echo "::notice::Gemini 모델 시도: $model"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://generativelanguage.googleapis.com/${API_VERSION}/models/${model}:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
+              -H "content-type: application/json" \
+              --data '{"contents":[{"parts":[{"text":"hi"}]}]}') || HTTP_CODE="000"
+            echo "::notice::HTTP $HTTP_CODE ($model)"
+            if [ "$HTTP_CODE" = "200" ]; then
+              SELECTED="$model"
+              break
+            elif [ "$HTTP_CODE" = "429" ]; then
+              echo "::warning::429 ($model) — 다음 모델로 전환"
+              sleep 5
+            fi
+          done
+
+          if [ -z "$SELECTED" ]; then
+            echo "::error::사용 가능한 Gemini 모델 없음"
+            exit 1
+          fi
+
+          echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
+          echo "::notice::선택된 Gemini 모델: $SELECTED"
+
+  review-gemini:
+    name: Gemini Review
+    needs: resolve-gemini-model
     runs-on: ubuntu-latest
     steps:
       - name: AI Code Review (Gemini)
@@ -31,18 +76,62 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           config.ai_provider: "google"
           google_ai_studio.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
-          google_ai_studio.MODEL: "gemini-2.5-flash"
+          google_ai_studio.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "false"
           github_action_config.auto_improve: "true"
           pr_reviewer.inline_code_comments: "true"
 
-  review-openai:
-    name: OpenAI Manual Review
+  resolve-openai-model:
+    name: Resolve OpenAI Model
     if: |
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '/openai-review')
+    runs-on: ubuntu-latest
+    outputs:
+      model: ${{ steps.pick.outputs.model }}
+    steps:
+      - name: Pick available OpenAI model
+        id: pick
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODELS: ${{ vars.OPENAI_MODELS }}
+        run: |
+          set -euo pipefail
+          MODELS_CSV="${OPENAI_MODELS:-gpt-4o}"
+          IFS=',' read -ra MODELS <<< "$MODELS_CSV"
+
+          SELECTED=""
+          for model in "${MODELS[@]}"; do
+            model="${model// /}"
+            echo "::notice::OpenAI 모델 시도: $model"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              "https://api.openai.com/v1/chat/completions" \
+              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+              -H "content-type: application/json" \
+              --data "{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1}") || HTTP_CODE="000"
+            echo "::notice::HTTP $HTTP_CODE ($model)"
+            if [ "$HTTP_CODE" = "200" ]; then
+              SELECTED="$model"
+              break
+            elif [ "$HTTP_CODE" = "429" ]; then
+              echo "::warning::429 ($model) — 다음 모델로 전환"
+              sleep 5
+            fi
+          done
+
+          if [ -z "$SELECTED" ]; then
+            echo "::error::사용 가능한 OpenAI 모델 없음"
+            exit 1
+          fi
+
+          echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
+          echo "::notice::선택된 OpenAI 모델: $SELECTED"
+
+  review-openai:
+    name: OpenAI Manual Review
+    needs: resolve-openai-model
     runs-on: ubuntu-latest
     steps:
       - name: AI Code Review (OpenAI)
@@ -51,7 +140,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           config.ai_provider: "openai"
           openai.KEY: ${{ secrets.OPENAI_API_KEY }}
-          openai.MODEL: "gpt-4o"
+          openai.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "false"
           github_action_config.auto_improve: "true"
