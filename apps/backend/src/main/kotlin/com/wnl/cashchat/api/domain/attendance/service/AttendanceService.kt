@@ -88,7 +88,7 @@ class AttendanceService(
         val start = try {
             LocalDate.of(year, month, 1)
         } catch (e: DateTimeException) {
-            throw InvalidAttendanceQueryException("year/month is out of the supported range")
+            throw InvalidAttendanceQueryException("year/month is out of the supported range", e)
         }
         val end = start.plusMonths(1).minusDays(1)
 
