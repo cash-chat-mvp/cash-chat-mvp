@@ -1,12 +1,13 @@
 name: PR Code Review (Qodo / pr-agent)
 
 on:
-  # Gemini: PR 생성/업데이트 시 자동 실행
-  pull_request_target:
+  # Gemini: dev 브랜치로 PR이 들어오거나 코드가 업데이트되면 자동 실행
+  # pull_request_target 대신 pull_request 사용 — PR 소스코드를 정확히 읽기 위함
+  pull_request:
     types: [opened, reopened, synchronize]
     branches:
       - dev
-  # Gemini·OpenAI: PR 코멘트로 수동 트리거
+  # Gemini 또는 OpenAI: PR 코멘트 명령어로 수동 트리거
   issue_comment:
     types: [created]
 
@@ -16,10 +17,13 @@ permissions:
   issues: write
 
 jobs:
+  # ----------------------------------------------------
+  # Gemini: 사용 가능한 모델 순차 탐색
+  # ----------------------------------------------------
   resolve-gemini-model:
     name: Resolve Gemini Model
     if: |
-      github.event_name == 'pull_request_target' ||
+      github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '/gemini-review'))
@@ -65,6 +69,9 @@ jobs:
           echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
           echo "::notice::선택된 Gemini 모델: $SELECTED"
 
+  # ----------------------------------------------------
+  # Gemini 리뷰 실행
+  # ----------------------------------------------------
   review-gemini:
     name: Gemini Review
     needs: resolve-gemini-model
@@ -74,14 +81,17 @@ jobs:
         uses: Codium-ai/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          config.ai_provider: "google"
-          google_ai_studio.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
-          google_ai_studio.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
-          github_action_config.auto_review: "true"
-          github_action_config.auto_describe: "false"
-          github_action_config.auto_improve: "true"
-          pr_reviewer.inline_code_comments: "true"
+          CONFIG.AI_PROVIDER: "google"
+          GOOGLE_AI_STUDIO.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          GOOGLE_AI_STUDIO.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
+          GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "true"
+          PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
 
+  # ----------------------------------------------------
+  # OpenAI: 사용 가능한 모델 순차 탐색
+  # ----------------------------------------------------
   resolve-openai-model:
     name: Resolve OpenAI Model
     if: |
@@ -129,6 +139,9 @@ jobs:
           echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
           echo "::notice::선택된 OpenAI 모델: $SELECTED"
 
+  # ----------------------------------------------------
+  # OpenAI 리뷰 실행
+  # ----------------------------------------------------
   review-openai:
     name: OpenAI Manual Review
     needs: resolve-openai-model
@@ -138,10 +151,10 @@ jobs:
         uses: Codium-ai/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          config.ai_provider: "openai"
-          openai.KEY: ${{ secrets.OPENAI_API_KEY }}
-          openai.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
-          github_action_config.auto_review: "true"
-          github_action_config.auto_describe: "false"
-          github_action_config.auto_improve: "true"
-          pr_reviewer.inline_code_comments: "true"
+          CONFIG.AI_PROVIDER: "openai"
+          OPENAI.KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
+          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
+          GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "true"
+          PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
