@@ -24,7 +24,7 @@ import org.testcontainers.containers.MySQLContainer
 import jakarta.persistence.EntityManager
 import javax.sql.DataSource
 
-@SpringBootTest(properties = ["spring.jpa.hibernate.ddl-auto=create-drop"])
+@SpringBootTest
 class ChatPersistenceIntegrationTest : FunSpec() {
     override fun extensions() = listOf(SpringExtension)
 

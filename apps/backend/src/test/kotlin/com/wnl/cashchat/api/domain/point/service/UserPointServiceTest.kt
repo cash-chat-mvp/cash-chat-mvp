@@ -2,6 +2,7 @@ package com.wnl.cashchat.api.domain.point.service
 
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.point.persistence.entity.UserPoint
+import com.wnl.cashchat.api.domain.point.persistence.repository.PointTransactionRepository
 import com.wnl.cashchat.api.domain.point.persistence.repository.UserPointRepository
 import com.wnl.cashchat.api.domain.point.properties.PointProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
@@ -19,12 +20,15 @@ import org.springframework.dao.DataIntegrityViolationException
 
 class UserPointServiceTest : FunSpec({
     lateinit var userPointRepository: UserPointRepository
+    lateinit var pointTransactionRepository: PointTransactionRepository
     lateinit var userPointService: UserPointService
 
     beforeTest {
         userPointRepository = mock()
+        pointTransactionRepository = mock()
         userPointService = UserPointService(
             userPointRepository = userPointRepository,
+            pointTransactionRepository = pointTransactionRepository,
             pointProperties = PointProperties(initialBalance = 3L),
         )
     }
