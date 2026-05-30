@@ -4,13 +4,13 @@
 
 ## Back-End
 
-### BE-1. 포인트 도메인 멱등성 확장 (공통 선결)
+### BE-1. 포인트 도메인 멱등성 확장 (공통 선결) ✅ (PR1 완료)
 
-- [ ] `domain/point/` 아래 `PointTransaction` 엔티티(ledger 테이블)와 Repository 추가
-- [ ] `UserPointService.recordTransaction(userId, delta, reason, idempotencyKey)` 메서드 추가
-- [ ] 동일 `idempotencyKey` 재호출 시 기존 트랜잭션을 그대로 반환 (중복 적립 방지)
-- [ ] 음수 잔액 거부 정책 (delta < 0이고 잔액 부족 시 `INSUFFICIENT_COIN`)
-- [ ] Kotest 단위 테스트: 정상 적립 / 중복 키 / 잔액 부족 / 동시 호출 경합
+- [x] `domain/point/` 아래 `PointTransaction` 엔티티(ledger 테이블)와 Repository 추가
+- [x] `UserPointService.recordTransaction(userId, delta, reason, idempotencyKey)` 메서드 추가
+- [x] 동일 `idempotencyKey` 재호출 시 기존 트랜잭션을 그대로 반환 (중복 적립 방지)
+- [x] 음수 잔액 거부 정책 (delta < 0이고 잔액 부족 시 거부) — 기존 `InsufficientPointsException`(`INSUFFICIENT_POINTS`, HTTP 402) 재사용. spec의 `INSUFFICIENT_COIN`은 신규 코드 추가 대신 기존 코드로 통일
+- [x] Kotest 단위 테스트: 정상 적립 / 중복 키 / 잔액 부족 (단위 mock) + 동시 호출 경합 (`PointIdempotencyIntegrationTest`, TestContainers MySQL)
 
 ### BE-2. 출석 도메인 (`domain/attendance/`)
 
@@ -45,9 +45,12 @@
 
 ### BE-4. 설정 및 마이그레이션
 
-- [ ] `application.yml`에 `reward.admob.daily-limit`, `reward.admob.public-keys-url`, `reward.admob.reward-coin` 추가
-- [ ] Flyway 마이그레이션 (dev H2 + prod MySQL): `point_transaction`, `attendance_log`, `attendance_reward`, `ad_reward_nonce`, `ad_reward_daily_quota`, `ad_reward_ledger`
-- [ ] 시드 데이터 SQL: 출석 보상 테이블 (Phase 1 종자값 — spec 부록 표)
+> 도메인별 PR 분할 결정에 따라 테이블/시드는 한 번에 만들지 않고 각 도메인 PR에서 생성한다.
+> Flyway 자체는 PR1에서 도입 완료 (V1 기존 스키마 베이스라인 + `ddl-auto=validate`, dev H2는 MySQL 호환 모드).
+
+- [ ] `application.yml`에 `reward.admob.daily-limit`, `reward.admob.public-keys-url`, `reward.admob.reward-coin` 추가 — BE-3(광고) PR
+- [x] Flyway 도입 + V1 베이스라인 + **`point_transaction`(V2)** 마이그레이션 (PR1) — `attendance_*`는 BE-2 PR, `ad_reward_*`는 BE-3 PR에서 추가
+- [ ] 시드 데이터 SQL: 출석 보상 테이블 (Phase 1 종자값 — spec 부록 표) — BE-2(출석) PR
 
 ## Front-End
 
