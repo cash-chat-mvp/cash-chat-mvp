@@ -166,12 +166,12 @@ jobs:
             echo "::error::Gemini 리뷰 실패 — 로그를 확인하세요"
             exit 1
           fi
-          # 리뷰 가이드 코멘트의 영문 라벨을 한국어로 치환
+          # 리뷰 가이드 / 코드 제안 코멘트의 하드코딩 영문 라벨을 한국어로 치환
           L_API="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
           L_COMMENTS=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$L_API/issues/${PR_NUMBER}/comments?per_page=100")
-          L_CID=$(printf '%s' "$L_COMMENTS" | jq -r '[.[] | select(.body | test("PR Reviewer Guide"))] | last | .id // empty')
-          if [ -n "$L_CID" ]; then
-            L_BODY=$(printf '%s' "$L_COMMENTS" | jq -r --argjson id "$L_CID" '.[] | select(.id==$id) | .body' | sed \
+          L_RID=$(printf '%s' "$L_COMMENTS" | jq -r '[.[] | select(.body | test("PR Reviewer Guide"))] | last | .id // empty')
+          if [ -n "$L_RID" ]; then
+            L_BODY=$(printf '%s' "$L_COMMENTS" | jq -r --argjson id "$L_RID" '.[] | select(.id==$id) | .body' | sed \
               -e 's/## Incremental PR Reviewer Guide/## 증분 PR 리뷰 가이드/g' \
               -e 's/## PR Reviewer Guide/## PR 리뷰 가이드/g' \
               -e 's/Here are some key observations to aid the review process:/리뷰에 참고할 주요 관찰 사항입니다:/g' \
@@ -187,7 +187,19 @@ jobs:
               -e 's/Contribution time estimate/기여 소요 시간 추정/g' \
               -e 's/Ticket compliance check/티켓 준수 확인/g' \
               -e 's/Relevant ticket/관련 티켓/g')
-            curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$L_API/issues/comments/${L_CID}" -d "$(jq -n --arg b "$L_BODY" '{body: $b}')" >/dev/null
+            curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$L_API/issues/comments/${L_RID}" -d "$(jq -n --arg b "$L_BODY" '{body: $b}')" >/dev/null
+          fi
+          L_SID=$(printf '%s' "$L_COMMENTS" | jq -r '[.[] | select(.body | test("PR Code Suggestions"))] | last | .id // empty')
+          if [ -n "$L_SID" ]; then
+            L_BODY=$(printf '%s' "$L_COMMENTS" | jq -r --argjson id "$L_SID" '.[] | select(.id==$id) | .body' | sed \
+              -e 's/## PR Code Suggestions/## PR 코드 개선 제안/g' \
+              -e 's/No code suggestions found for the PR./이 PR에 대한 코드 개선 제안이 없습니다./g' \
+              -e 's#<strong>Category</strong>#<strong>분류</strong>#g' \
+              -e 's/<strong>Suggestion/<strong>제안/g' \
+              -e 's#<strong>Impact</strong>#<strong>영향도</strong>#g' \
+              -e 's/Suggestion importance\[1-10\]:/제안 중요도[1-10]:/g' \
+              -e 's/Why: /이유: /g')
+            curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$L_API/issues/comments/${L_SID}" -d "$(jq -n --arg b "$L_BODY" '{body: $b}')" >/dev/null
           fi
 
   # ====================================================
@@ -273,33 +285,47 @@ jobs:
               exit 1
             fi
           }
-          localize_review_comment() {
+          # 리뷰 가이드 / 코드 제안 코멘트의 하드코딩 영문 라벨을 한국어로 치환
+          localize_comments() {
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
-            local comments cid body
+            local comments rid sid body
             comments=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments?per_page=100")
-            cid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Reviewer Guide"))] | last | .id // empty')
-            [ -z "$cid" ] && return 0
-            body=$(printf '%s' "$comments" | jq -r --argjson id "$cid" '.[] | select(.id==$id) | .body' | sed \
-              -e 's/## Incremental PR Reviewer Guide/## 증분 PR 리뷰 가이드/g' \
-              -e 's/## PR Reviewer Guide/## PR 리뷰 가이드/g' \
-              -e 's/Here are some key observations to aid the review process:/리뷰에 참고할 주요 관찰 사항입니다:/g' \
-              -e 's/Estimated effort to review/리뷰 예상 난이도/g' \
-              -e 's/No relevant tests/관련 테스트 없음/g' \
-              -e 's/PR contains tests/테스트 포함됨/g' \
-              -e 's/No security concerns identified/보안 이슈 없음/g' \
-              -e 's/Security concerns/보안 이슈/g' \
-              -e 's/No major issues detected/주요 이슈 없음/g' \
-              -e 's/Recommended focus areas for review/중점 리뷰 영역/g' \
-              -e 's/No TODO sections/TODO 섹션 없음/g' \
-              -e 's/TODO sections/TODO 섹션/g' \
-              -e 's/Contribution time estimate/기여 소요 시간 추정/g' \
-              -e 's/Ticket compliance check/티켓 준수 확인/g' \
-              -e 's/Relevant ticket/관련 티켓/g')
-            curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${cid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            rid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Reviewer Guide"))] | last | .id // empty')
+            if [ -n "$rid" ]; then
+              body=$(printf '%s' "$comments" | jq -r --argjson id "$rid" '.[] | select(.id==$id) | .body' | sed \
+                -e 's/## Incremental PR Reviewer Guide/## 증분 PR 리뷰 가이드/g' \
+                -e 's/## PR Reviewer Guide/## PR 리뷰 가이드/g' \
+                -e 's/Here are some key observations to aid the review process:/리뷰에 참고할 주요 관찰 사항입니다:/g' \
+                -e 's/Estimated effort to review/리뷰 예상 난이도/g' \
+                -e 's/No relevant tests/관련 테스트 없음/g' \
+                -e 's/PR contains tests/테스트 포함됨/g' \
+                -e 's/No security concerns identified/보안 이슈 없음/g' \
+                -e 's/Security concerns/보안 이슈/g' \
+                -e 's/No major issues detected/주요 이슈 없음/g' \
+                -e 's/Recommended focus areas for review/중점 리뷰 영역/g' \
+                -e 's/No TODO sections/TODO 섹션 없음/g' \
+                -e 's/TODO sections/TODO 섹션/g' \
+                -e 's/Contribution time estimate/기여 소요 시간 추정/g' \
+                -e 's/Ticket compliance check/티켓 준수 확인/g' \
+                -e 's/Relevant ticket/관련 티켓/g')
+              curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${rid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            fi
+            sid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Code Suggestions"))] | last | .id // empty')
+            if [ -n "$sid" ]; then
+              body=$(printf '%s' "$comments" | jq -r --argjson id "$sid" '.[] | select(.id==$id) | .body' | sed \
+                -e 's/## PR Code Suggestions/## PR 코드 개선 제안/g' \
+                -e 's/No code suggestions found for the PR./이 PR에 대한 코드 개선 제안이 없습니다./g' \
+                -e 's#<strong>Category</strong>#<strong>분류</strong>#g' \
+                -e 's/<strong>Suggestion/<strong>제안/g' \
+                -e 's#<strong>Impact</strong>#<strong>영향도</strong>#g' \
+                -e 's/Suggestion importance\[1-10\]:/제안 중요도[1-10]:/g' \
+                -e 's/Why: /이유: /g')
+              curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            fi
           }
           run_command "/review"
-          localize_review_comment
           run_command "/improve"
+          localize_comments
 
   # ====================================================
   # OpenAI: 사용 가능한 모델 순차 탐색 (수동 전용)
@@ -436,30 +462,44 @@ jobs:
               exit 1
             fi
           }
-          localize_review_comment() {
+          # 리뷰 가이드 / 코드 제안 코멘트의 하드코딩 영문 라벨을 한국어로 치환
+          localize_comments() {
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
-            local comments cid body
+            local comments rid sid body
             comments=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments?per_page=100")
-            cid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Reviewer Guide"))] | last | .id // empty')
-            [ -z "$cid" ] && return 0
-            body=$(printf '%s' "$comments" | jq -r --argjson id "$cid" '.[] | select(.id==$id) | .body' | sed \
-              -e 's/## Incremental PR Reviewer Guide/## 증분 PR 리뷰 가이드/g' \
-              -e 's/## PR Reviewer Guide/## PR 리뷰 가이드/g' \
-              -e 's/Here are some key observations to aid the review process:/리뷰에 참고할 주요 관찰 사항입니다:/g' \
-              -e 's/Estimated effort to review/리뷰 예상 난이도/g' \
-              -e 's/No relevant tests/관련 테스트 없음/g' \
-              -e 's/PR contains tests/테스트 포함됨/g' \
-              -e 's/No security concerns identified/보안 이슈 없음/g' \
-              -e 's/Security concerns/보안 이슈/g' \
-              -e 's/No major issues detected/주요 이슈 없음/g' \
-              -e 's/Recommended focus areas for review/중점 리뷰 영역/g' \
-              -e 's/No TODO sections/TODO 섹션 없음/g' \
-              -e 's/TODO sections/TODO 섹션/g' \
-              -e 's/Contribution time estimate/기여 소요 시간 추정/g' \
-              -e 's/Ticket compliance check/티켓 준수 확인/g' \
-              -e 's/Relevant ticket/관련 티켓/g')
-            curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${cid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            rid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Reviewer Guide"))] | last | .id // empty')
+            if [ -n "$rid" ]; then
+              body=$(printf '%s' "$comments" | jq -r --argjson id "$rid" '.[] | select(.id==$id) | .body' | sed \
+                -e 's/## Incremental PR Reviewer Guide/## 증분 PR 리뷰 가이드/g' \
+                -e 's/## PR Reviewer Guide/## PR 리뷰 가이드/g' \
+                -e 's/Here are some key observations to aid the review process:/리뷰에 참고할 주요 관찰 사항입니다:/g' \
+                -e 's/Estimated effort to review/리뷰 예상 난이도/g' \
+                -e 's/No relevant tests/관련 테스트 없음/g' \
+                -e 's/PR contains tests/테스트 포함됨/g' \
+                -e 's/No security concerns identified/보안 이슈 없음/g' \
+                -e 's/Security concerns/보안 이슈/g' \
+                -e 's/No major issues detected/주요 이슈 없음/g' \
+                -e 's/Recommended focus areas for review/중점 리뷰 영역/g' \
+                -e 's/No TODO sections/TODO 섹션 없음/g' \
+                -e 's/TODO sections/TODO 섹션/g' \
+                -e 's/Contribution time estimate/기여 소요 시간 추정/g' \
+                -e 's/Ticket compliance check/티켓 준수 확인/g' \
+                -e 's/Relevant ticket/관련 티켓/g')
+              curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${rid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            fi
+            sid=$(printf '%s' "$comments" | jq -r '[.[] | select(.body | test("PR Code Suggestions"))] | last | .id // empty')
+            if [ -n "$sid" ]; then
+              body=$(printf '%s' "$comments" | jq -r --argjson id "$sid" '.[] | select(.id==$id) | .body' | sed \
+                -e 's/## PR Code Suggestions/## PR 코드 개선 제안/g' \
+                -e 's/No code suggestions found for the PR./이 PR에 대한 코드 개선 제안이 없습니다./g' \
+                -e 's#<strong>Category</strong>#<strong>분류</strong>#g' \
+                -e 's/<strong>Suggestion/<strong>제안/g' \
+                -e 's#<strong>Impact</strong>#<strong>영향도</strong>#g' \
+                -e 's/Suggestion importance\[1-10\]:/제안 중요도[1-10]:/g' \
+                -e 's/Why: /이유: /g')
+              curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
+            fi
           }
           run_command "/review"
-          localize_review_comment
           run_command "/improve"
+          localize_comments
