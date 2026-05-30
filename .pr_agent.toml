@@ -4,6 +4,10 @@
 
 [config]
 output_language = "ko-KR"
+# pr-agent에 토큰 한도가 등록되지 않은 최신 모델(gemini-3.5-flash 등) 허용
+custom_model_max_tokens = 1048576
+# 기본 fallback(gpt-5.4-mini) 비활성화 — OpenAI 키 없이 동작하도록
+fallback_models = []
 
 [pr_reviewer]
 inline_code_comments = true
