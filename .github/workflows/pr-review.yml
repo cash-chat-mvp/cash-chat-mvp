@@ -2,6 +2,11 @@ name: PR Code Review (Qodo / pr-agent)
 
 # 공통 리뷰 설정은 레포 루트의 .pr_agent.toml 에서 관리합니다.
 # 이 워크플로우는 트리거·프로바이더·모델·봇 토큰만 다룹니다.
+#
+# pr-agent는 내부 에러가 나도 항상 정상 종료(exit 0)하므로,
+# uses: 액션 대신 docker run 으로 직접 실행하고 로그에서 실패 마커를
+# 감지해 job을 실패(빨간 X)로 표시합니다.
+# 이미지는 공급망 보안을 위해 digest로 핀닝합니다.
 
 on:
   # Gemini 자동: dev 브랜치로 PR 생성/재오픈/커밋 푸시 시
@@ -16,6 +21,12 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # pr-agent 이미지 digest 핀닝 (uses: Codium-ai/pr-agent 가 내부적으로 쓰는 베이스 이미지)
+  PR_AGENT_IMAGE: "pragent/pr-agent@sha256:70e78800a3ee94ee31a25e43d3b8ef25e8e8fda7ccacfd765f911c9f66b6b048"
+  # 리뷰 실패로 간주할 pr-agent 로그 마커 (최종 실패 메시지만)
+  PR_AGENT_FAIL_MARKERS: "Failed to review PR:|Failed to generate code suggestions for PR, error:|Failed to generate prediction with any model"
 
 jobs:
   # ====================================================
@@ -90,17 +101,34 @@ jobs:
         with:
           app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
           private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
-      - name: AI Code Review (Gemini)
-        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
+      - name: AI Review + Improve (Gemini)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          CONFIG.AI_PROVIDER: "google"
-          CONFIG.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
-          GOOGLE_AI_STUDIO.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
-          GOOGLE_AI_STUDIO.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
-          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
-          GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
-          GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "true"
+          MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+          GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          LOG=$(mktemp)
+          docker run --rm \
+            -e GITHUB_TOKEN \
+            -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+            -e GITHUB_REPOSITORY="${{ github.repository }}" \
+            -e GITHUB_API_URL="${{ github.api_url }}" \
+            -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+            -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+            -e "CONFIG.AI_PROVIDER=google" \
+            -e "CONFIG.MODEL=$MODEL" \
+            -e "GOOGLE_AI_STUDIO.KEY=$GEMINI_KEY" \
+            -e "GOOGLE_AI_STUDIO.MODEL=$MODEL" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=true" \
+            -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
+            "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
+          if grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; then
+            echo "::error::Gemini 리뷰 실패 — 로그를 확인하세요"
+            exit 1
+          fi
 
   # ====================================================
   # Gemini 수동 리뷰 (/gemini-review 코멘트)
@@ -123,32 +151,39 @@ jobs:
         with:
           app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
           private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
-      - name: Override comment to /review
-        run: |
-          tmp=$(mktemp)
-          jq '.comment.body = "/review"' "$GITHUB_EVENT_PATH" > "$tmp"
-          mv "$tmp" "$GITHUB_EVENT_PATH"
-      - name: AI Review (Gemini)
-        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
+      - name: AI Review + Improve (Gemini)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          CONFIG.AI_PROVIDER: "google"
-          CONFIG.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
-          GOOGLE_AI_STUDIO.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
-          GOOGLE_AI_STUDIO.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
-      - name: Override comment to /improve
+          MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+          GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
         run: |
-          tmp=$(mktemp)
-          jq '.comment.body = "/improve"' "$GITHUB_EVENT_PATH" > "$tmp"
-          mv "$tmp" "$GITHUB_EVENT_PATH"
-      - name: AI Improve (Gemini)
-        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
-        env:
-          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          CONFIG.AI_PROVIDER: "google"
-          CONFIG.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
-          GOOGLE_AI_STUDIO.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
-          GOOGLE_AI_STUDIO.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+          set -euo pipefail
+          run_command() {
+            local cmd="$1"
+            local tmp; tmp=$(mktemp)
+            jq --arg c "$cmd" '.comment.body = $c' "$GITHUB_EVENT_PATH" > "$tmp"
+            mv "$tmp" "$GITHUB_EVENT_PATH"
+            local log; log=$(mktemp)
+            docker run --rm \
+              -e GITHUB_TOKEN \
+              -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+              -e GITHUB_REPOSITORY="${{ github.repository }}" \
+              -e GITHUB_API_URL="${{ github.api_url }}" \
+              -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+              -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+              -e "CONFIG.AI_PROVIDER=google" \
+              -e "CONFIG.MODEL=$MODEL" \
+              -e "GOOGLE_AI_STUDIO.KEY=$GEMINI_KEY" \
+              -e "GOOGLE_AI_STUDIO.MODEL=$MODEL" \
+              -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
+              "$PR_AGENT_IMAGE" 2>&1 | tee "$log"
+            if grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
+              echo "::error::Gemini $cmd 실패 — 로그를 확인하세요"
+              exit 1
+            fi
+          }
+          run_command "/review"
+          run_command "/improve"
 
   # ====================================================
   # OpenAI: 사용 가능한 모델 순차 탐색 (수동 전용)
@@ -219,29 +254,36 @@ jobs:
         with:
           app-id: ${{ secrets.OPENAI_BOT_APP_ID }}
           private-key: ${{ secrets.OPENAI_BOT_PRIVATE_KEY }}
-      - name: Override comment to /review
-        run: |
-          tmp=$(mktemp)
-          jq '.comment.body = "/review"' "$GITHUB_EVENT_PATH" > "$tmp"
-          mv "$tmp" "$GITHUB_EVENT_PATH"
-      - name: AI Review (OpenAI)
-        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
+      - name: AI Review + Improve (OpenAI)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          CONFIG.AI_PROVIDER: "openai"
-          CONFIG.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
-          OPENAI.KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
-      - name: Override comment to /improve
+          MODEL: ${{ needs.resolve-openai-model.outputs.model }}
+          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          tmp=$(mktemp)
-          jq '.comment.body = "/improve"' "$GITHUB_EVENT_PATH" > "$tmp"
-          mv "$tmp" "$GITHUB_EVENT_PATH"
-      - name: AI Improve (OpenAI)
-        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
-        env:
-          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          CONFIG.AI_PROVIDER: "openai"
-          CONFIG.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
-          OPENAI.KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
+          set -euo pipefail
+          run_command() {
+            local cmd="$1"
+            local tmp; tmp=$(mktemp)
+            jq --arg c "$cmd" '.comment.body = $c' "$GITHUB_EVENT_PATH" > "$tmp"
+            mv "$tmp" "$GITHUB_EVENT_PATH"
+            local log; log=$(mktemp)
+            docker run --rm \
+              -e GITHUB_TOKEN \
+              -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+              -e GITHUB_REPOSITORY="${{ github.repository }}" \
+              -e GITHUB_API_URL="${{ github.api_url }}" \
+              -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+              -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+              -e "CONFIG.AI_PROVIDER=openai" \
+              -e "CONFIG.MODEL=$MODEL" \
+              -e "OPENAI.KEY=$OPENAI_KEY" \
+              -e "OPENAI.MODEL=$MODEL" \
+              -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
+              "$PR_AGENT_IMAGE" 2>&1 | tee "$log"
+            if grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
+              echo "::error::OpenAI $cmd 실패 — 로그를 확인하세요"
+              exit 1
+            fi
+          }
+          run_command "/review"
+          run_command "/improve"
