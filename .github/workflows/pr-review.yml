@@ -92,6 +92,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CONFIG.AI_PROVIDER: "google"
           CONFIG.OUTPUT_LANGUAGE: "ko-KR"
+          CONFIG.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
           GOOGLE_AI_STUDIO.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           GOOGLE_AI_STUDIO.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
           GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
