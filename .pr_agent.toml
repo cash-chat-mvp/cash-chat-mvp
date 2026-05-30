@@ -1,0 +1,19 @@
+# pr-agent 공통 설정
+# 시크릿(API 키)·프로바이더·모델·봇 토큰은 워크플로우 env에서 주입합니다.
+# 정적 공통 설정만 이 파일에서 관리합니다.
+
+[config]
+output_language = "ko-KR"
+
+[pr_reviewer]
+inline_code_comments = true
+require_security_review = true
+extra_instructions = "반드시 한국어로 리뷰하세요. 보안 취약점(OWASP Top 10, SQL Injection, XSS, 인증/인가 문제, 민감 정보 노출 등)을 중점적으로 검토하고, 발견 시 심각도(높음/중간/낮음)를 명시해주세요."
+
+[pr_code_suggestions]
+extra_instructions = "반드시 한국어로 작성하세요."
+
+# 자동 리뷰(pull_request_target) 시 처리할 액션 목록
+# 기본값에는 synchronize(커밋 푸시)가 없어 명시적으로 추가
+[github_action_config]
+pr_actions = ["opened", "reopened", "synchronize"]

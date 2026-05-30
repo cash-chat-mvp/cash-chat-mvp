@@ -1,14 +1,16 @@
 name: PR Code Review (Qodo / pr-agent)
 
+# 공통 리뷰 설정은 레포 루트의 .pr_agent.toml 에서 관리합니다.
+# 이 워크플로우는 트리거·프로바이더·모델·봇 토큰만 다룹니다.
+
 on:
-  # Gemini: dev 브랜치로 PR이 들어오거나 코드가 업데이트되면 자동 실행
+  # Gemini 자동: dev 브랜치로 PR 생성/재오픈/커밋 푸시 시
   # fork PR에서 secrets 접근을 위해 pull_request_target 사용
-  # pr-agent는 GitHub API로 diff를 읽으므로 소스코드 접근 문제 없음
   pull_request_target:
     types: [opened, reopened, synchronize]
     branches:
       - dev
-  # Gemini 또는 OpenAI: PR 코멘트 명령어로 수동 트리거
+  # 수동: PR 코멘트 명령어 (/gemini-review, /openai-review)
   issue_comment:
     types: [created]
 
@@ -16,9 +18,9 @@ permissions:
   contents: read
 
 jobs:
-  # ----------------------------------------------------
-  # Gemini: 사용 가능한 모델 순차 탐색
-  # ----------------------------------------------------
+  # ====================================================
+  # Gemini: 사용 가능한 모델 순차 탐색 (자동·수동 공용)
+  # ====================================================
   resolve-gemini-model:
     name: Resolve Gemini Model
     if: |
@@ -29,9 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    concurrency:
-      group: gemini-review-${{ github.event.pull_request.number || github.event.issue.number }}
-      cancel-in-progress: true
     outputs:
       model: ${{ steps.pick.outputs.model }}
     steps:
@@ -74,39 +73,86 @@ jobs:
           echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
           echo "::notice::선택된 Gemini 모델: $SELECTED"
 
-  # ----------------------------------------------------
-  # Gemini 리뷰 실행
-  # ----------------------------------------------------
-  review-gemini:
-    name: Gemini Review
+  # ====================================================
+  # Gemini 자동 리뷰 (PR 생성/커밋 푸시)
+  # ====================================================
+  review-gemini-auto:
+    name: Gemini Auto Review
     needs: resolve-gemini-model
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
     steps:
+      - name: Generate Gemini bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
+          private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
       - name: AI Code Review (Gemini)
         uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           CONFIG.AI_PROVIDER: "google"
-          CONFIG.OUTPUT_LANGUAGE: "ko-KR"
           CONFIG.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
           GOOGLE_AI_STUDIO.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           GOOGLE_AI_STUDIO.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
           GITHUB_ACTION_CONFIG.AUTO_REVIEW: "true"
           GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
           GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "true"
-          GITHUB_ACTION_CONFIG.HANDLE_PUSH_TRIGGER: "true"
-          GITHUB_ACTION_CONFIG.PR_COMMANDS: "['/review', '/improve']"
-          PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
-          PR_REVIEWER.REQUIRE_SECURITY_REVIEW: "true"
-          PR_REVIEWER.EXTRA_INSTRUCTIONS: "반드시 한국어로 리뷰하세요. 보안 취약점(OWASP Top 10, SQL Injection, XSS, 인증/인가 문제, 민감 정보 노출 등)을 중점적으로 검토하고, 발견 시 심각도(높음/중간/낮음)를 명시해주세요."
 
-  # ----------------------------------------------------
-  # OpenAI: 사용 가능한 모델 순차 탐색
-  # ----------------------------------------------------
+  # ====================================================
+  # Gemini 수동 리뷰 (/gemini-review 코멘트)
+  # 코멘트 본문을 /review, /improve 로 바꿔치기 후 실행
+  # ====================================================
+  review-gemini-manual:
+    name: Gemini Manual Review
+    needs: resolve-gemini-model
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      contains(github.event.comment.body, '/gemini-review')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate Gemini bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
+          private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Override comment to /review
+        run: |
+          tmp=$(mktemp)
+          jq '.comment.body = "/review"' "$GITHUB_EVENT_PATH" > "$tmp"
+          mv "$tmp" "$GITHUB_EVENT_PATH"
+      - name: AI Review (Gemini)
+        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          CONFIG.AI_PROVIDER: "google"
+          CONFIG.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+          GOOGLE_AI_STUDIO.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          GOOGLE_AI_STUDIO.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+      - name: Override comment to /improve
+        run: |
+          tmp=$(mktemp)
+          jq '.comment.body = "/improve"' "$GITHUB_EVENT_PATH" > "$tmp"
+          mv "$tmp" "$GITHUB_EVENT_PATH"
+      - name: AI Improve (Gemini)
+        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          CONFIG.AI_PROVIDER: "google"
+          CONFIG.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+          GOOGLE_AI_STUDIO.KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          GOOGLE_AI_STUDIO.MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
+
+  # ====================================================
+  # OpenAI: 사용 가능한 모델 순차 탐색 (수동 전용)
+  # ====================================================
   resolve-openai-model:
     name: Resolve OpenAI Model
     if: |
@@ -116,9 +162,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    concurrency:
-      group: openai-review-${{ github.event.issue.number }}
-      cancel-in-progress: true
     outputs:
       model: ${{ steps.pick.outputs.model }}
     steps:
@@ -160,30 +203,45 @@ jobs:
           echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
           echo "::notice::선택된 OpenAI 모델: $SELECTED"
 
-  # ----------------------------------------------------
-  # OpenAI 리뷰 실행
-  # ----------------------------------------------------
-  review-openai:
+  # ====================================================
+  # OpenAI 수동 리뷰 (/openai-review 코멘트)
+  # ====================================================
+  review-openai-manual:
     name: OpenAI Manual Review
     needs: resolve-openai-model
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-      issues: write
     steps:
-      - name: AI Code Review (OpenAI)
+      - name: Generate OpenAI bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.OPENAI_BOT_APP_ID }}
+          private-key: ${{ secrets.OPENAI_BOT_PRIVATE_KEY }}
+      - name: Override comment to /review
+        run: |
+          tmp=$(mktemp)
+          jq '.comment.body = "/review"' "$GITHUB_EVENT_PATH" > "$tmp"
+          mv "$tmp" "$GITHUB_EVENT_PATH"
+      - name: AI Review (OpenAI)
         uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           CONFIG.AI_PROVIDER: "openai"
-          CONFIG.OUTPUT_LANGUAGE: "ko-KR"
+          CONFIG.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
           OPENAI.KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
-          GITHUB_ACTION_CONFIG.AUTO_REVIEW: "false"
-          GITHUB_ACTION_CONFIG.AUTO_DESCRIBE: "false"
-          GITHUB_ACTION_CONFIG.AUTO_IMPROVE: "false"
-          GITHUB_ACTION_CONFIG.PR_COMMANDS: "['/review', '/improve']"
-          PR_REVIEWER.INLINE_CODE_COMMENTS: "true"
-          PR_REVIEWER.REQUIRE_SECURITY_REVIEW: "true"
-          PR_REVIEWER.EXTRA_INSTRUCTIONS: "반드시 한국어로 리뷰하세요. 보안 취약점(OWASP Top 10, SQL Injection, XSS, 인증/인가 문제, 민감 정보 노출 등)을 중점적으로 검토하고, 발견 시 심각도(높음/중간/낮음)를 명시해주세요."
+      - name: Override comment to /improve
+        run: |
+          tmp=$(mktemp)
+          jq '.comment.body = "/improve"' "$GITHUB_EVENT_PATH" > "$tmp"
+          mv "$tmp" "$GITHUB_EVENT_PATH"
+      - name: AI Improve (OpenAI)
+        uses: Codium-ai/pr-agent@751af2422bef9be99fa605734c058c1c9bc1b3fa
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          CONFIG.AI_PROVIDER: "openai"
+          CONFIG.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
+          OPENAI.KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI.MODEL: ${{ needs.resolve-openai-model.outputs.model }}
