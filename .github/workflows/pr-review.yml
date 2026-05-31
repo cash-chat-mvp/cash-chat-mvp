@@ -41,10 +41,12 @@ jobs:
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' &&
        github.event.comment.user.type != 'Bot' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
        github.event.issue.pull_request != null &&
        (contains(github.event.comment.body, '/gemini-review') || contains(github.event.comment.body, '/ask'))) ||
       (github.event_name == 'pull_request_review_comment' &&
        github.event.comment.user.type != 'Bot' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
        contains(github.event.comment.body, '/ask'))
     runs-on: ubuntu-latest
     permissions:
@@ -124,7 +126,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
+              | jq -r '.[] | select(.user.type == "Bot" and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -136,7 +138,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select((.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
+              | jq -r '.[] | select(.user.type == "Bot" and (.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -148,7 +150,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
+              | jq -r '.[] | select(.user.type == "Bot" and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -167,6 +169,20 @@ jobs:
           # 폴백 완전 비활성화([])로 이미지 기본값(gpt-5.4-mini) 차단.
           MODEL_ENV=(-e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]")
           cleanup_notices
+          # 리뷰 진행 중 안내 — 완료/실패와 무관하게 trap으로 자동 삭제
+          PROGRESS_ID=""
+          clear_progress() {
+            if [ -n "${PROGRESS_ID:-}" ]; then
+              curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/comments/${PROGRESS_ID}" >/dev/null || true
+              PROGRESS_ID=""
+            fi
+          }
+          trap clear_progress EXIT
+          PROGRESS_BODY=$(printf '## 🔍 AI 코드 리뷰를 진행하고 있어요\n\n⏳ 변경된 코드를 살펴보는 중입니다 — 보통 1~2분 정도 걸려요.\n\n리뷰가 끝나면 이 안내는 자동으로 사라지고 결과가 게시됩니다.')
+          PROGRESS_ID=$(curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty')
           LOG=$(mktemp)
           docker run --rm \
             -e GITHUB_TOKEN \
@@ -242,6 +258,7 @@ jobs:
     if: |
       github.event_name == 'issue_comment' &&
       github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '/gemini-review')
     runs-on: ubuntu-latest
@@ -269,7 +286,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
+              | jq -r '.[] | select(.user.type == "Bot" and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -281,7 +298,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select((.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
+              | jq -r '.[] | select(.user.type == "Bot" and (.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -293,7 +310,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
+              | jq -r '.[] | select(.user.type == "Bot" and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -374,15 +391,35 @@ jobs:
               curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
             fi
           }
+          # 각 명령 직후 소프트 사용량 소진 검사 (/review 단계 누락 방지)
+          check_soft_quota() {
+            local log="$1"
+            if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$log"; then
+              delete_no_suggestions_comment
+              notify_failure "$log"
+              echo "::error::사용량 소진(소프트) — 로그를 확인하세요"
+              exit 1
+            fi
+          }
           cleanup_notices
+          # 리뷰 진행 중 안내 — 완료/실패와 무관하게 trap으로 자동 삭제
+          PROGRESS_ID=""
+          clear_progress() {
+            if [ -n "${PROGRESS_ID:-}" ]; then
+              curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/comments/${PROGRESS_ID}" >/dev/null || true
+              PROGRESS_ID=""
+            fi
+          }
+          trap clear_progress EXIT
+          PROGRESS_BODY=$(printf '## 🔍 AI 코드 리뷰를 진행하고 있어요\n\n⏳ 변경된 코드를 살펴보는 중입니다 — 보통 1~2분 정도 걸려요.\n\n리뷰가 끝나면 이 안내는 자동으로 사라지고 결과가 게시됩니다.')
+          PROGRESS_ID=$(curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty')
           run_command "/review"
+          check_soft_quota "$LAST_LOG"
           run_command "/improve"
-          if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$LAST_LOG"; then
-            delete_no_suggestions_comment
-            notify_failure "$LAST_LOG"
-            echo "::error::사용량 소진(소프트) — 로그를 확인하세요"
-            exit 1
-          fi
+          check_soft_quota "$LAST_LOG"
           localize_comments
 
   # ====================================================
@@ -393,6 +430,7 @@ jobs:
     if: |
       github.event_name == 'issue_comment' &&
       github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
       github.event.issue.pull_request != null &&
       contains(github.event.comment.body, '/openai-review')
     runs-on: ubuntu-latest
@@ -469,7 +507,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
+              | jq -r '.[] | select(.user.type == "Bot" and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -481,7 +519,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select((.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
+              | jq -r '.[] | select(.user.type == "Bot" and (.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -493,7 +531,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
+              | jq -r '.[] | select(.user.type == "Bot" and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null
@@ -574,15 +612,35 @@ jobs:
               curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
             fi
           }
+          # 각 명령 직후 소프트 사용량 소진 검사 (/review 단계 누락 방지)
+          check_soft_quota() {
+            local log="$1"
+            if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$log"; then
+              delete_no_suggestions_comment
+              notify_failure "$log"
+              echo "::error::사용량 소진(소프트) — 로그를 확인하세요"
+              exit 1
+            fi
+          }
           cleanup_notices
+          # 리뷰 진행 중 안내 — 완료/실패와 무관하게 trap으로 자동 삭제
+          PROGRESS_ID=""
+          clear_progress() {
+            if [ -n "${PROGRESS_ID:-}" ]; then
+              curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/comments/${PROGRESS_ID}" >/dev/null || true
+              PROGRESS_ID=""
+            fi
+          }
+          trap clear_progress EXIT
+          PROGRESS_BODY=$(printf '## 🔍 AI 코드 리뷰를 진행하고 있어요\n\n⏳ 변경된 코드를 살펴보는 중입니다 — 보통 1~2분 정도 걸려요.\n\n리뷰가 끝나면 이 안내는 자동으로 사라지고 결과가 게시됩니다.')
+          PROGRESS_ID=$(curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty')
           run_command "/review"
+          check_soft_quota "$LAST_LOG"
           run_command "/improve"
-          if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$LAST_LOG"; then
-            delete_no_suggestions_comment
-            notify_failure "$LAST_LOG"
-            echo "::error::사용량 소진(소프트) — 로그를 확인하세요"
-            exit 1
-          fi
+          check_soft_quota "$LAST_LOG"
           localize_comments
 
   # ====================================================
@@ -594,10 +652,12 @@ jobs:
     if: |
       (github.event_name == 'issue_comment' &&
        github.event.comment.user.type != 'Bot' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
        github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '/ask')) ||
       (github.event_name == 'pull_request_review_comment' &&
        github.event.comment.user.type != 'Bot' &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
        contains(github.event.comment.body, '/ask'))
     runs-on: ubuntu-latest
     permissions:
