@@ -96,4 +96,17 @@ class AdRewardServiceTest : FunSpec({
         verify(nonceRepository, never()).findForUpdate(any())
         verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
     }
+
+    test("already REJECTED event is skipped on retry (no nonce lock, no re-grant)") {
+        val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-z", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
+        event.markRejected(RewardStatus.REJECTED_OVER_QUOTA)
+        whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
+
+        service.grantFromCallback(callback("nonce-z"), now)
+
+        // 거절 종결 상태는 재전송돼도 그대로 유지되고, nonce 락 획득·적립을 시도하지 않는다.
+        event.rewardStatus shouldBe RewardStatus.REJECTED_OVER_QUOTA
+        verify(nonceRepository, never()).findForUpdate(any())
+        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+    }
 })

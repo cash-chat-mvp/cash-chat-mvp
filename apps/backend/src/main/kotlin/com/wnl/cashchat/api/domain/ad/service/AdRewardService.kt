@@ -30,9 +30,10 @@ class AdRewardService(
     @Transactional
     fun grantFromCallback(callback: GoogleAdSsvCallback, now: Instant) {
         val event = googleAdSsvEventRepository.findByTransactionId(callback.transactionId) ?: return
-        // 이미 적립 완료된 이벤트(AdMob 재전송 등)는 멱등하게 건너뛴다.
-        // 적립 실패로 VERIFIED 로 남은 이벤트는 재전송 시 다시 적립을 시도해 영구 미적립을 막는다.
-        if (event.rewardStatus == RewardStatus.GRANTED) {
+        // VERIFIED(적립 미결정) 상태만 적립을 시도한다. GRANTED(적립 완료)·REJECTED_*(거절 종결) 이벤트는
+        // AdMob 재전송 시 멱등하게 건너뛴다 — 불필요한 nonce 락을 피하고, 한도 초과로 거절된 콜백이
+        // 다음 날 재전송 시 적립되는 부작용도 막는다. 적립 실패로 VERIFIED 로 남은 이벤트는 재시도된다.
+        if (event.rewardStatus != RewardStatus.VERIFIED) {
             return
         }
 
