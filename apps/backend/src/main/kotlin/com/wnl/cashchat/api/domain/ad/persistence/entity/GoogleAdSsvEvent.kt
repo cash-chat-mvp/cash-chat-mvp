@@ -44,13 +44,25 @@ class GoogleAdSsvEvent(
     @Column(name = "key_id", nullable = false)
     val keyId: Long,
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "reward_status", nullable = false)
-    val rewardStatus: RewardStatus = RewardStatus.VERIFIED,
-
     @Column(name = "raw_query_string", nullable = false, columnDefinition = "TEXT")
     val rawQueryString: String,
 ) : BaseEntity() {
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reward_status", nullable = false)
+    var rewardStatus: RewardStatus = RewardStatus.VERIFIED
+        private set
+
+    fun markGranted() {
+        rewardStatus = RewardStatus.GRANTED
+    }
+
+    fun markRejected(reason: RewardStatus) {
+        require(reason == RewardStatus.REJECTED_INVALID_NONCE || reason == RewardStatus.REJECTED_OVER_QUOTA) {
+            "reason must be a REJECTED_* status"
+        }
+        rewardStatus = reason
+    }
+
     init {
         require(transactionId.isNotBlank()) { "Transaction id must not be blank" }
         require(userId.isNotBlank()) { "User id must not be blank" }
@@ -64,4 +76,7 @@ class GoogleAdSsvEvent(
 
 enum class RewardStatus {
     VERIFIED,
+    GRANTED,
+    REJECTED_INVALID_NONCE,
+    REJECTED_OVER_QUOTA,
 }
