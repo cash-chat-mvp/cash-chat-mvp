@@ -36,9 +36,9 @@
 - [x] `AdRewardNonceService.issueFor(userId)` (TTL·UUID nonce 발급)
 - [x] ~~`AdMobSsvVerifier`~~ → cc-242의 `GoogleAdSsvSignatureVerifier`·`GoogleAdPublicKeyClient`·`GoogleAdSsvQueryParser`가 이미 구현
 - [x] `AdRewardService.grantFromCallback(callback, now)` — **단일 `@Transactional`**
-  - [x] cc-242 서명 검증 후 신규 이벤트일 때만 적립. SSV `user_id`(=nonce)로 `ad_reward_nonce` 조회 → userId 해석 (클라이언트 식별값 미신뢰)
+  - [x] cc-242 서명 검증 후 `VERIFIED` 이벤트만 적립(GRANTED·REJECTED_* 는 멱등 스킵). SSV `user_id`(=nonce)로 `ad_reward_nonce`를 `findForUpdate`(PESSIMISTIC_WRITE 행 락)로 조회 → userId 해석 (클라이언트 식별값 미신뢰; 동일 nonce 동시 요청 직렬화로 중복 적립 방지, 커밋 5d45958)
   - [x] nonce 없음/만료/used → `REJECTED_INVALID_NONCE`
-  - [x] `ad_reward_daily_quota` 행 UPSERT 후 `findForUpdate`(per-user-per-day 행 락) — TOCTOU 방지
+  - [x] `ad_reward_daily_quota` 행 멱등 INSERT 후 `findForUpdate`(per-user-per-day 행 락) — nonce 행 락과 함께 **이중 락**으로 TOCTOU·중복 적립 방지
   - [x] 락 상태에서 `usedCount >= dailyLimit` → `REJECTED_OVER_QUOTA`
   - [x] 한도 미만 → `usedCount += 1` → nonce.used=true → recordTransaction(멱등성 키 `admob:reward:{transactionId}`) → 이벤트 `GRANTED`
 - [x] `AdRewardController` (`POST /api/ads/reward/issue-nonce`, `GET /api/ads/reward/quota`); SSV 콜백은 cc-242 `GoogleAdSsvController`(`GET /api/ads/google/ssv`)에 적립 연동

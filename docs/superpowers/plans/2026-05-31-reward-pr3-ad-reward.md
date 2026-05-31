@@ -205,10 +205,12 @@ data class AdRewardProperties(
     @field:Positive
     val dailyLimit: Int = 10,
 
+    @field:PositiveDuration
     val nonceTtl: Duration = Duration.ofMinutes(10),
 )
 ```
 > 등록은 기존 `GoogleAdSsvProperties`와 동일 방식(`@ConfigurationPropertiesScan`)으로 자동 인식된다.
+> `@PositiveDuration`은 표준 Jakarta Validation이 아니라 `MaxDuration.kt`에 정의된 프로젝트 커스텀 제약(`PositiveDurationValidator`)이다. `AdRewardProperties`와 동일 패키지(`...ad.properties`)라 별도 import는 필요 없다.
 
 - [ ] **Step 2: application.yaml 에 설정 추가**
 
@@ -716,8 +718,13 @@ class AdRewardService(
     @Transactional
     fun grantFromCallback(callback: GoogleAdSsvCallback, now: Instant) {
         val event = googleAdSsvEventRepository.findByTransactionId(callback.transactionId) ?: return
+        // VERIFIED(적립 미결정)만 적립을 시도한다. GRANTED·REJECTED_* 종결 이벤트는 재전송 시 멱등하게 건너뛴다.
+        if (event.rewardStatus != RewardStatus.VERIFIED) {
+            return
+        }
 
-        val nonce = adRewardNonceRepository.findById(callback.userId).orElse(null)
+        // 동일 nonce 동시 요청을 직렬화하기 위해 비관적 쓰기 락으로 조회한다(무락 시 stale 캐시로 중복 적립).
+        val nonce = adRewardNonceRepository.findForUpdate(callback.userId)
         if (nonce == null || !nonce.isUsable(now)) {
             event.markRejected(RewardStatus.REJECTED_INVALID_NONCE)
             return
@@ -741,14 +748,12 @@ class AdRewardService(
         event.markGranted()
     }
 
+    // 멱등 native INSERT(ON DUPLICATE KEY UPDATE no-op)로 행을 보장 생성 → 충돌해도 예외가 없어 트랜잭션이
+    // 오염되지 않고, findForUpdate 가 행을 락과 함께 최신 상태로 처음 로드한다.
     private fun lockOrCreateQuota(userId: Long, kstDate: LocalDate): AdRewardDailyQuota {
-        adRewardDailyQuotaRepository.findForUpdate(userId, kstDate)?.let { return it }
-        return try {
-            adRewardDailyQuotaRepository.saveAndFlush(AdRewardDailyQuota(userId = userId, kstDate = kstDate))
-            adRewardDailyQuotaRepository.findForUpdate(userId, kstDate)!!
-        } catch (e: org.springframework.dao.DataIntegrityViolationException) {
-            adRewardDailyQuotaRepository.findForUpdate(userId, kstDate)!!
-        }
+        adRewardDailyQuotaRepository.insertIfAbsent(userId, kstDate)
+        return adRewardDailyQuotaRepository.findForUpdate(userId, kstDate)
+            ?: throw IllegalStateException("ad_reward_daily_quota row must exist for userId=$userId on $kstDate")
     }
 
     private companion object {
@@ -756,6 +761,8 @@ class AdRewardService(
     }
 }
 ```
+
+> **동시성 전략 / 락 순서**: 동일 nonce 동시 요청 시 첫 트랜잭션만 적립하도록, nonce·일일 한도 행을 모두 비관적 쓰기 락(`SELECT … FOR UPDATE`)으로 조회한다. 데드락 방지를 위해 락 획득 순서를 **nonce → ad_reward_daily_quota → user_point** 로 고정한다(`AdRewardNonceRepository.findForUpdate` → `AdRewardDailyQuotaRepository.findForUpdate` → `UserPointService.recordTransaction` 내부 락).
 
 - [ ] **Step 4: 단위 테스트 통과**
 

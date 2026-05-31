@@ -119,7 +119,8 @@ class AdRewardIntegrationTest : FunSpec() {
                     try { adRewardService.grantFromCallback(callback("rt-$i", "rn-$i"), now) } catch (e: Throwable) { failures.add(e) }
                 }
             }
-            ready.await(); go.countDown(); pool.shutdown(); pool.awaitTermination(30, TimeUnit.SECONDS)
+            ready.await(); go.countDown(); pool.shutdown()
+            pool.awaitTermination(30, TimeUnit.SECONDS) shouldBe true
 
             // 한도 초과는 예외가 아니라 REJECTED 처리이므로 어떤 스레드도 예외를 던지지 않아야 한다.
             failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
@@ -146,7 +147,8 @@ class AdRewardIntegrationTest : FunSpec() {
                     try { adRewardService.grantFromCallback(callback("ft-$i", "fn-$i"), now) } catch (e: Throwable) { failures.add(e) }
                 }
             }
-            ready.await(); go.countDown(); pool.shutdown(); pool.awaitTermination(30, TimeUnit.SECONDS)
+            ready.await(); go.countDown(); pool.shutdown()
+            pool.awaitTermination(30, TimeUnit.SECONDS) shouldBe true
 
             // 동시 생성 충돌이 예외 없이 흡수되고(멱등 INSERT), 행은 정확히 하나, 6회 모두 적립(한도 10 미만).
             failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
@@ -174,7 +176,8 @@ class AdRewardIntegrationTest : FunSpec() {
                     try { adRewardService.grantFromCallback(callback("st-$i", "shared"), now) } catch (e: Throwable) { failures.add(e) }
                 }
             }
-            ready.await(); go.countDown(); pool.shutdown(); pool.awaitTermination(30, TimeUnit.SECONDS)
+            ready.await(); go.countDown(); pool.shutdown()
+            pool.awaitTermination(30, TimeUnit.SECONDS) shouldBe true
 
             // nonce 비관적 락으로 직렬화 → 정확히 1회만 적립, 나머지는 예외 없이 REJECTED_INVALID_NONCE.
             failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
