@@ -20,7 +20,6 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Instant
 import java.time.LocalDate
-import java.util.Optional
 
 class AdRewardServiceTest : FunSpec({
     lateinit var eventRepository: GoogleAdSsvEventRepository
@@ -50,7 +49,7 @@ class AdRewardServiceTest : FunSpec({
     test("invalid/used/expired nonce marks event REJECTED_INVALID_NONCE and grants nothing") {
         val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-x", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
         whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
-        whenever(nonceRepository.findById("nonce-x")).thenReturn(Optional.empty())
+        whenever(nonceRepository.findForUpdate("nonce-x")).thenReturn(null)
 
         service.grantFromCallback(callback("nonce-x"), now)
 
@@ -61,7 +60,7 @@ class AdRewardServiceTest : FunSpec({
     test("over quota marks event REJECTED_OVER_QUOTA and grants nothing") {
         val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-y", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
         whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
-        whenever(nonceRepository.findById("nonce-y")).thenReturn(Optional.of(AdRewardNonce(nonce = "nonce-y", userId = 7L, expiresAt = now.plusSeconds(60))))
+        whenever(nonceRepository.findForUpdate("nonce-y")).thenReturn(AdRewardNonce(nonce = "nonce-y", userId = 7L, expiresAt = now.plusSeconds(60)))
         whenever(quotaRepository.findForUpdate(7L, kstToday)).thenReturn(AdRewardDailyQuota(userId = 7L, kstDate = kstToday, usedCount = 10))
 
         service.grantFromCallback(callback("nonce-y"), now)
@@ -75,7 +74,7 @@ class AdRewardServiceTest : FunSpec({
         val nonce = AdRewardNonce(nonce = "nonce-z", userId = 7L, expiresAt = now.plusSeconds(60))
         val quota = AdRewardDailyQuota(userId = 7L, kstDate = kstToday, usedCount = 3)
         whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
-        whenever(nonceRepository.findById("nonce-z")).thenReturn(Optional.of(nonce))
+        whenever(nonceRepository.findForUpdate("nonce-z")).thenReturn(nonce)
         whenever(quotaRepository.findForUpdate(7L, kstToday)).thenReturn(quota)
 
         service.grantFromCallback(callback("nonce-z"), now)
@@ -94,7 +93,7 @@ class AdRewardServiceTest : FunSpec({
         service.grantFromCallback(callback("nonce-z"), now)
 
         event.rewardStatus shouldBe RewardStatus.GRANTED
-        verify(nonceRepository, never()).findById(any())
+        verify(nonceRepository, never()).findForUpdate(any())
         verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
     }
 })

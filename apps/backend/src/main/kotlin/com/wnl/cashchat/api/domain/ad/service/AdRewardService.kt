@@ -36,7 +36,9 @@ class AdRewardService(
             return
         }
 
-        val nonce = adRewardNonceRepository.findById(callback.userId).orElse(null)
+        // 비관적 쓰기 락으로 nonce 를 조회한다. 동일 nonce 동시 요청을 직렬화해, 뒤 트랜잭션이
+        // stale 캐시가 아닌 최신 used 상태를 읽도록 보장 → 단일 사용 nonce 의 중복 적립을 차단한다.
+        val nonce = adRewardNonceRepository.findForUpdate(callback.userId)
         if (nonce == null || !nonce.isUsable(now)) {
             event.markRejected(RewardStatus.REJECTED_INVALID_NONCE)
             return

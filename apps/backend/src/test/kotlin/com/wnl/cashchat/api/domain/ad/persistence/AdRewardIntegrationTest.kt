@@ -155,6 +155,36 @@ class AdRewardIntegrationTest : FunSpec() {
             userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 240L
             pointTransactionRepository.count() shouldBe 6L
         }
+
+        test("concurrent grants reusing one nonce credit exactly once (no double spending)") {
+            val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "reuse"))
+            userPointService.ensureInitialized(user)
+            val baseline = userPointRepository.findByUserId(user.id)!!.balance
+            // 단일 nonce 하나만 발급하고, 서로 다른 transactionId 6건이 동시에 같은 nonce 로 적립을 시도한다.
+            nonceRepository.saveAndFlush(AdRewardNonce(nonce = "shared", userId = user.id, expiresAt = now.plusSeconds(600)))
+            val threads = 6
+            val pool = Executors.newFixedThreadPool(threads)
+            val ready = CountDownLatch(threads)
+            val go = CountDownLatch(1)
+            val failures = ConcurrentLinkedQueue<Throwable>()
+            repeat(threads) { i ->
+                storeEvent("st-$i", "shared")
+                pool.submit {
+                    ready.countDown(); go.await()
+                    try { adRewardService.grantFromCallback(callback("st-$i", "shared"), now) } catch (e: Throwable) { failures.add(e) }
+                }
+            }
+            ready.await(); go.countDown(); pool.shutdown(); pool.awaitTermination(30, TimeUnit.SECONDS)
+
+            // nonce 비관적 락으로 직렬화 → 정확히 1회만 적립, 나머지는 예외 없이 REJECTED_INVALID_NONCE.
+            failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
+            nonceRepository.findById("shared").get().used shouldBe true
+            pointTransactionRepository.count() shouldBe 1L
+            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 40L
+            (0 until threads).count {
+                eventRepository.findByTransactionId("st-$it")!!.rewardStatus == RewardStatus.GRANTED
+            } shouldBe 1
+        }
     }
 
     companion object {
