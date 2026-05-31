@@ -12,18 +12,19 @@
 - [x] 음수 잔액 거부 정책 (delta < 0이고 잔액 부족 시 거부) — 기존 `InsufficientPointsException`(`INSUFFICIENT_POINTS`, HTTP 402) 재사용. spec의 `INSUFFICIENT_COIN`은 신규 코드 추가 대신 기존 코드로 통일
 - [x] Kotest 단위 테스트: 정상 적립 / 중복 키 / 잔액 부족 (단위 mock) + 동시 호출 경합 (`PointIdempotencyIntegrationTest`, TestContainers MySQL)
 
-### BE-2. 출석 도메인 (`domain/attendance/`)
+### BE-2. 출석 도메인 (`domain/attendance/`) ✅ (PR2 완료)
 
-- [ ] `AttendanceLog`, `AttendanceReward`(시드) 엔티티 정의
-- [ ] `AttendanceService.checkIn(userId, todayKst)` 구현
-  - [ ] 중복 일자 거부 → `ALREADY_CHECKED_IN`
-  - [ ] 연속 일차 계산 (전일 출석 여부에 따라 +1 또는 1로 리셋)
-  - [ ] 누적 일차 기반 보상 lookup + 보너스 1회 지급 가드
-  - [ ] `UserPointService.recordTransaction(key="attendance:{userId}:{date}")` 호출
-- [ ] `AttendanceService.getMonthly(userId, year, month)` 구현
-- [ ] `AttendanceController` (`POST /api/attendance/check-in`, `GET /api/attendance/me`)
-- [ ] Kotest 테스트: 첫 출석 / 중복 / 연속 증가 / 끊김 리셋 / 7·14·30일 부가 보상
-  - 31일+ 사이클 재진입은 spec에서 Phase 1 범위 외 — 별도 의사결정 후 후속 PR에서 추가
+- [x] `AttendanceLog`, `AttendanceReward`(시드) 엔티티 정의 — `AttendanceRewardBonus`(부가 보상 정의) 포함, V3 마이그레이션·시드
+- [x] `AttendanceService.checkIn(userId, todayKst)` 구현 — 단일 `@Transactional`로 로그+코인 원자 적립
+  - [x] 중복 일자 거부 → `ALREADY_CHECKED_IN` (409)
+  - [x] 연속 일차 계산 (전일 출석 여부에 따라 +1 또는 1로 리셋)
+  - [x] 누적 일차 기반 보상 lookup (`day_count=0` 기본 폴백 + 7/14/30 마일스톤)
+  - [x] `UserPointService.recordTransaction(key="attendance:{userId}:{date}")` 호출 (KST)
+- [x] `AttendanceService.getMonthly(userId, year, month)` 구현 — year/month 둘 다/둘 다 생략, 한쪽만 400
+- [x] `AttendanceController` (`POST /api/attendance/check-in`, `GET /api/attendance/me`)
+- [x] Kotest 테스트: 첫 출석 / 중복 / 연속 증가 / 끊김 리셋 / 7일 부가 보상 (단위) + 컨트롤러 WebMvc + TestContainers 통합(첫 출석·중복·7일 시드값)
+  - 31일+ 정식 "월간 사이클" 정책은 후속 PR 예정(Confluence 가설 존재). 현재 구현은 모든 31일+ 일차에 대해 기본 폴백으로 20코인을 지급(보너스/streak 리셋 없음)
+  - **부가 보상 아이템(EVO_STONE 등)은 정의·미리보기만 제공, 실제 인벤토리 지급은 미구현** — 인벤토리/아이템 도메인(Shop/Evolution) 등장 시 연결
 
 ### BE-3. 광고 도메인 (`domain/ad/`)
 
@@ -50,7 +51,7 @@
 
 - [ ] `application.yml`에 `reward.admob.daily-limit`, `reward.admob.public-keys-url`, `reward.admob.reward-coin` 추가 — BE-3(광고) PR
 - [x] Flyway 도입 + V1 베이스라인 + **`point_transaction`(V2)** 마이그레이션 (PR1) — `attendance_*`는 BE-2 PR, `ad_reward_*`는 BE-3 PR에서 추가
-- [ ] 시드 데이터 SQL: 출석 보상 테이블 (Phase 1 종자값 — spec 부록 표) — BE-2(출석) PR
+- [x] 시드 데이터 SQL: 출석 보상 테이블 (Phase 1 종자값 — spec 부록 표) — BE-2(출석) PR에서 V3로 제공 완료
 
 ## Front-End
 
