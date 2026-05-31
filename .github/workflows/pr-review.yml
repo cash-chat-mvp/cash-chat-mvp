@@ -145,7 +145,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
+              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")) or (.body | test("^## 💡 심층 리뷰를 권장")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null || true
@@ -163,13 +163,28 @@ jobs:
                     "$api/issues/comments/${cid}" >/dev/null || true
                 done || true
           }
+          # 난이도 높은(>=4) 리뷰엔 심층 리뷰(OpenAI/CodeRabbit) 권장 코멘트 게시(best-effort)
+          recommend_deep_review() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            local comments gbody score
+            comments=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments?per_page=100")
+            gbody=$(printf '%s' "$comments" | jq -r '[.[] | select(.body != null and (.body | test("PR 리뷰 가이드|PR Reviewer Guide")))] | last | .body // empty')
+            [ -z "$gbody" ] && return 0
+            score=$(printf '%s' "$gbody" | grep -oiE '(난이도|effort to review)[^0-9]{0,20}[1-5]' | grep -oE '[1-5]' | tail -1 || true)
+            [ -z "${score:-}" ] && return 0
+            if [ "$score" -ge 4 ]; then
+              local msg
+              msg=$(printf '## 💡 심층 리뷰를 권장해요\n\n이 PR은 변경이 많거나 복잡합니다 (리뷰 난이도 **%s/5**). 더 꼼꼼한 검토를 위해 아래 중 하나로 한 번 더 리뷰받는 걸 추천해요:\n\n- `/openai-review` — OpenAI 심층 리뷰\n- `@coderabbitai review` — CodeRabbit 추가 관점 리뷰' "$score")
+              curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments" -d "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || true
+            fi
+          }
           # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
           notify_failure() {
             local log="$1"
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
+              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")) or (.body | test("^## 💡 심층 리뷰를 권장")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null || true
@@ -269,6 +284,7 @@ jobs:
               -e 's/Why: /이유: /g')
             curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$L_API/issues/comments/${L_SID}" -d "$(jq -n --arg b "$L_BODY" '{body: $b}')" >/dev/null
           fi
+          recommend_deep_review
 
   # ====================================================
   # Gemini 수동 리뷰 (/gemini-review 코멘트)
@@ -308,7 +324,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
+              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")) or (.body | test("^## 💡 심층 리뷰를 권장")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null || true
@@ -326,13 +342,28 @@ jobs:
                     "$api/issues/comments/${cid}" >/dev/null || true
                 done || true
           }
+          # 난이도 높은(>=4) 리뷰엔 심층 리뷰(OpenAI/CodeRabbit) 권장 코멘트 게시(best-effort)
+          recommend_deep_review() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            local comments gbody score
+            comments=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments?per_page=100")
+            gbody=$(printf '%s' "$comments" | jq -r '[.[] | select(.body != null and (.body | test("PR 리뷰 가이드|PR Reviewer Guide")))] | last | .body // empty')
+            [ -z "$gbody" ] && return 0
+            score=$(printf '%s' "$gbody" | grep -oiE '(난이도|effort to review)[^0-9]{0,20}[1-5]' | grep -oE '[1-5]' | tail -1 || true)
+            [ -z "${score:-}" ] && return 0
+            if [ "$score" -ge 4 ]; then
+              local msg
+              msg=$(printf '## 💡 심층 리뷰를 권장해요\n\n이 PR은 변경이 많거나 복잡합니다 (리뷰 난이도 **%s/5**). 더 꼼꼼한 검토를 위해 아래 중 하나로 한 번 더 리뷰받는 걸 추천해요:\n\n- `/openai-review` — OpenAI 심층 리뷰\n- `@coderabbitai review` — CodeRabbit 추가 관점 리뷰' "$score")
+              curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments" -d "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || true
+            fi
+          }
           # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
           notify_failure() {
             local log="$1"
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
+              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")) or (.body | test("^## 💡 심층 리뷰를 권장")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null || true
@@ -446,6 +477,7 @@ jobs:
           run_command "/improve"
           check_soft_quota "$LAST_LOG"
           localize_comments
+          recommend_deep_review
 
   # ====================================================
   # OpenAI: 사용 가능한 모델 순차 탐색 (수동 전용)
@@ -532,7 +564,7 @@ jobs:
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
+              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")) or (.body | test("^## 💡 심층 리뷰를 권장")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null || true
@@ -550,13 +582,28 @@ jobs:
                     "$api/issues/comments/${cid}" >/dev/null || true
                 done || true
           }
+          # 난이도 높은(>=4) 리뷰엔 심층 리뷰(OpenAI/CodeRabbit) 권장 코멘트 게시(best-effort)
+          recommend_deep_review() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            local comments gbody score
+            comments=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments?per_page=100")
+            gbody=$(printf '%s' "$comments" | jq -r '[.[] | select(.body != null and (.body | test("PR 리뷰 가이드|PR Reviewer Guide")))] | last | .body // empty')
+            [ -z "$gbody" ] && return 0
+            score=$(printf '%s' "$gbody" | grep -oiE '(난이도|effort to review)[^0-9]{0,20}[1-5]' | grep -oE '[1-5]' | tail -1 || true)
+            [ -z "${score:-}" ] && return 0
+            if [ "$score" -ge 4 ]; then
+              local msg
+              msg=$(printf '## 💡 심층 리뷰를 권장해요\n\n이 PR은 변경이 많거나 복잡합니다 (리뷰 난이도 **%s/5**). 더 꼼꼼한 검토를 위해 아래 중 하나로 한 번 더 리뷰받는 걸 추천해요:\n\n- `/openai-review` — OpenAI 심층 리뷰\n- `@coderabbitai review` — CodeRabbit 추가 관점 리뷰' "$score")
+              curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/${PR_NUMBER}/comments" -d "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || true
+            fi
+          }
           # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
           notify_failure() {
             local log="$1"
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
+              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")) or (.body | test("^## 💡 심층 리뷰를 권장")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null || true
@@ -670,6 +717,7 @@ jobs:
           run_command "/improve"
           check_soft_quota "$LAST_LOG"
           localize_comments
+          recommend_deep_review
 
   # ====================================================
   # 티키타카 대화 (/ask) — PR 전체 및 라인 댓글, model_weak 사용
