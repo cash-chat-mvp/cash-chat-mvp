@@ -18,6 +18,9 @@ on:
   # 수동: PR 코멘트 명령어 (/gemini-review, /openai-review)
   issue_comment:
     types: [created]
+  # 라인 댓글의 /ask 대화 (인라인 코멘트에 답글)
+  pull_request_review_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -39,13 +42,16 @@ jobs:
       (github.event_name == 'issue_comment' &&
        github.event.comment.user.type != 'Bot' &&
        github.event.issue.pull_request != null &&
-       contains(github.event.comment.body, '/gemini-review'))
+       (contains(github.event.comment.body, '/gemini-review') || contains(github.event.comment.body, '/ask'))) ||
+      (github.event_name == 'pull_request_review_comment' &&
+       github.event.comment.user.type != 'Bot' &&
+       contains(github.event.comment.body, '/ask'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
-      model: ${{ steps.pick.outputs.model }}
-      fallbacks: ${{ steps.pick.outputs.fallbacks }}
+      model0: ${{ steps.pick.outputs.model0 }}
+      model1: ${{ steps.pick.outputs.model1 }}
     steps:
       - name: Pick available Gemini model
         id: pick
@@ -61,7 +67,6 @@ jobs:
 
           # 존재 확인은 GET /models/{model} 로 수행 — generateContent와 달리
           # 무료 등급 일일 생성 할당량(RPD)을 소모하지 않는다.
-          # 실제 rate-limit(429) 회피는 리뷰 시점의 fallback_models가 담당한다.
           VALID=()
           for model in "${MODELS[@]}"; do
             model="${model// /}"
@@ -80,16 +85,12 @@ jobs:
             exit 1
           fi
 
-          SELECTED="${VALID[0]}"
-          # 1순위를 제외한 나머지를 gemini/ 접두어 붙여 폴백 목록(CSV)으로 구성
-          FALLBACKS=""
-          for m in "${VALID[@]:1}"; do
-            if [ -z "$FALLBACKS" ]; then FALLBACKS="gemini/$m"; else FALLBACKS="$FALLBACKS,gemini/$m"; fi
-          done
-
-          echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
-          echo "fallbacks=${FALLBACKS}" >> "$GITHUB_OUTPUT"
-          echo "::notice::선택된 Gemini 모델: $SELECTED (폴백: ${FALLBACKS:-없음})"
+          # 리뷰=1순위(model0), 대화/describe=2순위(model1). 폴백 없음.
+          MODEL0="gemini/${VALID[0]}"
+          if [ ${#VALID[@]} -ge 2 ]; then MODEL1="gemini/${VALID[1]}"; else MODEL1="$MODEL0"; fi
+          echo "model0=${MODEL0}" >> "$GITHUB_OUTPUT"
+          echo "model1=${MODEL1}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Gemini 모델 — 리뷰: $MODEL0 / 대화: $MODEL1"
 
   # ====================================================
   # Gemini 자동 리뷰 (PR 생성/커밋 푸시)
@@ -111,13 +112,36 @@ jobs:
       - name: AI Review + Improve (Gemini)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
-          FALLBACKS: ${{ needs.resolve-gemini-model.outputs.fallbacks }}
+          MODEL0: ${{ needs.resolve-gemini-model.outputs.model0 }}
+          MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
           GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RETRY_CMD: "/gemini-review"
         run: |
           set -euo pipefail
+          # 안내성(임시/사용량/실패) 코멘트만 삭제. 리뷰 결과물은 보존.
+          cleanup_notices() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
+              | while read -r cid; do
+                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    "$api/issues/comments/${cid}" >/dev/null
+                done
+          }
+          # 코드 제안이 "제안 없음"인데 실제로는 사용량 소진인 경우 그 코멘트 삭제
+          # (주의: 반드시 localize_comments 이전·영문 상태에서 호출되어야 정상 결과를 지우지 않음)
+          delete_no_suggestions_comment() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+              | jq -r '.[] | select((.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
+              | while read -r cid; do
+                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    "$api/issues/comments/${cid}" >/dev/null
+                done
+          }
           # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
           notify_failure() {
             local log="$1"
@@ -139,13 +163,10 @@ jobs:
               "$api/issues/${PR_NUMBER}/comments" \
               -d "$(jq -n --arg b "$msg" '{body: $b}')" >/dev/null
           }
-          # rate-limit(429) 시 다음 Gemini 모델로 폴백 (목록이 있을 때만 주입)
-          # 폴백 목록 주입: .pr_agent.toml에는 fallback_models를 두지 않으므로
-          # 여기서 env로 항상 주입한다. 비어 있으면 []로 줘서 이미지 기본값
-          # (gpt-5.4-mini)이 폴백으로 끼는 것을 막는다.
-          FB="${FALLBACKS:-}"
-          [ -z "$FB" ] && FB="[]"
-          EXTRA_ENV=(-e "CONFIG.FALLBACK_MODELS=$FB")
+          # 모델 분리: 리뷰/개선=model0(REGULAR), 대화/describe=model1(WEAK).
+          # 폴백 완전 비활성화([])로 이미지 기본값(gpt-5.4-mini) 차단.
+          MODEL_ENV=(-e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]")
+          cleanup_notices
           LOG=$(mktemp)
           docker run --rm \
             -e GITHUB_TOKEN \
@@ -155,8 +176,7 @@ jobs:
             -e GITHUB_SERVER_URL="${{ github.server_url }}" \
             -e GITHUB_EVENT_PATH=/github/workflow/event.json \
             -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-            -e "CONFIG.MODEL=gemini/$MODEL" \
-            "${EXTRA_ENV[@]}" \
+            "${MODEL_ENV[@]}" \
             -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
             -e "GEMINI_API_KEY=$GEMINI_KEY" \
             -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
@@ -167,6 +187,13 @@ jobs:
           if grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; then
             notify_failure "$LOG"
             echo "::error::Gemini 리뷰 실패 — 로그를 확인하세요"
+            exit 1
+          fi
+          # 하드 실패는 아니지만 로그에 할당량 마커가 있으면 조용한 소진으로 처리
+          if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$LOG"; then
+            delete_no_suggestions_comment
+            notify_failure "$LOG"
+            echo "::error::Gemini 사용량 소진(소프트) — 로그를 확인하세요"
             exit 1
           fi
           # 리뷰 가이드 / 코드 제안 코멘트의 하드코딩 영문 라벨을 한국어로 치환
@@ -196,7 +223,7 @@ jobs:
           if [ -n "$L_SID" ]; then
             L_BODY=$(printf '%s' "$L_COMMENTS" | jq -r --argjson id "$L_SID" '.[] | select(.id==$id) | .body' | sed \
               -e 's/## PR Code Suggestions/## PR 코드 개선 제안/g' \
-              -e 's/No code suggestions found for the PR./이 PR에 대한 코드 개선 제안이 없습니다./g' \
+              -e 's/No code suggestions found for the PR./✅ 개선할 점을 찾지 못했어요 — 코드가 깔끔합니다! 👍 (사용량 소진이 아닌 정상 완료입니다)/g' \
               -e 's#<strong>Category</strong>#<strong>분류</strong>#g' \
               -e 's/<strong>Suggestion/<strong>제안/g' \
               -e 's#<strong>Impact</strong>#<strong>영향도</strong>#g' \
@@ -230,13 +257,36 @@ jobs:
       - name: AI Review + Improve (Gemini)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          MODEL: ${{ needs.resolve-gemini-model.outputs.model }}
-          FALLBACKS: ${{ needs.resolve-gemini-model.outputs.fallbacks }}
+          MODEL0: ${{ needs.resolve-gemini-model.outputs.model0 }}
+          MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
           GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           PR_NUMBER: ${{ github.event.issue.number }}
           RETRY_CMD: "/gemini-review"
         run: |
           set -euo pipefail
+          # 안내성(임시/사용량/실패) 코멘트만 삭제. 리뷰 결과물은 보존.
+          cleanup_notices() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
+              | while read -r cid; do
+                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    "$api/issues/comments/${cid}" >/dev/null
+                done
+          }
+          # 코드 제안이 "제안 없음"인데 실제로는 사용량 소진인 경우 그 코멘트 삭제
+          # (주의: 반드시 localize_comments 이전·영문 상태에서 호출되어야 정상 결과를 지우지 않음)
+          delete_no_suggestions_comment() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+              | jq -r '.[] | select((.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
+              | while read -r cid; do
+                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    "$api/issues/comments/${cid}" >/dev/null
+                done
+          }
           # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
           notify_failure() {
             local log="$1"
@@ -258,19 +308,15 @@ jobs:
               "$api/issues/${PR_NUMBER}/comments" \
               -d "$(jq -n --arg b "$msg" '{body: $b}')" >/dev/null
           }
-          # rate-limit(429) 시 다음 Gemini 모델로 폴백 (목록이 있을 때만 주입)
-          # 폴백 목록 주입: .pr_agent.toml에는 fallback_models를 두지 않으므로
-          # 여기서 env로 항상 주입한다. 비어 있으면 []로 줘서 이미지 기본값
-          # (gpt-5.4-mini)이 폴백으로 끼는 것을 막는다.
-          FB="${FALLBACKS:-}"
-          [ -z "$FB" ] && FB="[]"
-          EXTRA_ENV=(-e "CONFIG.FALLBACK_MODELS=$FB")
+          # 모델 분리: 리뷰/개선=model0(REGULAR), 대화/describe=model1(WEAK).
+          # 폴백 완전 비활성화([])로 이미지 기본값(gpt-5.4-mini) 차단.
+          MODEL_ENV=(-e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]")
           run_command() {
             local cmd="$1"
             local tmp; tmp=$(mktemp)
             jq --arg c "$cmd" '.comment.body = $c' "$GITHUB_EVENT_PATH" > "$tmp"
             mv "$tmp" "$GITHUB_EVENT_PATH"
-            local log; log=$(mktemp)
+            LAST_LOG=$(mktemp); local log="$LAST_LOG"
             docker run --rm \
               -e GITHUB_TOKEN \
               -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
@@ -279,8 +325,7 @@ jobs:
               -e GITHUB_SERVER_URL="${{ github.server_url }}" \
               -e GITHUB_EVENT_PATH=/github/workflow/event.json \
               -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-              -e "CONFIG.MODEL=gemini/$MODEL" \
-              "${EXTRA_ENV[@]}" \
+              "${MODEL_ENV[@]}" \
               -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
               -e "GEMINI_API_KEY=$GEMINI_KEY" \
               -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
@@ -320,7 +365,7 @@ jobs:
             if [ -n "$sid" ]; then
               body=$(printf '%s' "$comments" | jq -r --argjson id "$sid" '.[] | select(.id==$id) | .body' | sed \
                 -e 's/## PR Code Suggestions/## PR 코드 개선 제안/g' \
-                -e 's/No code suggestions found for the PR./이 PR에 대한 코드 개선 제안이 없습니다./g' \
+                -e 's/No code suggestions found for the PR./✅ 개선할 점을 찾지 못했어요 — 코드가 깔끔합니다! 👍 (사용량 소진이 아닌 정상 완료입니다)/g' \
                 -e 's#<strong>Category</strong>#<strong>분류</strong>#g' \
                 -e 's/<strong>Suggestion/<strong>제안/g' \
                 -e 's#<strong>Impact</strong>#<strong>영향도</strong>#g' \
@@ -329,8 +374,15 @@ jobs:
               curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
             fi
           }
+          cleanup_notices
           run_command "/review"
           run_command "/improve"
+          if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$LAST_LOG"; then
+            delete_no_suggestions_comment
+            notify_failure "$LAST_LOG"
+            echo "::error::사용량 소진(소프트) — 로그를 확인하세요"
+            exit 1
+          fi
           localize_comments
 
   # ====================================================
@@ -347,8 +399,8 @@ jobs:
     permissions:
       contents: read
     outputs:
-      model: ${{ steps.pick.outputs.model }}
-      fallbacks: ${{ steps.pick.outputs.fallbacks }}
+      model0: ${{ steps.pick.outputs.model0 }}
+      model1: ${{ steps.pick.outputs.model1 }}
     steps:
       - name: Pick available OpenAI model
         id: pick
@@ -380,16 +432,11 @@ jobs:
             exit 1
           fi
 
-          SELECTED="${VALID[0]}"
-          # 1순위를 제외한 나머지를 폴백 목록(CSV)으로 구성 (OpenAI는 접두어 불필요)
-          FALLBACKS=""
-          for m in "${VALID[@]:1}"; do
-            if [ -z "$FALLBACKS" ]; then FALLBACKS="$m"; else FALLBACKS="$FALLBACKS,$m"; fi
-          done
-
-          echo "model=${SELECTED}" >> "$GITHUB_OUTPUT"
-          echo "fallbacks=${FALLBACKS}" >> "$GITHUB_OUTPUT"
-          echo "::notice::선택된 OpenAI 모델: $SELECTED (폴백: ${FALLBACKS:-없음})"
+          MODEL0="${VALID[0]}"
+          if [ ${#VALID[@]} -ge 2 ]; then MODEL1="${VALID[1]}"; else MODEL1="$MODEL0"; fi
+          echo "model0=${MODEL0}" >> "$GITHUB_OUTPUT"
+          echo "model1=${MODEL1}" >> "$GITHUB_OUTPUT"
+          echo "::notice::OpenAI 모델 — 리뷰: $MODEL0 / 대화: $MODEL1"
 
   # ====================================================
   # OpenAI 수동 리뷰 (/openai-review 코멘트)
@@ -410,13 +457,36 @@ jobs:
       - name: AI Review + Improve (OpenAI)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          MODEL: ${{ needs.resolve-openai-model.outputs.model }}
-          FALLBACKS: ${{ needs.resolve-openai-model.outputs.fallbacks }}
+          MODEL0: ${{ needs.resolve-openai-model.outputs.model0 }}
+          MODEL1: ${{ needs.resolve-openai-model.outputs.model1 }}
           OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
           PR_NUMBER: ${{ github.event.issue.number }}
           RETRY_CMD: "/openai-review"
         run: |
           set -euo pipefail
+          # 안내성(임시/사용량/실패) 코멘트만 삭제. 리뷰 결과물은 보존.
+          cleanup_notices() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+              | jq -r '.[] | select(.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지"))) | .id' \
+              | while read -r cid; do
+                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    "$api/issues/comments/${cid}" >/dev/null
+                done
+          }
+          # 코드 제안이 "제안 없음"인데 실제로는 사용량 소진인 경우 그 코멘트 삭제
+          # (주의: 반드시 localize_comments 이전·영문 상태에서 호출되어야 정상 결과를 지우지 않음)
+          delete_no_suggestions_comment() {
+            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+              | jq -r '.[] | select((.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
+              | while read -r cid; do
+                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
+                    "$api/issues/comments/${cid}" >/dev/null
+                done
+          }
           # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
           notify_failure() {
             local log="$1"
@@ -438,19 +508,15 @@ jobs:
               "$api/issues/${PR_NUMBER}/comments" \
               -d "$(jq -n --arg b "$msg" '{body: $b}')" >/dev/null
           }
-          # rate-limit(429) 시 다음 OpenAI 모델로 폴백 (목록이 있을 때만 주입)
-          # 폴백 목록 주입: .pr_agent.toml에는 fallback_models를 두지 않으므로
-          # 여기서 env로 항상 주입한다. 비어 있으면 []로 줘서 이미지 기본값
-          # (gpt-5.4-mini)이 폴백으로 끼는 것을 막는다.
-          FB="${FALLBACKS:-}"
-          [ -z "$FB" ] && FB="[]"
-          EXTRA_ENV=(-e "CONFIG.FALLBACK_MODELS=$FB")
+          # 모델 분리: 리뷰/개선=model0(REGULAR), 대화/describe=model1(WEAK).
+          # 폴백 완전 비활성화([])로 이미지 기본값(gpt-5.4-mini) 차단.
+          MODEL_ENV=(-e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]")
           run_command() {
             local cmd="$1"
             local tmp; tmp=$(mktemp)
             jq --arg c "$cmd" '.comment.body = $c' "$GITHUB_EVENT_PATH" > "$tmp"
             mv "$tmp" "$GITHUB_EVENT_PATH"
-            local log; log=$(mktemp)
+            LAST_LOG=$(mktemp); local log="$LAST_LOG"
             docker run --rm \
               -e GITHUB_TOKEN \
               -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
@@ -459,8 +525,7 @@ jobs:
               -e GITHUB_SERVER_URL="${{ github.server_url }}" \
               -e GITHUB_EVENT_PATH=/github/workflow/event.json \
               -e "CONFIG.AI_PROVIDER=openai" \
-              -e "CONFIG.MODEL=$MODEL" \
-              "${EXTRA_ENV[@]}" \
+              "${MODEL_ENV[@]}" \
               -e "OPENAI.KEY=$OPENAI_KEY" \
               -e "OPENAI_API_KEY=$OPENAI_KEY" \
               -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
@@ -500,7 +565,7 @@ jobs:
             if [ -n "$sid" ]; then
               body=$(printf '%s' "$comments" | jq -r --argjson id "$sid" '.[] | select(.id==$id) | .body' | sed \
                 -e 's/## PR Code Suggestions/## PR 코드 개선 제안/g' \
-                -e 's/No code suggestions found for the PR./이 PR에 대한 코드 개선 제안이 없습니다./g' \
+                -e 's/No code suggestions found for the PR./✅ 개선할 점을 찾지 못했어요 — 코드가 깔끔합니다! 👍 (사용량 소진이 아닌 정상 완료입니다)/g' \
                 -e 's#<strong>Category</strong>#<strong>분류</strong>#g' \
                 -e 's/<strong>Suggestion/<strong>제안/g' \
                 -e 's#<strong>Impact</strong>#<strong>영향도</strong>#g' \
@@ -509,6 +574,73 @@ jobs:
               curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
             fi
           }
+          cleanup_notices
           run_command "/review"
           run_command "/improve"
+          if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$LAST_LOG"; then
+            delete_no_suggestions_comment
+            notify_failure "$LAST_LOG"
+            echo "::error::사용량 소진(소프트) — 로그를 확인하세요"
+            exit 1
+          fi
           localize_comments
+
+  # ====================================================
+  # 티키타카 대화 (/ask) — PR 전체 및 라인 댓글, model_weak 사용
+  # ====================================================
+  ask-gemini:
+    name: Gemini Ask
+    needs: resolve-gemini-model
+    if: |
+      (github.event_name == 'issue_comment' &&
+       github.event.comment.user.type != 'Bot' &&
+       github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '/ask')) ||
+      (github.event_name == 'pull_request_review_comment' &&
+       github.event.comment.user.type != 'Bot' &&
+       contains(github.event.comment.body, '/ask'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate Gemini bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
+          private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Ask (Gemini, model_weak)
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          MODEL0: ${{ needs.resolve-gemini-model.outputs.model0 }}
+          MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
+          GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          # /ask 는 ModelType.WEAK → CONFIG.MODEL_WEAK(=model1) 사용.
+          # 코멘트 본문은 rewrite 하지 않고 그대로 pr-agent 러너가 파싱한다.
+          LOG=$(mktemp)
+          docker run --rm \
+            -e GITHUB_TOKEN \
+            -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+            -e GITHUB_REPOSITORY="${{ github.repository }}" \
+            -e GITHUB_API_URL="${{ github.api_url }}" \
+            -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+            -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+            -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+            -e "CONFIG.MODEL=$MODEL0" \
+            -e "CONFIG.MODEL_WEAK=$MODEL1" \
+            -e "CONFIG.FALLBACK_MODELS=[]" \
+            -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
+            -e "GEMINI_API_KEY=$GEMINI_KEY" \
+            -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
+            "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
+          if grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG" || grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$LOG"; then
+            PR_NUM="${{ github.event.issue.number || github.event.pull_request.number }}"
+            api="${GITHUB_API_URL}/repos/${{ github.repository }}"
+            msg='답변 생성에 실패했어요. 사용량 소진일 수 있어요 — 잠시 후 다시 `/ask` 로 질문해 주세요. 🙏'
+            curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$api/issues/${PR_NUM}/comments" -d "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null
+            echo "::error::/ask 실패"
+            exit 1
+          fi
