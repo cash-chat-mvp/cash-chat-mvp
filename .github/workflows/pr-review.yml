@@ -797,8 +797,14 @@ jobs:
             PR_NUM="${{ github.event.issue.number || github.event.pull_request.number }}"
             api="${GITHUB_API_URL}/repos/${{ github.repository }}"
             msg='답변 생성에 실패했어요. 사용량 소진일 수 있어요 — 잠시 후 다시 `/ask` 로 질문해 주세요. 🙏'
-            curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
-              "$api/issues/${PR_NUM}/comments" -d "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null
+            if [ "${{ github.event_name }}" = "pull_request_review_comment" ]; then
+              # 인라인 댓글의 /ask 실패는 해당 라인 스레드에 답글로 게시 (맥락 유지)
+              curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+                "$api/pulls/${PR_NUM}/comments/${{ github.event.comment.id }}/replies" -d "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || true
+            else
+              curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+                "$api/issues/${PR_NUM}/comments" -d "$(jq -n --arg b "$msg" '{body:$b}')" >/dev/null || true
+            fi
             echo "::error::/ask 실패"
             exit 1
           fi
