@@ -56,6 +56,19 @@ class AdRewardService(
         event.markGranted()
     }
 
+    @Transactional(readOnly = true)
+    fun quotaOf(userId: Long, now: Instant): AdRewardQuota {
+        val kstDate = LocalDate.ofInstant(now, KST)
+        val usedToday = adRewardDailyQuotaRepository.findByUserIdAndKstDate(userId, kstDate)?.usedCount ?: 0
+        val resetAtKst = kstDate.plusDays(1).atStartOfDay(KST).toInstant()
+        return AdRewardQuota(
+            usedToday = usedToday,
+            dailyLimit = adRewardProperties.dailyLimit,
+            remaining = (adRewardProperties.dailyLimit - usedToday).coerceAtLeast(0),
+            resetAtKst = resetAtKst,
+        )
+    }
+
     private fun lockOrCreateQuota(userId: Long, kstDate: LocalDate): AdRewardDailyQuota {
         adRewardDailyQuotaRepository.findForUpdate(userId, kstDate)?.let { return it }
         return try {
