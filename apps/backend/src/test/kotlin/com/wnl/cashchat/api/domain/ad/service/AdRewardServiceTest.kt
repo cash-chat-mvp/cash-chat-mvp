@@ -85,4 +85,16 @@ class AdRewardServiceTest : FunSpec({
         quota.usedCount shouldBe 4
         verify(userPointService).recordTransaction(eq(7L), eq(40L), eq(PointTransactionReason.AD_REWARD), eq("admob:reward:txn-1"))
     }
+
+    test("already GRANTED event is skipped idempotently (no re-grant, no quota touch)") {
+        val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-z", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
+        event.markGranted()
+        whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
+
+        service.grantFromCallback(callback("nonce-z"), now)
+
+        event.rewardStatus shouldBe RewardStatus.GRANTED
+        verify(nonceRepository, never()).findById(any())
+        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+    }
 })

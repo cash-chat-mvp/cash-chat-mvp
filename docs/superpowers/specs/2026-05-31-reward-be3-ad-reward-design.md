@@ -1,6 +1,6 @@
 # 혜택존 BE-3 — 리워드 광고 적립 레이어 Design (cc-242 SSV 위 통합)
 
-> 상태: Draft
+> 상태: In Review (PR #164)
 > 범위: CC-288 백엔드 PR3 (BE-3) — AdMob 리워드 광고 시청 → 코인 적립
 > 관련: cc-242(#146, dev 머지됨 — Google AdMob SSV 검증/로깅), `docs/features/reward/spec.md`(BE-3 인수 기준), RFC CC-287, BE-1 `UserPointService.recordTransaction`
 
@@ -44,7 +44,7 @@ AdMob 리워드 광고 시청을 **서버 SSV 검증 후 코인으로 적립**�
 - `AdRewardController`: `POST /api/ads/reward/issue-nonce`, `GET /api/ads/reward/quota`
 - `GoogleAdSsvController` 수정: `verifyAndStore` 결과를 `adRewardService.grantFromCallback`으로 연결
 
-**설정 (`app.ads.google.reward.*`)**: `coin-amount`(40), `daily-limit`(10), `nonce-ttl`(10m)
+**설정 (`app.ads.reward.*`)**: `coin-amount`(40), `daily-limit`(10), `nonce-ttl`(10m)
 
 **마이그레이션 V5**: `ad_reward_nonce`, `ad_reward_daily_quota`
 
@@ -114,7 +114,7 @@ Given 오늘 3회 시청·한도 10 When `GET /api/ads/reward/quota` Then `{ use
 
 ## 10. Phase 1 설정값 (가설)
 
-- 일일 시청 한도: 10 (`app.ads.google.reward.daily-limit`)
-- 시청당 적립 코인: 40 (`app.ads.google.reward.coin-amount`)
-- nonce TTL: 10분 (`app.ads.google.reward.nonce-ttl`)
+- 일일 시청 한도: 10 (`app.ads.reward.daily-limit`)
+- 시청당 적립 코인: 40 (`app.ads.reward.coin-amount`)
+- nonce TTL: 10분 (`app.ads.reward.nonce-ttl`)
 - 일자·리셋·nonce 만료 판정: `Asia/Seoul`(KST)

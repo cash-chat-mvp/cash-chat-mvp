@@ -52,7 +52,7 @@
 > 도메인별 PR 분할 결정에 따라 테이블/시드는 한 번에 만들지 않고 각 도메인 PR에서 생성한다.
 > Flyway 자체는 PR1에서 도입 완료 (V1 기존 스키마 베이스라인 + `ddl-auto=validate`, dev H2는 MySQL 호환 모드).
 
-- [ ] `application.yml`에 `reward.admob.daily-limit`, `reward.admob.public-keys-url`, `reward.admob.reward-coin` 추가 — BE-3(광고) PR
+- [x] 광고 리워드 설정 추가 (BE-3 PR) — `app.ads.reward.*`(coin-amount/daily-limit/nonce-ttl). 공개키 URL은 cc-242의 `app.ads.google.ssv-public-keys-uri`가 담당하므로 `reward.admob.public-keys-url`은 도입하지 않음
 - [x] Flyway 도입 + V1 베이스라인 + **`point_transaction`(V2)** 마이그레이션 (PR1) — `attendance_*`는 BE-2 PR, `ad_reward_*`는 BE-3 PR에서 추가
 - [x] 시드 데이터 SQL: 출석 보상 테이블 (Phase 1 종자값 — spec 부록 표) — BE-2(출석) PR에서 V3로 제공 완료
 

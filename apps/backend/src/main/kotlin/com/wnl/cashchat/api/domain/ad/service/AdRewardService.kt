@@ -8,7 +8,6 @@ import com.wnl.cashchat.api.domain.ad.persistence.repository.GoogleAdSsvEventRep
 import com.wnl.cashchat.api.domain.ad.properties.AdRewardProperties
 import com.wnl.cashchat.api.domain.point.persistence.entity.PointTransactionReason
 import com.wnl.cashchat.api.domain.point.service.UserPointService
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -31,6 +30,11 @@ class AdRewardService(
     @Transactional
     fun grantFromCallback(callback: GoogleAdSsvCallback, now: Instant) {
         val event = googleAdSsvEventRepository.findByTransactionId(callback.transactionId) ?: return
+        // 이미 적립 완료된 이벤트(AdMob 재전송 등)는 멱등하게 건너뛴다.
+        // 적립 실패로 VERIFIED 로 남은 이벤트는 재전송 시 다시 적립을 시도해 영구 미적립을 막는다.
+        if (event.rewardStatus == RewardStatus.GRANTED) {
+            return
+        }
 
         val nonce = adRewardNonceRepository.findById(callback.userId).orElse(null)
         if (nonce == null || !nonce.isUsable(now)) {
@@ -70,14 +74,11 @@ class AdRewardService(
     }
 
     private fun lockOrCreateQuota(userId: Long, kstDate: LocalDate): AdRewardDailyQuota {
-        adRewardDailyQuotaRepository.findForUpdate(userId, kstDate)?.let { return it }
-        return try {
-            adRewardDailyQuotaRepository.saveAndFlush(AdRewardDailyQuota(userId = userId, kstDate = kstDate))
-            adRewardDailyQuotaRepository.findForUpdate(userId, kstDate)!!
-        } catch (e: DataIntegrityViolationException) {
-            // 동시에 같은 (userId, kstDate) 행이 INSERT 된 경우: 그 행을 락 잡아 다시 읽는다.
-            adRewardDailyQuotaRepository.findForUpdate(userId, kstDate) ?: throw e
-        }
+        // 멱등 INSERT(ON DUPLICATE KEY UPDATE no-op)로 행을 보장 생성한다. 충돌해도 예외가 없어 메인 트랜잭션이
+        // 오염되지 않고, 엔티티를 로드하지 않으므로 findForUpdate 가 행을 락과 함께 최신 상태로 처음 로드한다.
+        adRewardDailyQuotaRepository.insertIfAbsent(userId, kstDate)
+        return adRewardDailyQuotaRepository.findForUpdate(userId, kstDate)
+            ?: throw IllegalStateException("ad_reward_daily_quota row must exist for userId=$userId on $kstDate")
     }
 
     private companion object {

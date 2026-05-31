@@ -45,9 +45,9 @@ class GoogleAdSsvController(
     )
     fun verify(request: HttpServletRequest): ResponseEntity<Void> {
         val result = googleAdSsvService.verifyAndStore(request.queryString)
-        if (result.newlyStored) {
-            adRewardService.grantFromCallback(result.callback, Instant.now())
-        }
+        // 모든 검증된 콜백에 대해 적립을 시도한다. grantFromCallback 은 이미 GRANTED 된 이벤트를 멱등하게 건너뛰므로,
+        // 직전 적립이 실패해 VERIFIED 로 남은 이벤트는 AdMob 재전송 시 다시 적립을 시도할 수 있다.
+        adRewardService.grantFromCallback(result.callback, Instant.now())
         return ResponseEntity.ok().build()
     }
 }

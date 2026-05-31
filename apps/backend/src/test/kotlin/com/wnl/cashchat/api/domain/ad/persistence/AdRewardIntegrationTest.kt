@@ -26,6 +26,7 @@ import org.testcontainers.containers.MySQLContainer
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -109,19 +110,50 @@ class AdRewardIntegrationTest : FunSpec() {
             val pool = Executors.newFixedThreadPool(threads)
             val ready = CountDownLatch(threads)
             val go = CountDownLatch(1)
+            val failures = ConcurrentLinkedQueue<Throwable>()
             repeat(threads) { i ->
                 nonceRepository.saveAndFlush(AdRewardNonce(nonce = "rn-$i", userId = user.id, expiresAt = now.plusSeconds(600)))
                 storeEvent("rt-$i", "rn-$i")
                 pool.submit {
                     ready.countDown(); go.await()
-                    try { adRewardService.grantFromCallback(callback("rt-$i", "rn-$i"), now) } catch (e: Exception) { }
+                    try { adRewardService.grantFromCallback(callback("rt-$i", "rn-$i"), now) } catch (e: Throwable) { failures.add(e) }
                 }
             }
             ready.await(); go.countDown(); pool.shutdown(); pool.awaitTermination(30, TimeUnit.SECONDS)
 
+            // 한도 초과는 예외가 아니라 REJECTED 처리이므로 어떤 스레드도 예외를 던지지 않아야 한다.
+            failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
             quotaRepository.findByUserIdAndKstDate(user.id, LocalDate.ofInstant(now, kst))!!.usedCount shouldBe 10
             userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 40L
             pointTransactionRepository.count() shouldBe 1L
+        }
+
+        test("concurrent first grants with no pre-existing quota row create exactly one row (no DIV leak)") {
+            val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "first"))
+            userPointService.ensureInitialized(user)
+            val baseline = userPointRepository.findByUserId(user.id)!!.balance
+            // quota 행을 미리 만들지 않는다 → 동시 첫 적립들이 lockOrCreateQuota 의 생성 경로(REQUIRES_NEW)를 경합한다.
+            val threads = 6
+            val pool = Executors.newFixedThreadPool(threads)
+            val ready = CountDownLatch(threads)
+            val go = CountDownLatch(1)
+            val failures = ConcurrentLinkedQueue<Throwable>()
+            repeat(threads) { i ->
+                nonceRepository.saveAndFlush(AdRewardNonce(nonce = "fn-$i", userId = user.id, expiresAt = now.plusSeconds(600)))
+                storeEvent("ft-$i", "fn-$i")
+                pool.submit {
+                    ready.countDown(); go.await()
+                    try { adRewardService.grantFromCallback(callback("ft-$i", "fn-$i"), now) } catch (e: Throwable) { failures.add(e) }
+                }
+            }
+            ready.await(); go.countDown(); pool.shutdown(); pool.awaitTermination(30, TimeUnit.SECONDS)
+
+            // 동시 생성 충돌이 예외 없이 흡수되고(멱등 INSERT), 행은 정확히 하나, 6회 모두 적립(한도 10 미만).
+            failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
+            quotaRepository.count() shouldBe 1L
+            quotaRepository.findByUserIdAndKstDate(user.id, LocalDate.ofInstant(now, kst))!!.usedCount shouldBe 6
+            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 240L
+            pointTransactionRepository.count() shouldBe 6L
         }
     }
 
