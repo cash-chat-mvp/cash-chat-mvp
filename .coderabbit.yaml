@@ -1,1 +1,4 @@
 language: "ko-KR"
+reviews:
+  auto_review:
+    enabled: false
