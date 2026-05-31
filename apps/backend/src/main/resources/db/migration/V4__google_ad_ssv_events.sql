@@ -1,4 +1,4 @@
--- V3: Google AdMob SSV 검증 이벤트 (transaction_id 유니크)
+-- V4: Google AdMob SSV 검증 이벤트 (transaction_id 유니크)
 
 CREATE TABLE google_ad_ssv_events (
     id               BIGINT       NOT NULL AUTO_INCREMENT,
