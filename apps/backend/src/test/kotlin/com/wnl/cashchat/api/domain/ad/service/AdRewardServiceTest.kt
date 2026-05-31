@@ -48,7 +48,7 @@ class AdRewardServiceTest : FunSpec({
 
     test("invalid/used/expired nonce marks event REJECTED_INVALID_NONCE and grants nothing") {
         val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-x", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
-        whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
+        whenever(eventRepository.findForUpdateByTransactionId(txnId)).thenReturn(event)
         whenever(nonceRepository.findForUpdate("nonce-x")).thenReturn(null)
 
         service.grantFromCallback(callback("nonce-x"), now)
@@ -57,15 +57,18 @@ class AdRewardServiceTest : FunSpec({
         verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
     }
 
-    test("over quota marks event REJECTED_OVER_QUOTA and grants nothing") {
+    test("over quota marks event REJECTED_OVER_QUOTA, consumes nonce, and grants nothing") {
         val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-y", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
-        whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
-        whenever(nonceRepository.findForUpdate("nonce-y")).thenReturn(AdRewardNonce(nonce = "nonce-y", userId = 7L, expiresAt = now.plusSeconds(60)))
+        val nonce = AdRewardNonce(nonce = "nonce-y", userId = 7L, expiresAt = now.plusSeconds(60))
+        whenever(eventRepository.findForUpdateByTransactionId(txnId)).thenReturn(event)
+        whenever(nonceRepository.findForUpdate("nonce-y")).thenReturn(nonce)
         whenever(quotaRepository.findForUpdate(7L, kstToday)).thenReturn(AdRewardDailyQuota(userId = 7L, kstDate = kstToday, usedCount = 10))
 
         service.grantFromCallback(callback("nonce-y"), now)
 
         event.rewardStatus shouldBe RewardStatus.REJECTED_OVER_QUOTA
+        // 한도 초과 거절이어도 유효 nonce 는 소모되어 단일 사용이 보장된다.
+        nonce.used shouldBe true
         verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
     }
 
@@ -73,7 +76,7 @@ class AdRewardServiceTest : FunSpec({
         val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-z", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
         val nonce = AdRewardNonce(nonce = "nonce-z", userId = 7L, expiresAt = now.plusSeconds(60))
         val quota = AdRewardDailyQuota(userId = 7L, kstDate = kstToday, usedCount = 3)
-        whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
+        whenever(eventRepository.findForUpdateByTransactionId(txnId)).thenReturn(event)
         whenever(nonceRepository.findForUpdate("nonce-z")).thenReturn(nonce)
         whenever(quotaRepository.findForUpdate(7L, kstToday)).thenReturn(quota)
 
@@ -88,7 +91,7 @@ class AdRewardServiceTest : FunSpec({
     test("already GRANTED event is skipped idempotently (no re-grant, no quota touch)") {
         val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-z", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
         event.markGranted()
-        whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
+        whenever(eventRepository.findForUpdateByTransactionId(txnId)).thenReturn(event)
 
         service.grantFromCallback(callback("nonce-z"), now)
 
@@ -100,7 +103,7 @@ class AdRewardServiceTest : FunSpec({
     test("already REJECTED event is skipped on retry (no nonce lock, no re-grant)") {
         val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-z", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
         event.markRejected(RewardStatus.REJECTED_OVER_QUOTA)
-        whenever(eventRepository.findByTransactionId(txnId)).thenReturn(event)
+        whenever(eventRepository.findForUpdateByTransactionId(txnId)).thenReturn(event)
 
         service.grantFromCallback(callback("nonce-z"), now)
 

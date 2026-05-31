@@ -29,7 +29,9 @@ class AdRewardService(
 ) {
     @Transactional
     fun grantFromCallback(callback: GoogleAdSsvCallback, now: Instant) {
-        val event = googleAdSsvEventRepository.findByTransactionId(callback.transactionId) ?: return
+        // 이벤트를 비관적 쓰기 락으로 조회한다. 동일 transactionId 콜백이 동시에 들어와도 적립을 직렬화해,
+        // 한쪽이 GRANTED 로 커밋한 뒤 대기하던 쪽이 stale 상태를 REJECTED 로 덮어쓰는 레이스를 막는다.
+        val event = googleAdSsvEventRepository.findForUpdateByTransactionId(callback.transactionId) ?: return
         // VERIFIED(적립 미결정) 상태만 적립을 시도한다. GRANTED(적립 완료)·REJECTED_*(거절 종결) 이벤트는
         // AdMob 재전송 시 멱등하게 건너뛴다 — 불필요한 nonce 락을 피하고, 한도 초과로 거절된 콜백이
         // 다음 날 재전송 시 적립되는 부작용도 막는다. 적립 실패로 VERIFIED 로 남은 이벤트는 재시도된다.
@@ -48,6 +50,9 @@ class AdRewardService(
         val kstDate = LocalDate.ofInstant(now, KST)
         val quota = lockOrCreateQuota(nonce.userId, kstDate)
         if (quota.usedCount >= adRewardProperties.dailyLimit) {
+            // 한도 초과로 거절돼도 유효 nonce 는 한 번의 광고 시청에 소모된 것이므로 사용 완료 처리한다
+            // (단일 사용 보장). 거절은 종결 상태라 TTL 내 동일 nonce 재사용을 막는다.
+            nonce.markUsed()
             event.markRejected(RewardStatus.REJECTED_OVER_QUOTA)
             return
         }

@@ -717,7 +717,8 @@ class AdRewardService(
 ) {
     @Transactional
     fun grantFromCallback(callback: GoogleAdSsvCallback, now: Instant) {
-        val event = googleAdSsvEventRepository.findByTransactionId(callback.transactionId) ?: return
+        // 동일 transactionId 동시 콜백을 직렬화하기 위해 이벤트를 비관적 쓰기 락으로 조회(상태 덮어쓰기 레이스 방지).
+        val event = googleAdSsvEventRepository.findForUpdateByTransactionId(callback.transactionId) ?: return
         // VERIFIED(적립 미결정)만 적립을 시도한다. GRANTED·REJECTED_* 종결 이벤트는 재전송 시 멱등하게 건너뛴다.
         if (event.rewardStatus != RewardStatus.VERIFIED) {
             return
@@ -733,6 +734,7 @@ class AdRewardService(
         val kstDate = LocalDate.ofInstant(now, KST)
         val quota = lockOrCreateQuota(nonce.userId, kstDate)
         if (quota.usedCount >= adRewardProperties.dailyLimit) {
+            nonce.markUsed() // 한도 초과 거절이어도 유효 nonce 는 1회 시청에 소모 처리(단일 사용 보장)
             event.markRejected(RewardStatus.REJECTED_OVER_QUOTA)
             return
         }
@@ -762,7 +764,7 @@ class AdRewardService(
 }
 ```
 
-> **동시성 전략 / 락 순서**: 동일 nonce 동시 요청 시 첫 트랜잭션만 적립하도록, nonce·일일 한도 행을 모두 비관적 쓰기 락(`SELECT … FOR UPDATE`)으로 조회한다. 데드락 방지를 위해 락 획득 순서를 **nonce → ad_reward_daily_quota → user_point** 로 고정한다(`AdRewardNonceRepository.findForUpdate` → `AdRewardDailyQuotaRepository.findForUpdate` → `UserPointService.recordTransaction` 내부 락).
+> **동시성 전략 / 락 순서**: 동일 transactionId·동일 nonce 동시 요청에서도 첫 트랜잭션만 적립하고 상태 덮어쓰기를 막도록, 이벤트·nonce·일일 한도 행을 모두 비관적 쓰기 락(`SELECT … FOR UPDATE`)으로 조회한다. 데드락 방지를 위해 락 획득 순서를 **event → nonce → ad_reward_daily_quota → user_point** 로 고정한다(`GoogleAdSsvEventRepository.findForUpdateByTransactionId` → `AdRewardNonceRepository.findForUpdate` → `AdRewardDailyQuotaRepository.findForUpdate` → `UserPointService.recordTransaction` 내부 락).
 
 - [ ] **Step 4: 단위 테스트 통과**
 

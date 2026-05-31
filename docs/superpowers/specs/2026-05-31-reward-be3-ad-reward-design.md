@@ -63,10 +63,10 @@ AdMob 리워드 광고 시청을 **서버 SSV 검증 후 코인으로 적립**�
 3. `isNew=true`면 컨트롤러가 `adRewardService.grantFromCallback(callback)` 호출 — **단일 `@Transactional`**:
    a. `callback.userId`(=nonce)로 `ad_reward_nonce`를 **비관적 쓰기 락(`SELECT … FOR UPDATE`, `AdRewardNonceRepository.findForUpdate`)으로 조회**(단순 read 아님). 없음/`expiresAt` 경과/`used=true` → 이벤트 `rewardStatus=REJECTED_INVALID_NONCE` UPDATE, 코인 없음, 종료.
    b. 해석된 `userId`로 `ad_reward_daily_quota` 행 UPSERT 후 `SELECT … FOR UPDATE`(per-user-per-day 행 락).
-   c. `usedCount >= daily-limit` → 이벤트 `rewardStatus=REJECTED_OVER_QUOTA`, 코인 없음, 종료.
+   c. `usedCount >= daily-limit` → `ad_reward_nonce.used = true`(유효 nonce 는 1회 시청에 소모, 단일 사용 보장); 이벤트 `rewardStatus=REJECTED_OVER_QUOTA`, 코인 없음, 종료.
    d. 한도 내 → `usedCount += 1`; `ad_reward_nonce.used = true`; `recordTransaction(userId, coin-amount, AD_REWARD, "admob:reward:{transactionId}")`(BE-1); 이벤트 `rewardStatus=GRANTED`.
 
-> **동시성/락 순서**: nonce 를 단순 read 가 아니라 `findForUpdate`(PESSIMISTIC_WRITE)로 조회해, 동일 nonce 로 거의 동시에 들어오는 요청을 직렬화하고 **첫 트랜잭션만** 적립하도록 한다(무락 시 stale 1차 캐시로 인한 중복 적립 방지). 데드락 방지를 위해 락 획득 순서를 **nonce(PESSIMISTIC_WRITE) → ad_reward_daily_quota(PESSIMISTIC_WRITE) → user_point** 로 고정한다.
+> **동시성/락 순서**: ① 이벤트를 `findForUpdateByTransactionId`(PESSIMISTIC_WRITE)로 조회해 **동일 transactionId 동시 콜백**의 상태 덮어쓰기(GRANTED→REJECTED)를 막고, ② nonce 를 단순 read 가 아니라 `findForUpdate`(PESSIMISTIC_WRITE)로 조회해 **동일 nonce** 동시 요청을 직렬화하고 첫 트랜잭션만 적립한다(stale 1차 캐시로 인한 중복 적립 방지). 데드락 방지를 위해 락 획득 순서를 **event(PESSIMISTIC_WRITE) → nonce(PESSIMISTIC_WRITE) → ad_reward_daily_quota(PESSIMISTIC_WRITE) → user_point** 로 고정한다.
 
 4. 컨트롤러는 (서명만 통과했다면) 거부 케이스라도 AdMob에 **200**을 반환(재시도 폭주 방지). 서명 실패는 cc-242의 4xx/503 그대로.
 

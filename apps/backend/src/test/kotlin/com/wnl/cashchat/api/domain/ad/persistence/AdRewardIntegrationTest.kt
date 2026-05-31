@@ -188,6 +188,35 @@ class AdRewardIntegrationTest : FunSpec() {
                 eventRepository.findByTransactionId("st-$it")!!.rewardStatus == RewardStatus.GRANTED
             } shouldBe 1
         }
+
+        test("concurrent callbacks with the same transactionId keep event GRANTED (no status overwrite)") {
+            val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "sametxn"))
+            userPointService.ensureInitialized(user)
+            val baseline = userPointRepository.findByUserId(user.id)!!.balance
+            // 단일 이벤트·단일 nonce 를 같은 transactionId 로 6스레드가 동시에 적립 시도한다.
+            nonceRepository.saveAndFlush(AdRewardNonce(nonce = "sn", userId = user.id, expiresAt = now.plusSeconds(600)))
+            storeEvent("stx", "sn")
+            val threads = 6
+            val pool = Executors.newFixedThreadPool(threads)
+            val ready = CountDownLatch(threads)
+            val go = CountDownLatch(1)
+            val failures = ConcurrentLinkedQueue<Throwable>()
+            repeat(threads) {
+                pool.submit {
+                    ready.countDown(); go.await()
+                    try { adRewardService.grantFromCallback(callback("stx", "sn"), now) } catch (e: Throwable) { failures.add(e) }
+                }
+            }
+            ready.await(); go.countDown(); pool.shutdown()
+            pool.awaitTermination(30, TimeUnit.SECONDS) shouldBe true
+
+            // 이벤트 비관적 락으로 직렬화 → 최종 상태는 GRANTED 로 유지(REJECTED 로 덮어쓰이지 않음), 적립 정확히 1회.
+            failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
+            eventRepository.findByTransactionId("stx")!!.rewardStatus shouldBe RewardStatus.GRANTED
+            nonceRepository.findById("sn").get().used shouldBe true
+            pointTransactionRepository.count() shouldBe 1L
+            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 40L
+        }
     }
 
     companion object {
