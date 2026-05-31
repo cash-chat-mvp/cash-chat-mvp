@@ -111,16 +111,35 @@ jobs:
         with:
           app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
           private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Resolve reviewer key (PR author)
+        id: whichkey
+        env:
+          LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          login_lc=$(printf '%s' "$LOGIN" | tr '[:upper:]' '[:lower:]')
+          case "$login_lc" in
+            gudals-kim) s=GUDALS ;;
+            seedplan005|jwchoi42) s=CHOI ;;
+            jeonj95|unistuj) s=JEON ;;
+            *) s="" ;;
+          esac
+          echo "suffix=$s" >> "$GITHUB_OUTPUT"
+          echo "::notice::자동 리뷰 키 소유자: ${s:-공용(기본)}"
       - name: AI Review + Improve (Gemini)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL0: ${{ needs.resolve-gemini-model.outputs.model0 }}
           MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
-          GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          # PR 작성자별 키(미매핑 시 빈 값 → 아래 run에서 공용 키로 폴백)
+          MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RETRY_CMD: "/gemini-review"
         run: |
           set -euo pipefail
+          # PR 작성자(=auto-assignee)의 키 사용, 미매핑 시 공용 키로 폴백
+          GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
           # 안내성(임시/사용량/실패) 코멘트만 삭제. 리뷰 결과물은 보존.
           cleanup_notices() {
             local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
@@ -669,14 +688,33 @@ jobs:
         with:
           app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
           private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Resolve commenter key
+        id: whichkey
+        env:
+          LOGIN: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          login_lc=$(printf '%s' "$LOGIN" | tr '[:upper:]' '[:lower:]')
+          case "$login_lc" in
+            gudals-kim) s=GUDALS ;;
+            seedplan005|jwchoi42) s=CHOI ;;
+            jeonj95|unistuj) s=JEON ;;
+            *) s="" ;;
+          esac
+          echo "suffix=$s" >> "$GITHUB_OUTPUT"
+          echo "::notice::/ask 키 소유자: ${s:-공용(기본)}"
       - name: Ask (Gemini, model_weak)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL0: ${{ needs.resolve-gemini-model.outputs.model0 }}
           MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
-          GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          # 명령(/ask) 작성자별 키(미매핑 시 빈 값 → 아래 run에서 공용 키로 폴백)
+          MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
         run: |
           set -euo pipefail
+          # 명령(/ask) 작성자의 키 사용, 미매핑 시 공용 키로 폴백
+          GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
           # /ask 는 ModelType.WEAK → CONFIG.MODEL_WEAK(=model1) 사용.
           # 코멘트 본문은 rewrite 하지 않고 그대로 pr-agent 러너가 파싱한다.
           LOG=$(mktemp)
