@@ -148,8 +148,8 @@ jobs:
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null
-                done
+                    "$api/issues/comments/${cid}" >/dev/null || true
+                done || true
           }
           # 코드 제안이 "제안 없음"인데 실제로는 사용량 소진인 경우 그 코멘트 삭제
           # (주의: 반드시 localize_comments 이전·영문 상태에서 호출되어야 정상 결과를 지우지 않음)
@@ -160,8 +160,8 @@ jobs:
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null
-                done
+                    "$api/issues/comments/${cid}" >/dev/null || true
+                done || true
           }
           # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
           notify_failure() {
@@ -172,8 +172,8 @@ jobs:
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null
-                done
+                    "$api/issues/comments/${cid}" >/dev/null || true
+                done || true
             local msg
             if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$log"; then
               msg=$(printf '## ⏳ 오늘의 AI 리뷰 사용량을 모두 사용했어요\n\n무료 등급의 **일일 호출 한도(RPD)** 에 도달해 이번 리뷰를 완료하지 못했습니다.\n\n- **원인:** 일일 요청 할당량 소진 (RESOURCE_EXHAUSTED / 429)\n- **초기화:** 매일 자정(태평양 표준시 PT) 기준으로 자동 초기화됩니다.\n\n👉 **내일 다시 시도되거나, `%s` 로 수동 재요청**해 주세요. 🙏' "$RETRY_CMD")
@@ -201,8 +201,9 @@ jobs:
           PROGRESS_BODY=$(printf '## 🔍 AI 코드 리뷰를 진행하고 있어요\n\n⏳ 변경된 코드를 살펴보는 중입니다 — 보통 1~2분 정도 걸려요.\n\n리뷰가 끝나면 이 안내는 자동으로 사라지고 결과가 게시됩니다.')
           PROGRESS_ID=$(curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty')
+            -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           LOG=$(mktemp)
+          set +e
           docker run --rm \
             -e GITHUB_TOKEN \
             -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
@@ -219,7 +220,9 @@ jobs:
             -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=true" \
             -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
             "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
-          if grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; then
+          docker_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$docker_status" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; then
             notify_failure "$LOG"
             echo "::error::Gemini 리뷰 실패 — 로그를 확인하세요"
             exit 1
@@ -308,8 +311,8 @@ jobs:
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null
-                done
+                    "$api/issues/comments/${cid}" >/dev/null || true
+                done || true
           }
           # 코드 제안이 "제안 없음"인데 실제로는 사용량 소진인 경우 그 코멘트 삭제
           # (주의: 반드시 localize_comments 이전·영문 상태에서 호출되어야 정상 결과를 지우지 않음)
@@ -320,8 +323,8 @@ jobs:
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null
-                done
+                    "$api/issues/comments/${cid}" >/dev/null || true
+                done || true
           }
           # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
           notify_failure() {
@@ -332,8 +335,8 @@ jobs:
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null
-                done
+                    "$api/issues/comments/${cid}" >/dev/null || true
+                done || true
             local msg
             if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$log"; then
               msg=$(printf '## ⏳ 오늘의 AI 리뷰 사용량을 모두 사용했어요\n\n무료 등급의 **일일 호출 한도(RPD)** 에 도달해 이번 리뷰를 완료하지 못했습니다.\n\n- **원인:** 일일 요청 할당량 소진 (RESOURCE_EXHAUSTED / 429)\n- **초기화:** 매일 자정(태평양 표준시 PT) 기준으로 자동 초기화됩니다.\n\n👉 **내일 다시 시도되거나, `%s` 로 수동 재요청**해 주세요. 🙏' "$RETRY_CMD")
@@ -353,6 +356,7 @@ jobs:
             jq --arg c "$cmd" '.comment.body = $c' "$GITHUB_EVENT_PATH" > "$tmp"
             mv "$tmp" "$GITHUB_EVENT_PATH"
             LAST_LOG=$(mktemp); local log="$LAST_LOG"
+            set +e
             docker run --rm \
               -e GITHUB_TOKEN \
               -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
@@ -366,7 +370,9 @@ jobs:
               -e "GEMINI_API_KEY=$GEMINI_KEY" \
               -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
               "$PR_AGENT_IMAGE" 2>&1 | tee "$log"
-            if grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
+            local st=${PIPESTATUS[0]}
+            set -e
+            if [ "$st" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
               notify_failure "$log"
               echo "::error::Gemini $cmd 실패 — 로그를 확인하세요"
               exit 1
@@ -434,7 +440,7 @@ jobs:
           PROGRESS_BODY=$(printf '## 🔍 AI 코드 리뷰를 진행하고 있어요\n\n⏳ 변경된 코드를 살펴보는 중입니다 — 보통 1~2분 정도 걸려요.\n\n리뷰가 끝나면 이 안내는 자동으로 사라지고 결과가 게시됩니다.')
           PROGRESS_ID=$(curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty')
+            -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           run_command "/review"
           check_soft_quota "$LAST_LOG"
           run_command "/improve"
@@ -529,8 +535,8 @@ jobs:
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null
-                done
+                    "$api/issues/comments/${cid}" >/dev/null || true
+                done || true
           }
           # 코드 제안이 "제안 없음"인데 실제로는 사용량 소진인 경우 그 코멘트 삭제
           # (주의: 반드시 localize_comments 이전·영문 상태에서 호출되어야 정상 결과를 지우지 않음)
@@ -541,8 +547,8 @@ jobs:
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null
-                done
+                    "$api/issues/comments/${cid}" >/dev/null || true
+                done || true
           }
           # 전체 모델 실패 시: pr-agent의 영문 실패 코멘트를 지우고 한국어 안내로 교체
           notify_failure() {
@@ -553,8 +559,8 @@ jobs:
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null
-                done
+                    "$api/issues/comments/${cid}" >/dev/null || true
+                done || true
             local msg
             if grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429|insufficient_quota" "$log"; then
               msg=$(printf '## ⏳ 오늘의 AI 리뷰 사용량을 모두 사용했어요\n\nOpenAI API 호출 한도에 도달해 이번 리뷰를 완료하지 못했습니다.\n\n- **원인:** 요청 할당량 소진 (rate limit / insufficient_quota / 429)\n- **해결:** 잠시 후 한도가 회복되면 `%s` 로 다시 시도해 주세요. 🙏' "$RETRY_CMD")
@@ -574,6 +580,7 @@ jobs:
             jq --arg c "$cmd" '.comment.body = $c' "$GITHUB_EVENT_PATH" > "$tmp"
             mv "$tmp" "$GITHUB_EVENT_PATH"
             LAST_LOG=$(mktemp); local log="$LAST_LOG"
+            set +e
             docker run --rm \
               -e GITHUB_TOKEN \
               -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
@@ -587,7 +594,9 @@ jobs:
               -e "OPENAI_API_KEY=$OPENAI_KEY" \
               -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
               "$PR_AGENT_IMAGE" 2>&1 | tee "$log"
-            if grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
+            local st=${PIPESTATUS[0]}
+            set -e
+            if [ "$st" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$log"; then
               notify_failure "$log"
               echo "::error::OpenAI $cmd 실패 — 로그를 확인하세요"
               exit 1
@@ -655,7 +664,7 @@ jobs:
           PROGRESS_BODY=$(printf '## 🔍 AI 코드 리뷰를 진행하고 있어요\n\n⏳ 변경된 코드를 살펴보는 중입니다 — 보통 1~2분 정도 걸려요.\n\n리뷰가 끝나면 이 안내는 자동으로 사라지고 결과가 게시됩니다.')
           PROGRESS_ID=$(curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty')
+            -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           run_command "/review"
           check_soft_quota "$LAST_LOG"
           run_command "/improve"
@@ -718,6 +727,7 @@ jobs:
           # /ask 는 ModelType.WEAK → CONFIG.MODEL_WEAK(=model1) 사용.
           # 코멘트 본문은 rewrite 하지 않고 그대로 pr-agent 러너가 파싱한다.
           LOG=$(mktemp)
+          set +e
           docker run --rm \
             -e GITHUB_TOKEN \
             -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
@@ -733,7 +743,9 @@ jobs:
             -e "GEMINI_API_KEY=$GEMINI_KEY" \
             -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
             "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
-          if grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG" || grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$LOG"; then
+          docker_status=${PIPESTATUS[0]}
+          set -e
+          if [ "$docker_status" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG" || grep -qiE "RESOURCE_EXHAUSTED|free_tier|quota|rate.?limit|429" "$LOG"; then
             PR_NUM="${{ github.event.issue.number || github.event.pull_request.number }}"
             api="${GITHUB_API_URL}/repos/${{ github.repository }}"
             msg='답변 생성에 실패했어요. 사용량 소진일 수 있어요 — 잠시 후 다시 `/ask` 로 질문해 주세요. 🙏'
