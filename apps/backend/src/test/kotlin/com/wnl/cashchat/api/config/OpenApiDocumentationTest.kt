@@ -37,6 +37,8 @@ class OpenApiDocumentationTest : FunSpec() {
             response.contains("Get conversation messages") shouldBe true
             response.contains("/api/v1/chat/history/{uuid}") shouldBe true
             response.contains("Get chat history") shouldBe true
+            response.contains("/api/ads/google/ssv") shouldBe true
+            response.contains("Verify Google AdMob SSV callback") shouldBe true
         }
     }
 }

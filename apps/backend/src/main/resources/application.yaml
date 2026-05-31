@@ -36,6 +36,11 @@ server:
 app:
   points:
     initial-balance: ${APP_POINTS_INITIAL_BALANCE:1}
+  ads:
+    google:
+      ssv-public-keys-uri: ${APP_ADS_GOOGLE_SSV_PUBLIC_KEYS_URI:https://www.gstatic.com/admob/reward/verifier-keys.json}
+      public-key-cache-ttl: ${APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL:24h}
+      rewarded-ad-unit-id: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID:}
 
 # O-Auth (Open Authorization)
 # OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml
