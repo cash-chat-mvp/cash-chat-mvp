@@ -41,6 +41,10 @@ app:
       ssv-public-keys-uri: ${APP_ADS_GOOGLE_SSV_PUBLIC_KEYS_URI:https://www.gstatic.com/admob/reward/verifier-keys.json}
       public-key-cache-ttl: ${APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL:24h}
       rewarded-ad-unit-id: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID:}
+    reward:
+      coin-amount: ${APP_ADS_REWARD_COIN_AMOUNT:40}
+      daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}
+      nonce-ttl: ${APP_ADS_REWARD_NONCE_TTL:10m}
 
 # O-Auth (Open Authorization)
 # OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml

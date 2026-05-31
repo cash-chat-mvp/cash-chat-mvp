@@ -18,7 +18,7 @@ class GoogleAdSsvService(
     private val properties: GoogleAdSsvProperties,
 ) {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    fun verifyAndStore(rawQueryString: String?) {
+    fun verifyAndStore(rawQueryString: String?): GoogleAdSsvVerificationResult {
         val callback = parser.parse(rawQueryString)
         validateAdUnit(callback)
         signatureVerifier.verify(callback.signedPayload, callback.signature, callback.keyId)
@@ -26,18 +26,20 @@ class GoogleAdSsvService(
         val existingEvent = repository.findByTransactionId(callback.transactionId)
         if (existingEvent != null) {
             logIfCoreFieldsDiffer(callback, existingEvent)
-            return
+            return GoogleAdSsvVerificationResult(callback, newlyStored = false)
         }
 
-        try {
+        return try {
             repository.saveAndFlush(callback.toEntity())
+            GoogleAdSsvVerificationResult(callback, newlyStored = true)
         } catch (exception: DataIntegrityViolationException) {
             val duplicateEvent = repository.findByTransactionId(callback.transactionId)
             if (duplicateEvent != null) {
                 logIfCoreFieldsDiffer(callback, duplicateEvent)
-                return
+                GoogleAdSsvVerificationResult(callback, newlyStored = false)
+            } else {
+                throw exception
             }
-            throw exception
         }
     }
 
