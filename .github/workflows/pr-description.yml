@@ -292,6 +292,15 @@ jobs:
               '- [ ] 불필요한 코드/주석 제거',
             ].join('\n');
 
+            const aiReviewCommands = [
+              '| 명령어 | 설명 |',
+              '|---|---|',
+              '| `/gemini-review` | Gemini 재리뷰 요청 (PR 생성·푸시 시 자동 실행, 재요청 시 사용) |',
+              '| `/openai-review` | OpenAI 심층 리뷰 요청 (수동, 비용 발생) |',
+              '| `/ask "질문"` | AI 코멘트에 답글로 후속 질문 (라인/PR, 비용 낮은 모델) |',
+              '| `@coderabbitai review` | CodeRabbit 리뷰 요청 (수동, 비용 발생) |',
+            ].join('\n');
+
             const body = [
               '## 📋 연관 Jira 티켓',
               issueKey ? `[${issueKey}](${jiraUrl})` : '없음',
@@ -301,6 +310,9 @@ jobs:
               '',
               '## ✅ 체크리스트',
               checklist,
+              '',
+              '## 🤖 AI 코드 리뷰 명령어',
+              aiReviewCommands,
             ].join('\n');
 
             await github.rest.pulls.update({

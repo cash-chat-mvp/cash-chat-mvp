@@ -17,8 +17,18 @@ spring:
 
   datasource:
     driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:test
+    # MODE=MySQL: prod(MySQL)와 동일한 방언으로 Flyway 마이그레이션을 실행하기 위함
+    # DB_CLOSE_DELAY=-1: 마지막 커넥션이 닫혀도 인메모리 DB를 JVM 종료까지 유지해 Flyway가 적용한 스키마가 보존되도록 함
+    url: jdbc:h2:mem:test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
     username: sa
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
 
 server:
   forward-headers-strategy: framework
@@ -26,6 +36,15 @@ server:
 app:
   points:
     initial-balance: ${APP_POINTS_INITIAL_BALANCE:1}
+  ads:
+    google:
+      ssv-public-keys-uri: ${APP_ADS_GOOGLE_SSV_PUBLIC_KEYS_URI:https://www.gstatic.com/admob/reward/verifier-keys.json}
+      public-key-cache-ttl: ${APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL:24h}
+      rewarded-ad-unit-id: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID:}
+    reward:
+      coin-amount: ${APP_ADS_REWARD_COIN_AMOUNT:40}
+      daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}
+      nonce-ttl: ${APP_ADS_REWARD_NONCE_TTL:10m}
 
 # O-Auth (Open Authorization)
 # OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml

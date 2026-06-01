@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletResponse
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
+import org.springframework.http.HttpMethod
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
 import org.springframework.security.config.http.SessionCreationPolicy
@@ -64,6 +65,7 @@ class SecurityConfig(
                     publicPaths.addAll(SWAGGER_PATHS)
                 }
                 it.requestMatchers("/api/auth/logout").authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/ads/google/ssv").permitAll()
                     .requestMatchers(*publicPaths.toTypedArray()).permitAll()
                     .anyRequest().authenticated()
             }
