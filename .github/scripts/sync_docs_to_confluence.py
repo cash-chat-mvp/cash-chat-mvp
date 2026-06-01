@@ -40,6 +40,11 @@ _index_version: int | None = None
 _dir_cache: dict[str, int] = {}
 
 
+def _key(path: Path) -> str:
+    """경로를 인덱스/타이틀 맵의 키로 정규화. git diff와 동일하게 항상 슬래시(/) 사용."""
+    return path.as_posix()
+
+
 def build_meta_banner(actor: str, sha: str, date: str) -> str:
     short_sha = sha[:7] if sha else "unknown"
     return (
@@ -96,7 +101,7 @@ def build_title_map(docs_dir: Path) -> dict[str, str]:
             candidate = f"{title} ({i})"
             i += 1
         used.add(candidate)
-        title_map[str(p)] = candidate
+        title_map[_key(p)] = candidate
     return title_map
 
 
@@ -164,7 +169,7 @@ def _create_page(title: str, body_html: str, parent_id: int | None) -> dict:
         "body": {"storage": {"value": body_html, "representation": "storage"}},
     }
     if parent_id is not None:
-        payload["ancestors"] = [{"id": parent_id}]
+        payload["ancestors"] = [{"id": str(parent_id)}]
     return _api("POST", "/content", json=payload)
 
 
@@ -223,7 +228,7 @@ def _page_url(result: dict) -> str:
 
 def sync_dir_page(dir_path: Path, title: str, parent_id: int) -> int:
     """디렉토리 컨테이너 페이지를 ID 기반으로 보장. 제목이 바뀌었으면 갱신."""
-    key = str(dir_path)
+    key = _key(dir_path)
     if key in _dir_cache:
         return _dir_cache[key]
 
@@ -254,13 +259,13 @@ def ensure_dir_chain(md_path: Path, root_id: int) -> int:
     accum = DOCS_DIR
     for part in md_path.parent.relative_to(DOCS_DIR).parts:
         accum = accum / part
-        parent_id = sync_dir_page(accum, _title_map[str(accum)], parent_id)
+        parent_id = sync_dir_page(accum, _title_map[_key(accum)], parent_id)
     return parent_id
 
 
 def sync_md_file(md_path: Path, parent_id: int) -> dict:
     """단일 MD 파일을 ID 기반으로 동기화. 제목(H1)이 바뀌어도 같은 페이지 갱신."""
-    key = str(md_path)
+    key = _key(md_path)
     title = _title_map[key]
     raw = md_path.read_text(encoding="utf-8")
     date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -295,10 +300,12 @@ def select_targets() -> list[Path]:
     삭제된 파일은 제외한다.
     """
     if os.environ.get("SYNC_ALL", "").lower() == "true":
-        candidates = [str(p) for p in DOCS_DIR.rglob("*.md")]
+        candidates = [_key(p) for p in DOCS_DIR.rglob("*.md")]
     else:
         candidates = [
-            c for c in os.environ.get("CHANGED_FILES", "").split() if c.endswith(".md")
+            Path(c).as_posix()
+            for c in os.environ.get("CHANGED_FILES", "").split()
+            if c.endswith(".md")
         ]
     targets = []
     for rel in sorted(set(candidates)):
@@ -322,7 +329,12 @@ def main() -> None:
             results.append(sync_md_file(md_path, parent_id))
         save_index(root_id)
 
-    print(json.dumps({"status": "success", "pages": results}))
+    # 결과를 파일로 출력해 stdout 로그 오염과 무관하게 후속 스텝이 안전하게 읽도록 함
+    output = {"status": "success", "pages": results}
+    Path("sync_result.json").write_text(
+        json.dumps(output, ensure_ascii=False), encoding="utf-8"
+    )
+    print(json.dumps(output, ensure_ascii=False))
 
 
 if __name__ == "__main__":

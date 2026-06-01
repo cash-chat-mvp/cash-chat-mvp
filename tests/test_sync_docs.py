@@ -79,8 +79,8 @@ def test_build_title_map_uses_h1(tmp_path):
     (docs / "b" / "spec.md").write_text("# Beta Spec\n", encoding="utf-8")
     tm = build_title_map(docs)
     # 파일명은 둘 다 spec이지만 H1이 달라 충돌하지 않는다
-    assert tm[str(docs / "a" / "spec.md")] == "Alpha Spec"
-    assert tm[str(docs / "b" / "spec.md")] == "Beta Spec"
+    assert tm[(docs / "a" / "spec.md").as_posix()] == "Alpha Spec"
+    assert tm[(docs / "b" / "spec.md").as_posix()] == "Beta Spec"
 
 
 def test_build_title_map_fallback_to_stem(tmp_path):
@@ -88,7 +88,7 @@ def test_build_title_map_fallback_to_stem(tmp_path):
     docs.mkdir()
     (docs / "000-adr.md").write_text("헤딩 없는 문서\n", encoding="utf-8")
     tm = build_title_map(docs)
-    assert tm[str(docs / "000-adr.md")] == "000-adr"
+    assert tm[(docs / "000-adr.md").as_posix()] == "000-adr"
 
 
 def test_build_title_map_dir_collision_disambiguated(tmp_path):
@@ -96,8 +96,8 @@ def test_build_title_map_dir_collision_disambiguated(tmp_path):
     (docs / "specs").mkdir(parents=True)
     (docs / "super" / "specs").mkdir(parents=True)
     tm = build_title_map(docs)
-    t1 = tm[str(docs / "specs")]
-    t2 = tm[str(docs / "super" / "specs")]
+    t1 = tm[(docs / "specs").as_posix()]
+    t2 = tm[(docs / "super" / "specs").as_posix()]
     # 디렉토리명이 같아도 제목은 고유해야 한다
     assert t1 != t2
 
@@ -159,7 +159,7 @@ def test_sync_md_file_updates_when_in_index(tmp_path, monkeypatch):
 
     monkeypatch.setattr(sdc, "DOCS_DIR", docs)
     sdc._title_map = build_title_map(docs)
-    sdc._index = {str(f): 42}
+    sdc._index = {f.as_posix(): 42}
     sdc._dir_cache = {}
 
     calls = []
@@ -198,4 +198,4 @@ def test_sync_md_file_creates_when_absent(tmp_path, monkeypatch):
 
     result = sdc.sync_md_file(f, parent_id=1)
     assert result["action"] == "created"
-    assert sdc._index[str(f)] == 100
+    assert sdc._index[f.as_posix()] == 100

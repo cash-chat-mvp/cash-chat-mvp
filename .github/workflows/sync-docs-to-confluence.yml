@@ -28,7 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: 의존 라이브러리 설치
-        run: pip install markdown requests
+        run: pip install markdown==3.7 requests==2.32.3
 
       - name: 변경된 docs 파일 추출
         id: changes
@@ -71,7 +71,6 @@ jobs:
           echo "pr_display=${PR_DISPLAY}" >> $GITHUB_OUTPUT
 
       - name: Confluence 동기화 실행
-        id: sync
         env:
           CONFLUENCE_BASE_URL: https://moneyfactoryslave.atlassian.net
           CONFLUENCE_SPACE_KEY: FCTC
@@ -83,18 +82,13 @@ jobs:
           SYNC_ALL: ${{ steps.changes.outputs.sync_all }}
           CHANGED_FILES: ${{ steps.changes.outputs.changed }}
         run: |
-          RESULT=$(python .github/scripts/sync_docs_to_confluence.py)
-          {
-            echo "result<<SYNC_EOF"
-            echo "$RESULT"
-            echo "SYNC_EOF"
-          } >> $GITHUB_OUTPUT
+          # 결과는 sync_result.json 파일로 출력됨(stdout 로그 오염과 무관)
+          python .github/scripts/sync_docs_to_confluence.py
 
       - name: Discord 성공 알림
         if: success()
         env:
           DISCORD_WIKI_WEBHOOK: ${{ secrets.DISCORD_WIKI_WEBHOOK }}
-          RESULT: ${{ steps.sync.outputs.result }}
           ACTOR: ${{ github.actor }}
           PR_URL: ${{ steps.pr_info.outputs.pr_url }}
           PR_DISPLAY: ${{ steps.pr_info.outputs.pr_display }}
@@ -103,6 +97,9 @@ jobs:
             echo "ℹ️ DISCORD_WIKI_WEBHOOK 없음 — 알림 건너뜀"
             exit 0
           fi
+
+          # 동기화 스크립트가 남긴 결과 파일을 읽음(없으면 빈 결과로 처리)
+          RESULT=$(cat sync_result.json 2>/dev/null || echo '{"pages":[]}')
 
           # 페이지 항목 배열 생성
           ITEMS=$(echo "$RESULT" | jq -c '[
