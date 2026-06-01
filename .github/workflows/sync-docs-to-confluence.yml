@@ -1,0 +1,193 @@
+name: Confluence 문서 동기화
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'docs/**/*.md'
+  workflow_dispatch:
+    inputs:
+      sync_all:
+        description: 'docs 전체를 재동기화'
+        type: boolean
+        default: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 의존 라이브러리 설치
+        run: pip install markdown requests
+
+      - name: 변경된 docs 파일 추출
+        id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_SYNC_ALL: ${{ github.event.inputs.sync_all }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "sync_all=${DISPATCH_SYNC_ALL}" >> $GITHUB_OUTPUT
+            echo "changed=" >> $GITHUB_OUTPUT
+          else
+            if [ -z "$BEFORE_SHA" ] || ! git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+              RANGE="HEAD~1 HEAD"
+            else
+              RANGE="$BEFORE_SHA $AFTER_SHA"
+            fi
+            CHANGED=$(git diff --name-only $RANGE -- 'docs/**/*.md' | tr '\n' ' ')
+            echo "sync_all=false" >> $GITHUB_OUTPUT
+            echo "changed=${CHANGED}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: PR 정보 파싱
+        id: pr_info
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          REPO: ${{ github.repository }}
+        run: |
+          PR_NUMBER=$(echo "$COMMIT_MSG" | grep -oE '#[0-9]+' | head -1 | tr -d '#')
+          if [ -n "$PR_NUMBER" ]; then
+            PR_TITLE=$(echo "$COMMIT_MSG" | sed -n '3p')
+            PR_URL="https://github.com/${REPO}/pull/${PR_NUMBER}"
+            PR_DISPLAY="${PR_TITLE:-PR #${PR_NUMBER}}"
+          else
+            PR_URL=""
+            PR_DISPLAY=$(echo "$COMMIT_MSG" | head -1)
+          fi
+          echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
+          echo "pr_display=${PR_DISPLAY}" >> $GITHUB_OUTPUT
+
+      - name: Confluence 동기화 실행
+        id: sync
+        env:
+          CONFLUENCE_BASE_URL: https://moneyfactoryslave.atlassian.net
+          CONFLUENCE_SPACE_KEY: FCTC
+          CONFLUENCE_ROOT_PAGE_TITLE: Cash Chat Docs
+          JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          COMMIT_SHA: ${{ github.sha }}
+          DOCS_DIR: docs
+          SYNC_ALL: ${{ steps.changes.outputs.sync_all }}
+          CHANGED_FILES: ${{ steps.changes.outputs.changed }}
+        run: |
+          RESULT=$(python .github/scripts/sync_docs_to_confluence.py)
+          {
+            echo "result<<SYNC_EOF"
+            echo "$RESULT"
+            echo "SYNC_EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Discord 성공 알림
+        if: success()
+        env:
+          DISCORD_WIKI_WEBHOOK: ${{ secrets.DISCORD_WIKI_WEBHOOK }}
+          RESULT: ${{ steps.sync.outputs.result }}
+          ACTOR: ${{ github.actor }}
+          PR_URL: ${{ steps.pr_info.outputs.pr_url }}
+          PR_DISPLAY: ${{ steps.pr_info.outputs.pr_display }}
+        run: |
+          if [ -z "$DISCORD_WIKI_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WIKI_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
+
+          # 페이지 항목 배열 생성
+          ITEMS=$(echo "$RESULT" | jq -c '[
+            .pages[] |
+            if .action == "created"
+            then "**" + .title + "** (신규) — [바로가기](" + .url + ")"
+            else "**" + .title + "** — [바로가기](" + .url + ")"
+            end
+          ]')
+
+          COUNT=$(echo "$ITEMS" | jq 'length')
+
+          if [ "$COUNT" = "0" ]; then
+            DOC_FIELDS='[{"name": "업데이트 문서", "value": "변경된 문서가 없습니다.", "inline": false}]'
+          else
+            # Discord 필드 value 1024자 한도 → 6개씩 끊어 여러 필드로 분할
+            DOC_FIELDS=$(echo "$ITEMS" | jq -c '
+              [ range(0; length; 6) as $i | .[$i:$i+6] | join("\n") ]
+              | to_entries
+              | map({
+                  name: (if .key == 0 then "업데이트 문서" else "\u200b" end),
+                  value: .value,
+                  inline: false
+                })
+            ')
+          fi
+
+          MR_FIELD=$(jq -n \
+            --arg pr_display "$PR_DISPLAY" \
+            --arg pr_url "$PR_URL" \
+            '{name: "MR", value: (if $pr_url != "" then ("[" + $pr_display + "](" + $pr_url + ")") else $pr_display end), inline: true}')
+
+          PAYLOAD=$(jq -n \
+            --arg actor "$ACTOR" \
+            --argjson mr "$MR_FIELD" \
+            --argjson docs "$DOC_FIELDS" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{embeds: [{
+              color: 5763719,
+              title: "✅ Confluence 업데이트 완료",
+              fields: ([
+                {name: "작성자", value: ("`@" + $actor + "`"), inline: true},
+                $mr
+              ] + $docs),
+              footer: {text: "Wild Nomad Coder Workspace"},
+              timestamp: $ts
+            }]}')
+
+          curl -sS -X POST "$DISCORD_WIKI_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
+
+      - name: Discord 실패 알림
+        if: failure()
+        env:
+          DISCORD_WIKI_WEBHOOK: ${{ secrets.DISCORD_WIKI_WEBHOOK }}
+          ACTOR: ${{ github.actor }}
+          PR_URL: ${{ steps.pr_info.outputs.pr_url }}
+          PR_DISPLAY: ${{ steps.pr_info.outputs.pr_display }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$DISCORD_WIKI_WEBHOOK" ]; then
+            echo "ℹ️ DISCORD_WIKI_WEBHOOK 없음 — 알림 건너뜀"
+            exit 0
+          fi
+
+          PAYLOAD=$(jq -n \
+            --arg actor "$ACTOR" \
+            --arg pr_display "$PR_DISPLAY" \
+            --arg pr_url "$PR_URL" \
+            --arg run_url "$RUN_URL" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{embeds: [{
+              color: 15548997,
+              title: "🚨 Confluence 업데이트 실패",
+              fields: [
+                {name: "작성자", value: ("`@" + $actor + "`"), inline: true},
+                {name: "MR", value: (if $pr_url != "" then ("[" + $pr_display + "](" + $pr_url + ")") else $pr_display end), inline: true},
+                {name: "안내", value: "문서 자동 동기화에 실패했습니다.\n워크플로우를 재실행하거나 Confluence에 직접 작성해주세요. 🙏", inline: false},
+                {name: "Actions 로그", value: ("[바로가기](" + $run_url + ")"), inline: false}
+              ],
+              footer: {text: "Wild Nomad Coder Workspace"},
+              timestamp: $ts
+            }]}')
+
+          curl -sS -X POST "$DISCORD_WIKI_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
