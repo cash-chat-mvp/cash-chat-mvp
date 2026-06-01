@@ -177,6 +177,7 @@ def _update_page(page_id: int, title: str, body_html: str, current_version: int)
     payload = {
         "type": "page",
         "title": title,
+        "space": {"key": SPACE_KEY},
         "version": {"number": current_version + 1},
         "body": {"storage": {"value": body_html, "representation": "storage"}},
     }
@@ -310,7 +311,8 @@ def select_targets() -> list[Path]:
     targets = []
     for rel in sorted(set(candidates)):
         path = Path(rel)
-        if path.exists():
+        # docs 밖 경로는 ensure_dir_chain의 relative_to에서 ValueError를 내므로 제외
+        if path.exists() and path.is_relative_to(DOCS_DIR):
             targets.append(path)
     return targets
 

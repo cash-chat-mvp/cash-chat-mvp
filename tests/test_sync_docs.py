@@ -199,3 +199,20 @@ def test_sync_md_file_creates_when_absent(tmp_path, monkeypatch):
     result = sdc.sync_md_file(f, parent_id=1)
     assert result["action"] == "created"
     assert sdc._index[f.as_posix()] == 100
+
+
+def test_select_targets_skips_paths_outside_docs(tmp_path, monkeypatch):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    inside = docs / "a.md"
+    inside.write_text("# 안쪽", encoding="utf-8")
+    outside = tmp_path / "README.md"
+    outside.write_text("# 바깥쪽", encoding="utf-8")
+
+    monkeypatch.setattr(sdc, "DOCS_DIR", docs)
+    monkeypatch.setenv("SYNC_ALL", "")
+    monkeypatch.setenv("CHANGED_FILES", f"{inside.as_posix()} {outside.as_posix()}")
+
+    targets = sdc.select_targets()
+    assert inside in targets
+    assert outside not in targets
