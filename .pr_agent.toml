@@ -13,6 +13,9 @@ custom_model_max_tokens = 1048576
 [pr_reviewer]
 inline_code_comments = true
 require_security_review = true
+# 매 리뷰 실행마다 새 코멘트 게시 — 기존 코멘트를 덮어쓰지 않음
+# (true 이면 "Persistent review updated to latest commit …" 메시지로 첫 코멘트를 수정)
+persistent_comment = false
 # 자동으로 붙는 "Review effort [1-5]" 라벨 비활성화
 enable_review_labels_effort = false
 extra_instructions = """
