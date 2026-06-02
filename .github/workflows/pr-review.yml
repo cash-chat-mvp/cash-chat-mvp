@@ -359,7 +359,7 @@ jobs:
             -e "GEMINI_API_KEY=$GEMINI_KEY" \
             -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
             -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
-            -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=true" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=false" \
             -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
             "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
           docker_status=${PIPESTATUS[0]}
@@ -487,13 +487,14 @@ jobs:
           docker_status=${PIPESTATUS[0]}
           set -e
           # describe는 보조 기능 — 실패해도 PR 체크를 깨지 않고 경고만 남긴다.
-          if [ "$docker_status" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; then
+          # PR_AGENT_FAIL_MARKERS가 비면 grep -qE "" 가 모든 줄에 매칭돼 오탐하므로 가드.
+          if [ "$docker_status" -ne 0 ] || { [ -n "${PR_AGENT_FAIL_MARKERS:-}" ] && grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; }; then
             echo "::warning::Gemini 자동 설명 실패 — 제목·본문은 그대로 유지됩니다"
           fi
 
   # ====================================================
   # Gemini 수동 리뷰 (/gemini-review 코멘트)
-  # 코멘트 본문을 /review, /improve 로 바꿔치기 후 실행
+  # 코멘트 본문을 /review 로 바꿔치기 후 실행
   # ====================================================
   review-gemini-manual:
     name: Gemini Manual Review
@@ -678,8 +679,6 @@ jobs:
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
             -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           run_command "/review"
-          check_soft_quota "$LAST_LOG"
-          run_command "/improve"
           check_soft_quota "$LAST_LOG"
           localize_comments
           recommend_deep_review
@@ -918,8 +917,6 @@ jobs:
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
             -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           run_command "/review"
-          check_soft_quota "$LAST_LOG"
-          run_command "/improve"
           check_soft_quota "$LAST_LOG"
           localize_comments
           recommend_deep_review
