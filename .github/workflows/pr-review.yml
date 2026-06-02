@@ -1052,8 +1052,6 @@ jobs:
         run: |
           set -euo pipefail
           API="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
-          OWNER="${GITHUB_REPOSITORY%%/*}"
-          NAME="${GITHUB_REPOSITORY##*/}"
 
           # 스레드 root 코멘트에 답글 (best-effort)
           gh_reply() {  # $1=root_comment_db_id  $2=body
@@ -1076,6 +1074,7 @@ jobs:
             "$API/pulls/comments/${ROOT_ID}")
           ORIG_BODY=$(printf '%s' "$ROOT_JSON" | jq -r '.body // ""')
           ORIG_PATH=$(printf '%s' "$ROOT_JSON" | jq -r '.path // ""')
+          ROOT_NODE_ID=$(printf '%s' "$ROOT_JSON" | jq -r '.node_id // ""')
           [ -z "$ORIG_BODY" ] && ORIG_BODY="(원본 코멘트를 불러오지 못했습니다)"
 
           # ── Jira 상위 티켓 추출 (PR 제목 → 브랜치명) ──
@@ -1136,13 +1135,17 @@ jobs:
           # ── 결과 답글 ──
           gh_reply "$ROOT_ID" "$(printf '📌 추후 처리 항목을 Jira 서브태스크로 등록했어요.\n\n- 서브태스크: [%s](%s)\n- 상위 티켓: %s\n- 사유: %s\n\n이 스레드는 리졸브됩니다. 후속 작업은 위 티켓에서 추적해주세요. 🙏' "$NEW_KEY" "$NEW_URL" "$PARENT" "$REASON")"
 
-          # ── GitHub 리뷰 스레드 리졸브 (root 코멘트가 속한 스레드) ──
-          THREAD_ID=$(curl -s --max-time 15 -X POST \
-            -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
-            "https://api.github.com/graphql" \
-            -d "$(jq -n --arg owner "$OWNER" --arg name "$NAME" --argjson number "$PR_NUMBER" \
-              '{query:"query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{id comments(first:1){nodes{databaseId}}}}}}}",variables:{owner:$owner,name:$name,number:$number}}')" \
-            | jq -r --argjson cid "$ROOT_ID" '.data.repository.pullRequest.reviewThreads.nodes[]? | select(.comments.nodes[0].databaseId==$cid) | .id' | head -1)
+          # ── GitHub 리뷰 스레드 리졸브 (root 코멘트의 node_id로 스레드 직접 조회) ──
+          # reviewThreads(first:100) 순회 대신 node() 쿼리로 정확·경량 조회(100개 한계 없음)
+          THREAD_ID=""
+          if [ -n "$ROOT_NODE_ID" ]; then
+            THREAD_ID=$(curl -s --max-time 15 -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
+              "https://api.github.com/graphql" \
+              -d "$(jq -n --arg id "$ROOT_NODE_ID" \
+                '{query:"query($id:ID!){node(id:$id){... on PullRequestReviewComment{pullRequestReviewThread{id}}}}",variables:{id:$id}}')" \
+              | jq -r '.data.node.pullRequestReviewThread.id // empty')
+          fi
           if [ -n "$THREAD_ID" ]; then
             curl -s --max-time 10 -X POST \
               -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
