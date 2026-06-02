@@ -136,6 +136,7 @@ jobs:
           DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RETRY_CMD: "/gemini-review"
+          EVENT_ACTION: ${{ github.event.action }}
         run: |
           set -euo pipefail
           # PR 작성자(=auto-assignee)의 키 사용, 미매핑 시 공용 키로 폴백
@@ -270,7 +271,7 @@ jobs:
                 "https://generativelanguage.googleapis.com/v1beta/models/${gemini_model}:generateContent?key=${GEMINI_KEY}" \
                 -H "Content-Type: application/json" \
                 -d "$(jq -n --arg p "$prompt" \
-                  '{contents:[{role:"user",parts:[{text:$p}]}],generationConfig:{maxOutputTokens:256,temperature:0,thinkingConfig:{thinkingBudget:0}}}')" \
+                  '{contents:[{role:"user",parts:[{text:$p}]}],generationConfig:{maxOutputTokens:256,temperature:0}}')" \
                 | jq -r '.candidates[0].content.parts[0].text // "no"' 2>/dev/null || echo "no")
 
               # 첫 줄: yes/no 판단 / 둘째 줄: 근거
@@ -318,7 +319,7 @@ jobs:
           # 자동 리졸브용: 리뷰 실행 '전' 기존 리뷰 스레드 ID 스냅샷 (synchronize에서만)
           # 이 run에서 새로 생성될 스레드는 여기에 없으므로, 봇이 방금 단 코멘트는 리졸브되지 않음
           PRE_RUN_THREAD_IDS=""
-          if [ "${{ github.event.action }}" = "synchronize" ]; then
+          if [ "$EVENT_ACTION" = "synchronize" ]; then
             PRE_RUN_THREAD_IDS=$(curl -s --max-time 15 -X POST \
               -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
               "https://api.github.com/graphql" \
@@ -327,7 +328,7 @@ jobs:
                 --arg name "${GITHUB_REPOSITORY##*/}" \
                 --argjson number "$PR_NUMBER" \
                 '{query:"query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{id}}}}}",variables:{owner:$owner,name:$name,number:$number}}')" \
-              | jq -r '.data.repository.pullRequest.reviewThreads.nodes[].id // empty' 2>/dev/null || true)
+              | jq -r '.data.repository.pullRequest.reviewThreads.nodes[]?.id // empty' 2>/dev/null || true)
           fi
           # 리뷰 진행 중 안내 — 완료/실패와 무관하게 trap으로 자동 삭제
           PROGRESS_ID=""
@@ -411,7 +412,7 @@ jobs:
             curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$L_API/issues/comments/${L_SID}" -d "$(jq -n --arg b "$L_BODY" '{body: $b}')" >/dev/null
           fi
           # synchronize(새 커밋 푸시)일 때만 이전 리뷰 스레드 자동 리졸브 (best-effort)
-          if [ "${{ github.event.action }}" = "synchronize" ]; then
+          if [ "$EVENT_ACTION" = "synchronize" ]; then
             auto_resolve_addressed_threads || true
           fi
           recommend_deep_review
@@ -820,7 +821,7 @@ jobs:
           # 각 명령 직후 소프트 사용량 소진 검사 (/review 단계 누락 방지)
           check_soft_quota() {
             local log="$1"
-            if grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429" "$log"; then
+            if grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429|insufficient_quota" "$log"; then
               delete_no_suggestions_comment
               notify_failure "$log"
               echo "::error::사용량 소진(소프트) — 로그를 확인하세요"
