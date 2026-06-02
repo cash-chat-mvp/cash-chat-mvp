@@ -30,6 +30,26 @@ extra_instructions = """
 - 너무 당연한 스타일 지적, 장황한 일반론, 변경과 무관한 훈수는 하지 마세요.
 """
 
+[pr_description]
+# 본문/제목을 덮어쓰지 않고 AI 설명을 별도 코멘트로만 게시 (기존 PR 템플릿 보존)
+publish_description_as_comment = true
+# 코멘트 1개를 갱신 — 재오픈 시 도배 방지
+publish_description_as_comment_persistent = true
+# 제목은 pr-description.yml(Jira 프리픽스)이 소유하므로 AI 제목 생성 끔
+generate_ai_title = false
+extra_instructions = """
+한국어로 작성하세요. 리뷰어가 빠르게 맥락을 잡도록 돕는 것이 목표입니다.
+- 요약: 이 PR이 '무엇을, 왜' 바꾸는지 2~3문장. 단순 diff 나열 금지.
+- walkthrough 표: 변경을 모듈 단위(apps/backend · apps/frontend · infra 등)로 묶고,
+  각 항목은 핵심 변경만 한 줄로 적습니다.
+- 중점 리뷰 영역: 리뷰어가 특히 봐야 할 부분(복잡한 로직, 인증/인가·보안,
+  DB 스키마·마이그레이션, 외부 API 연동, 설정 변경)을 짚어줍니다.
+- 영향/주의: Breaking change, 환경변수·설정·스키마 변경, 마이그레이션 필요 여부가
+  있으면 반드시 표기하고, 없으면 해당 항목은 생략합니다.
+- 검증: 동작 확인 방법이나 테스트 범위가 드러나면 간단히 언급합니다.
+당연한 일반론·장황한 설명·변경과 무관한 내용은 피합니다.
+"""
+
 [pr_code_suggestions]
 # 코드 줄에 직접 커밋가능 인라인 제안 (CodeRabbit 라인 코멘트 재현)
 commitable_code_suggestions = true

@@ -418,6 +418,80 @@ jobs:
           recommend_deep_review
 
   # ====================================================
+  # Gemini 자동 설명 (PR 생성/재오픈 시 /describe → 코멘트 게시)
+  # 제목·본문은 건드리지 않고 AI 요약을 별도 코멘트로만 추가.
+  # 모델은 model1(2순위)을 사용 — 리뷰(model0)와 분리.
+  # ====================================================
+  describe-gemini-auto:
+    name: Gemini Auto Describe
+    needs: resolve-gemini-model
+    if: |
+      github.event_name == 'pull_request_target' &&
+      (github.event.action == 'opened' || github.event.action == 'reopened')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate Gemini bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
+          private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Resolve reviewer key (PR author)
+        id: whichkey
+        env:
+          LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          login_lc=$(printf '%s' "$LOGIN" | tr '[:upper:]' '[:lower:]')
+          case "$login_lc" in
+            gudals-kim) s=GUDALS ;;
+            seedplan005|jwchoi42) s=CHOI ;;
+            jeonj95|unistuj) s=JEON ;;
+            *) s="" ;;
+          esac
+          echo "suffix=$s" >> "$GITHUB_OUTPUT"
+          echo "::notice::자동 설명 키 소유자: ${s:-공용(기본)}"
+      - name: AI Describe (Gemini model1 → comment)
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          # describe는 2순위 모델(model1)만 사용 — 리뷰(model0)와 쿼터 분리
+          MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
+          MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          # MODEL=MODEL_WEAK=model1 로 통일, 폴백 차단([])해 이미지 기본값(gpt) 방지.
+          # publish_description_as_comment / generate_ai_title=false 는 .pr_agent.toml 정적 설정.
+          MODEL_ENV=(-e "CONFIG.MODEL=$MODEL1" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]")
+          LOG=$(mktemp)
+          set +e
+          docker run --rm \
+            -e GITHUB_TOKEN \
+            -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+            -e GITHUB_REPOSITORY="${{ github.repository }}" \
+            -e GITHUB_API_URL="${{ github.api_url }}" \
+            -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+            -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+            -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+            "${MODEL_ENV[@]}" \
+            -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
+            -e "GEMINI_API_KEY=$GEMINI_KEY" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=false" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=true" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=false" \
+            -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
+            "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
+          docker_status=${PIPESTATUS[0]}
+          set -e
+          # describe는 보조 기능 — 실패해도 PR 체크를 깨지 않고 경고만 남긴다.
+          if [ "$docker_status" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; then
+            echo "::warning::Gemini 자동 설명 실패 — 제목·본문은 그대로 유지됩니다"
+          fi
+
+  # ====================================================
   # Gemini 수동 리뷰 (/gemini-review 코멘트)
   # 코멘트 본문을 /review, /improve 로 바꿔치기 후 실행
   # ====================================================
