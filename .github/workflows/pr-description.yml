@@ -298,6 +298,7 @@ jobs:
               '| `/gemini-review` | Gemini 재리뷰 요청 (PR 생성·푸시 시 자동 실행, 재요청 시 사용) |',
               '| `/openai-review` | OpenAI 심층 리뷰 요청 (수동, 비용 발생) |',
               '| `/ask "질문"` | AI 코멘트에 답글로 후속 질문 (라인/PR, 비용 낮은 모델) |',
+              '| `/resolve "사유"` | 리뷰 코멘트에 답글로 작성 → 사유와 함께 Jira 서브태스크 생성 후 스레드 자동 리졸브 (추후 일괄 수정용) |',
               '| `@coderabbitai review` | CodeRabbit 리뷰 요청 (수동, 비용 발생) |',
             ].join('\n');
 

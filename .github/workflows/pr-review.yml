@@ -1010,3 +1010,145 @@ jobs:
             echo "::error::/ask 실패"
             exit 1
           fi
+
+  # ====================================================
+  # /resolve — 리뷰 코멘트를 Jira 서브태스크로 적재 후 스레드 리졸브
+  # 봇 인라인 리뷰 코멘트에 `/resolve "사유"` 답글 시:
+  #   ① PR의 Jira 티켓 하위에 서브태스크 생성(원본 코멘트 + 사유 + PR 링크)
+  #   ② 스레드에 생성 결과 답글  ③ GitHub 리뷰 스레드 리졸브
+  # 서브태스크 생성에 성공한 경우에만 리졸브한다(추적 누락 방지).
+  # ====================================================
+  resolve-to-jira-subtask:
+    name: Resolve → Jira Subtask
+    if: |
+      github.event_name == 'pull_request_review_comment' &&
+      github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+      startsWith(github.event.comment.body, '/resolve')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
+          private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Create Jira subtask & resolve thread
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HTML_URL: ${{ github.event.pull_request.html_url }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          IN_REPLY_TO: ${{ github.event.comment.in_reply_to_id }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          API="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          NAME="${GITHUB_REPOSITORY##*/}"
+
+          # 스레드 root 코멘트에 답글 (best-effort)
+          gh_reply() {  # $1=root_comment_db_id  $2=body
+            curl -s --max-time 15 -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$API/pulls/${PR_NUMBER}/comments/$1/replies" \
+              -d "$(jq -n --arg b "$2" '{body:$b}')" >/dev/null || true
+          }
+
+          # ── 사유 파싱: "/resolve" 뒤 텍스트, 양쪽 따옴표 제거 ──
+          REASON=$(printf '%s' "$COMMENT_BODY" | sed -E 's#^/resolve[[:space:]]*##' | head -1)
+          REASON=$(printf '%s' "$REASON" | sed -E 's/^["“”'"'"']//; s/["“”'"'"']$//; s/[[:space:]]*$//')
+          [ -z "$REASON" ] && REASON="추후 일괄 수정 예정"
+
+          # ── 답글/스레드 대상(root): 답글이면 in_reply_to, 아니면 본인 코멘트 ──
+          ROOT_ID="${IN_REPLY_TO:-$COMMENT_ID}"
+
+          # ── 원본(루트) 리뷰 코멘트 본문/파일 경로 ──
+          ROOT_JSON=$(curl -s --max-time 15 -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$API/pulls/comments/${ROOT_ID}")
+          ORIG_BODY=$(printf '%s' "$ROOT_JSON" | jq -r '.body // ""')
+          ORIG_PATH=$(printf '%s' "$ROOT_JSON" | jq -r '.path // ""')
+          [ -z "$ORIG_BODY" ] && ORIG_BODY="(원본 코멘트를 불러오지 못했습니다)"
+
+          # ── Jira 상위 티켓 추출 (PR 제목 → 브랜치명) ──
+          PARENT=$(printf '%s %s' "$PR_TITLE" "$HEAD_REF" | grep -oE 'CC-[0-9]+' | head -1 || true)
+          if [ -z "$PARENT" ]; then
+            gh_reply "$ROOT_ID" "⚠️ PR에서 Jira 티켓(CC-###)을 찾지 못해 서브태스크를 만들지 못했어요. 스레드는 그대로 둡니다."
+            echo "::warning::Jira 키 없음 — 중단"; exit 0
+          fi
+          PROJECT_KEY="${PARENT%%-*}"
+
+          # ── 서브태스크 issuetype 런타임 자동 감지 (이름 무관, subtask=true) ──
+          SUBTASK_TYPE_ID=$(curl -s --max-time 20 --user "${JIRA_EMAIL}:${JIRA_TOKEN}" -H "Accept: application/json" \
+            "${JIRA_BASE_URL}/rest/api/3/issue/createmeta/${PROJECT_KEY}/issuetypes" \
+            | jq -r '[(.values // .issueTypes // [])[] | select(.subtask==true)][0].id // empty')
+          if [ -z "$SUBTASK_TYPE_ID" ]; then
+            SUBTASK_TYPE_ID=$(curl -s --max-time 20 --user "${JIRA_EMAIL}:${JIRA_TOKEN}" -H "Accept: application/json" \
+              "${JIRA_BASE_URL}/rest/api/3/issuetype" \
+              | jq -r '[.[] | select(.subtask==true)][0].id // empty')
+          fi
+          if [ -z "$SUBTASK_TYPE_ID" ]; then
+            gh_reply "$ROOT_ID" "⚠️ Jira 서브태스크 이슈 타입을 찾지 못했어요. 스레드는 그대로 둡니다."
+            echo "::warning::subtask issuetype 미발견 — 중단"; exit 0
+          fi
+
+          # ── summary / description(ADF) ──
+          SUMMARY=$(printf '[리뷰 후속] %s' "$(printf '%s' "$ORIG_BODY" | tr '\n' ' ' | cut -c1-180)")
+          DESCRIPTION=$(jq -n \
+            --arg reason "$REASON" --arg orig "$ORIG_BODY" --arg path "$ORIG_PATH" \
+            --arg pr "$PR_HTML_URL" --arg who "$COMMENTER" '
+            {type:"doc",version:1,content:[
+              {type:"paragraph",content:[{type:"text",text:"GitHub PR 리뷰에서 추후 처리로 분류된 항목입니다."}]},
+              {type:"paragraph",content:[{type:"text",text:("사유: " + $reason)}]},
+              {type:"paragraph",content:[{type:"text",text:("요청자: @" + $who)}]},
+              ($path | if . == "" then empty else {type:"paragraph",content:[{type:"text",text:("파일: " + .)}]} end),
+              {type:"paragraph",content:[{type:"text",text:"원본 리뷰 코멘트:"}]},
+              {type:"blockquote",content:[{type:"paragraph",content:[{type:"text",text:$orig}]}]},
+              {type:"paragraph",content:[{type:"text",text:"PR: "},{type:"text",text:$pr,marks:[{type:"link",attrs:{href:$pr}}]}]}
+            ]}')
+          PAYLOAD=$(jq -n \
+            --arg pk "$PROJECT_KEY" --arg parent "$PARENT" --arg tid "$SUBTASK_TYPE_ID" \
+            --arg summary "$SUMMARY" --argjson desc "$DESCRIPTION" \
+            '{fields:{project:{key:$pk},parent:{key:$parent},issuetype:{id:$tid},summary:$summary,description:$desc}}')
+
+          # ── 서브태스크 생성 ──
+          RESP=$(curl -s --max-time 25 --user "${JIRA_EMAIL}:${JIRA_TOKEN}" -w $'\n%{http_code}' \
+            -X POST -H "Content-Type: application/json" -H "Accept: application/json" \
+            "${JIRA_BASE_URL}/rest/api/3/issue" --data "$PAYLOAD")
+          HTTP_CODE=$(printf '%s' "$RESP" | tail -1)
+          RBODY=$(printf '%s' "$RESP" | sed '$d')
+          if [ "$HTTP_CODE" != "201" ]; then
+            gh_reply "$ROOT_ID" "⚠️ Jira 서브태스크 생성에 실패했어요 (HTTP ${HTTP_CODE}). 스레드는 그대로 둡니다."
+            echo "::error::서브태스크 생성 실패: $(printf '%s' "$RBODY" | head -c 400)"; exit 1
+          fi
+          NEW_KEY=$(printf '%s' "$RBODY" | jq -r '.key')
+          NEW_URL="${JIRA_BASE_URL}/browse/${NEW_KEY}"
+          echo "::notice::서브태스크 생성: $NEW_KEY"
+
+          # ── 결과 답글 ──
+          gh_reply "$ROOT_ID" "$(printf '📌 추후 처리 항목을 Jira 서브태스크로 등록했어요.\n\n- 서브태스크: [%s](%s)\n- 상위 티켓: %s\n- 사유: %s\n\n이 스레드는 리졸브됩니다. 후속 작업은 위 티켓에서 추적해주세요. 🙏' "$NEW_KEY" "$NEW_URL" "$PARENT" "$REASON")"
+
+          # ── GitHub 리뷰 스레드 리졸브 (root 코멘트가 속한 스레드) ──
+          THREAD_ID=$(curl -s --max-time 15 -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
+            "https://api.github.com/graphql" \
+            -d "$(jq -n --arg owner "$OWNER" --arg name "$NAME" --argjson number "$PR_NUMBER" \
+              '{query:"query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{id comments(first:1){nodes{databaseId}}}}}}}",variables:{owner:$owner,name:$name,number:$number}}')" \
+            | jq -r --argjson cid "$ROOT_ID" '.data.repository.pullRequest.reviewThreads.nodes[]? | select(.comments.nodes[0].databaseId==$cid) | .id' | head -1)
+          if [ -n "$THREAD_ID" ]; then
+            curl -s --max-time 10 -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
+              "https://api.github.com/graphql" \
+              -d "$(jq -n --arg id "$THREAD_ID" '{query:"mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}",variables:{id:$id}}')" >/dev/null || true
+            echo "::notice::스레드 리졸브 완료"
+          else
+            echo "::warning::스레드 ID 미발견 — 리졸브 건너뜀(서브태스크는 생성됨)"
+          fi
