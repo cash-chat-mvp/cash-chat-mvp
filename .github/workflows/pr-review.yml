@@ -359,7 +359,7 @@ jobs:
             -e "GEMINI_API_KEY=$GEMINI_KEY" \
             -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
             -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
-            -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=true" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=false" \
             -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
             "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
           docker_status=${PIPESTATUS[0]}
@@ -418,8 +418,83 @@ jobs:
           recommend_deep_review
 
   # ====================================================
+  # Gemini 자동 설명 (PR 생성/재오픈 시 /describe → 코멘트 게시)
+  # 제목·본문은 건드리지 않고 AI 요약을 별도 코멘트로만 추가.
+  # 모델은 model1(2순위)을 사용 — 리뷰(model0)와 분리.
+  # ====================================================
+  describe-gemini-auto:
+    name: Gemini Auto Describe
+    needs: resolve-gemini-model
+    if: |
+      github.event_name == 'pull_request_target' &&
+      (github.event.action == 'opened' || github.event.action == 'reopened')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate Gemini bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
+          private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Resolve reviewer key (PR author)
+        id: whichkey
+        env:
+          LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          login_lc=$(printf '%s' "$LOGIN" | tr '[:upper:]' '[:lower:]')
+          case "$login_lc" in
+            gudals-kim) s=GUDALS ;;
+            seedplan005|jwchoi42) s=CHOI ;;
+            jeonj95|unistuj) s=JEON ;;
+            *) s="" ;;
+          esac
+          echo "suffix=$s" >> "$GITHUB_OUTPUT"
+          echo "::notice::자동 설명 키 소유자: ${s:-공용(기본)}"
+      - name: AI Describe (Gemini model1 → comment)
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          # describe는 2순위 모델(model1)만 사용 — 리뷰(model0)와 쿼터 분리
+          MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
+          MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          # MODEL=MODEL_WEAK=model1 로 통일, 폴백 차단([])해 이미지 기본값(gpt) 방지.
+          # publish_description_as_comment / generate_ai_title=false 는 .pr_agent.toml 정적 설정.
+          MODEL_ENV=(-e "CONFIG.MODEL=$MODEL1" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]")
+          LOG=$(mktemp)
+          set +e
+          docker run --rm \
+            -e GITHUB_TOKEN \
+            -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+            -e GITHUB_REPOSITORY="${{ github.repository }}" \
+            -e GITHUB_API_URL="${{ github.api_url }}" \
+            -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+            -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+            -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+            "${MODEL_ENV[@]}" \
+            -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
+            -e "GEMINI_API_KEY=$GEMINI_KEY" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=false" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=true" \
+            -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=false" \
+            -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
+            "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
+          docker_status=${PIPESTATUS[0]}
+          set -e
+          # describe는 보조 기능 — 실패해도 PR 체크를 깨지 않고 경고만 남긴다.
+          # PR_AGENT_FAIL_MARKERS가 비면 grep -qE "" 가 모든 줄에 매칭돼 오탐하므로 가드.
+          if [ "$docker_status" -ne 0 ] || { [ -n "${PR_AGENT_FAIL_MARKERS:-}" ] && grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; }; then
+            echo "::warning::Gemini 자동 설명 실패 — 제목·본문은 그대로 유지됩니다"
+          fi
+
+  # ====================================================
   # Gemini 수동 리뷰 (/gemini-review 코멘트)
-  # 코멘트 본문을 /review, /improve 로 바꿔치기 후 실행
+  # 코멘트 본문을 /review 로 바꿔치기 후 실행
   # ====================================================
   review-gemini-manual:
     name: Gemini Manual Review
@@ -604,8 +679,6 @@ jobs:
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
             -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           run_command "/review"
-          check_soft_quota "$LAST_LOG"
-          run_command "/improve"
           check_soft_quota "$LAST_LOG"
           localize_comments
           recommend_deep_review
@@ -845,8 +918,6 @@ jobs:
             -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           run_command "/review"
           check_soft_quota "$LAST_LOG"
-          run_command "/improve"
-          check_soft_quota "$LAST_LOG"
           localize_comments
           recommend_deep_review
 
@@ -938,4 +1009,150 @@ jobs:
             fi
             echo "::error::/ask 실패"
             exit 1
+          fi
+
+  # ====================================================
+  # /resolve — 리뷰 코멘트를 Jira 서브태스크로 적재 후 스레드 리졸브
+  # 봇 인라인 리뷰 코멘트에 `/resolve "사유"` 답글 시:
+  #   ① PR의 Jira 티켓 하위에 서브태스크 생성(원본 코멘트 + 사유 + PR 링크)
+  #   ② 스레드에 생성 결과 답글  ③ GitHub 리뷰 스레드 리졸브
+  # 서브태스크 생성에 성공한 경우에만 리졸브한다(추적 누락 방지).
+  # ====================================================
+  resolve-to-jira-subtask:
+    name: Resolve → Jira Subtask
+    if: |
+      github.event_name == 'pull_request_review_comment' &&
+      github.event.action == 'created' &&
+      github.event.comment.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+      startsWith(github.event.comment.body, '/resolve')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Generate bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
+          private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Create Jira subtask & resolve thread
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HTML_URL: ${{ github.event.pull_request.html_url }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          IN_REPLY_TO: ${{ github.event.comment.in_reply_to_id }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          API="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+
+          # 스레드 root 코멘트에 답글 (best-effort)
+          gh_reply() {  # $1=root_comment_db_id  $2=body
+            curl -s --max-time 15 -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$API/pulls/${PR_NUMBER}/comments/$1/replies" \
+              -d "$(jq -n --arg b "$2" '{body:$b}')" >/dev/null || true
+          }
+
+          # ── 사유 파싱: "/resolve" 뒤 텍스트, 양쪽 따옴표 제거 ──
+          REASON=$(printf '%s' "$COMMENT_BODY" | sed -E 's#^/resolve[[:space:]]*##' | head -1)
+          REASON=$(printf '%s' "$REASON" | sed -E 's/^["“”'"'"']//; s/["“”'"'"']$//; s/[[:space:]]*$//')
+          [ -z "$REASON" ] && REASON="추후 일괄 수정 예정"
+
+          # ── 답글/스레드 대상(root): 답글이면 in_reply_to, 아니면 본인 코멘트 ──
+          ROOT_ID="${IN_REPLY_TO:-$COMMENT_ID}"
+
+          # ── 원본(루트) 리뷰 코멘트 본문/파일 경로 ──
+          ROOT_JSON=$(curl -s --max-time 15 -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$API/pulls/comments/${ROOT_ID}")
+          ORIG_BODY=$(printf '%s' "$ROOT_JSON" | jq -r '.body // ""')
+          ORIG_PATH=$(printf '%s' "$ROOT_JSON" | jq -r '.path // ""')
+          ROOT_NODE_ID=$(printf '%s' "$ROOT_JSON" | jq -r '.node_id // ""')
+          [ -z "$ORIG_BODY" ] && ORIG_BODY="(원본 코멘트를 불러오지 못했습니다)"
+
+          # ── Jira 상위 티켓 추출 (PR 제목 → 브랜치명) ──
+          PARENT=$(printf '%s %s' "$PR_TITLE" "$HEAD_REF" | grep -oE 'CC-[0-9]+' | head -1 || true)
+          if [ -z "$PARENT" ]; then
+            gh_reply "$ROOT_ID" "⚠️ PR에서 Jira 티켓(CC-###)을 찾지 못해 서브태스크를 만들지 못했어요. 스레드는 그대로 둡니다."
+            echo "::warning::Jira 키 없음 — 중단"; exit 0
+          fi
+          PROJECT_KEY="${PARENT%%-*}"
+
+          # ── 서브태스크 issuetype 런타임 자동 감지 (이름 무관, subtask=true) ──
+          SUBTASK_TYPE_ID=$(curl -s --max-time 20 --user "${JIRA_EMAIL}:${JIRA_TOKEN}" -H "Accept: application/json" \
+            "${JIRA_BASE_URL}/rest/api/3/issue/createmeta/${PROJECT_KEY}/issuetypes" \
+            | jq -r '[(.values // .issueTypes // [])[] | select(.subtask==true)][0].id // empty')
+          if [ -z "$SUBTASK_TYPE_ID" ]; then
+            SUBTASK_TYPE_ID=$(curl -s --max-time 20 --user "${JIRA_EMAIL}:${JIRA_TOKEN}" -H "Accept: application/json" \
+              "${JIRA_BASE_URL}/rest/api/3/issuetype" \
+              | jq -r '[.[] | select(.subtask==true)][0].id // empty')
+          fi
+          if [ -z "$SUBTASK_TYPE_ID" ]; then
+            gh_reply "$ROOT_ID" "⚠️ Jira 서브태스크 이슈 타입을 찾지 못했어요. 스레드는 그대로 둡니다."
+            echo "::warning::subtask issuetype 미발견 — 중단"; exit 0
+          fi
+
+          # ── summary / description(ADF) ──
+          SUMMARY=$(printf '[리뷰 후속] %s' "$(printf '%s' "$ORIG_BODY" | tr '\n' ' ' | cut -c1-180)")
+          DESCRIPTION=$(jq -n \
+            --arg reason "$REASON" --arg orig "$ORIG_BODY" --arg path "$ORIG_PATH" \
+            --arg pr "$PR_HTML_URL" --arg who "$COMMENTER" '
+            {type:"doc",version:1,content:[
+              {type:"paragraph",content:[{type:"text",text:"GitHub PR 리뷰에서 추후 처리로 분류된 항목입니다."}]},
+              {type:"paragraph",content:[{type:"text",text:("사유: " + $reason)}]},
+              {type:"paragraph",content:[{type:"text",text:("요청자: @" + $who)}]},
+              ($path | if . == "" then empty else {type:"paragraph",content:[{type:"text",text:("파일: " + .)}]} end),
+              {type:"paragraph",content:[{type:"text",text:"원본 리뷰 코멘트:"}]},
+              {type:"blockquote",content:($orig | split("\n") | map(if . == "" then {type:"paragraph"} else {type:"paragraph",content:[{type:"text",text:.}]} end))},
+              {type:"paragraph",content:[{type:"text",text:"PR: "},{type:"text",text:$pr,marks:[{type:"link",attrs:{href:$pr}}]}]}
+            ]}')
+          PAYLOAD=$(jq -n \
+            --arg pk "$PROJECT_KEY" --arg parent "$PARENT" --arg tid "$SUBTASK_TYPE_ID" \
+            --arg summary "$SUMMARY" --argjson desc "$DESCRIPTION" \
+            '{fields:{project:{key:$pk},parent:{key:$parent},issuetype:{id:$tid},summary:$summary,description:$desc}}')
+
+          # ── 서브태스크 생성 ──
+          RESP=$(curl -s --max-time 25 --user "${JIRA_EMAIL}:${JIRA_TOKEN}" -w $'\n%{http_code}' \
+            -X POST -H "Content-Type: application/json" -H "Accept: application/json" \
+            "${JIRA_BASE_URL}/rest/api/3/issue" --data "$PAYLOAD")
+          HTTP_CODE=$(printf '%s' "$RESP" | tail -1)
+          RBODY=$(printf '%s' "$RESP" | sed '$d')
+          if [ "$HTTP_CODE" != "201" ]; then
+            gh_reply "$ROOT_ID" "⚠️ Jira 서브태스크 생성에 실패했어요 (HTTP ${HTTP_CODE}). 스레드는 그대로 둡니다."
+            echo "::error::서브태스크 생성 실패: $(printf '%s' "$RBODY" | head -c 400)"; exit 1
+          fi
+          NEW_KEY=$(printf '%s' "$RBODY" | jq -r '.key')
+          NEW_URL="${JIRA_BASE_URL}/browse/${NEW_KEY}"
+          echo "::notice::서브태스크 생성: $NEW_KEY"
+
+          # ── 결과 답글 ──
+          gh_reply "$ROOT_ID" "$(printf '📌 추후 처리 항목을 Jira 서브태스크로 등록했어요.\n\n- 서브태스크: [%s](%s)\n- 상위 티켓: %s\n- 사유: %s\n\n이 스레드는 리졸브됩니다. 후속 작업은 위 티켓에서 추적해주세요. 🙏' "$NEW_KEY" "$NEW_URL" "$PARENT" "$REASON")"
+
+          # ── GitHub 리뷰 스레드 리졸브 (root 코멘트의 node_id로 스레드 직접 조회) ──
+          # reviewThreads(first:100) 순회 대신 node() 쿼리로 정확·경량 조회(100개 한계 없음)
+          THREAD_ID=""
+          if [ -n "$ROOT_NODE_ID" ]; then
+            THREAD_ID=$(curl -s --max-time 15 -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
+              "https://api.github.com/graphql" \
+              -d "$(jq -n --arg id "$ROOT_NODE_ID" \
+                '{query:"query($id:ID!){node(id:$id){... on PullRequestReviewComment{pullRequestReviewThread{id}}}}",variables:{id:$id}}')" \
+              | jq -r '.data.node.pullRequestReviewThread.id // empty')
+          fi
+          if [ -n "$THREAD_ID" ]; then
+            curl -s --max-time 10 -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
+              "https://api.github.com/graphql" \
+              -d "$(jq -n --arg id "$THREAD_ID" '{query:"mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}",variables:{id:$id}}')" >/dev/null || true
+            echo "::notice::스레드 리졸브 완료"
+          else
+            echo "::warning::스레드 ID 미발견 — 리졸브 건너뜀(서브태스크는 생성됨)"
           fi
