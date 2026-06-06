@@ -7,17 +7,18 @@ import jakarta.validation.constraints.Pattern
 
 data class PurchaseRequest(
     @field:NotBlank
-    val itemCode: String = "",
+    val itemCode: String,
 
     @field:Min(1)
-    val qty: Int = 0,
+    val qty: Int,
 
-    // UUID 형식만 검증(버전 무관) — spec: "서버는 형식만 검증"
+    // UUID 형식만 검증(버전 무관) — spec: "서버는 형식만 검증". NotBlank 로 누락/공백도 명확히 거부.
+    @field:NotBlank
     @field:Pattern(
         regexp = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
         message = "idempotencyKey must be a UUID",
     )
-    val idempotencyKey: String = "",
+    val idempotencyKey: String,
 ) {
     fun toCommand() = PurchaseCommand(itemCode = itemCode, qty = qty, idempotencyKey = idempotencyKey)
 }

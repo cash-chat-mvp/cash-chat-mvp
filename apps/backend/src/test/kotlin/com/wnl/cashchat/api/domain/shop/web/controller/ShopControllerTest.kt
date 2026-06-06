@@ -2,7 +2,10 @@ package com.wnl.cashchat.api.domain.shop.web.controller
 
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
 import com.wnl.cashchat.api.domain.inventory.service.InventoryLine
+import com.wnl.cashchat.api.domain.shop.exception.IdempotencyKeyConflictException
 import com.wnl.cashchat.api.domain.shop.exception.InsufficientCoinException
+import com.wnl.cashchat.api.domain.shop.exception.ItemInactiveException
+import com.wnl.cashchat.api.domain.shop.exception.ItemNotFoundException
 import com.wnl.cashchat.api.domain.shop.persistence.entity.PurchaseOrderStatus
 import com.wnl.cashchat.api.domain.shop.persistence.entity.ShopItem
 import com.wnl.cashchat.api.domain.shop.persistence.entity.ShopItemCategory
@@ -118,6 +121,49 @@ class ShopControllerTest : FunSpec() {
             )
                 .andExpect(status().isBadRequest)
                 .andExpect(jsonPath("$.code").value("INSUFFICIENT_COIN"))
+        }
+
+        test("POST purchase mapping ITEM_NOT_FOUND returns 400") {
+            whenever(shopPurchaseFacade.purchase(eq(1L), any())).thenThrow(ItemNotFoundException())
+            mockMvc.perform(
+                post("/api/shop/purchase").principal(principal)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"itemCode":"NOPE","qty":1,"idempotencyKey":"$validUuid"}""")
+            )
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("ITEM_NOT_FOUND"))
+        }
+
+        test("POST purchase mapping ITEM_INACTIVE returns 400") {
+            whenever(shopPurchaseFacade.purchase(eq(1L), any())).thenThrow(ItemInactiveException())
+            mockMvc.perform(
+                post("/api/shop/purchase").principal(principal)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"itemCode":"EVO_STONE","qty":1,"idempotencyKey":"$validUuid"}""")
+            )
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("ITEM_INACTIVE"))
+        }
+
+        test("POST purchase mapping IDEMPOTENCY_KEY_CONFLICT returns 409") {
+            whenever(shopPurchaseFacade.purchase(eq(1L), any())).thenThrow(IdempotencyKeyConflictException())
+            mockMvc.perform(
+                post("/api/shop/purchase").principal(principal)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"itemCode":"EVO_STONE","qty":1,"idempotencyKey":"$validUuid"}""")
+            )
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_CONFLICT"))
+        }
+
+        test("POST purchase with blank itemCode returns 400 VALIDATION") {
+            mockMvc.perform(
+                post("/api/shop/purchase").principal(principal)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"itemCode":"","qty":1,"idempotencyKey":"$validUuid"}""")
+            )
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("VALIDATION"))
         }
     }
 }

@@ -24,7 +24,7 @@ class ShopController(
 ) {
     @GetMapping("/items")
     fun items(@RequestParam category: ShopItemCategory): ShopCatalogResponse =
-        ShopCatalogResponse.of(category, shopCatalogService.listItems(category))
+        ShopCatalogResponse.from(category, shopCatalogService.listItems(category))
 
     @PostMapping("/purchase")
     fun purchase(

@@ -17,7 +17,7 @@ data class ShopCatalogResponse(
     )
 
     companion object {
-        fun of(category: ShopItemCategory, items: List<ShopItem>) = ShopCatalogResponse(
+        fun from(category: ShopItemCategory, items: List<ShopItem>) = ShopCatalogResponse(
             category = category.name,
             phase1Active = category.phase1Active,
             items = items.map {
