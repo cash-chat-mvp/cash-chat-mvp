@@ -1,0 +1,146 @@
+package com.wnl.cashchat.api.domain.evolution.service
+
+import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
+import com.wnl.cashchat.api.domain.evolution.exception.AlreadyMaxLevelException
+import com.wnl.cashchat.api.domain.evolution.persistence.entity.EvolutionAttempt
+import com.wnl.cashchat.api.domain.evolution.persistence.entity.UserEvolution
+import com.wnl.cashchat.api.domain.evolution.persistence.repository.EvolutionAttemptRepository
+import com.wnl.cashchat.api.domain.evolution.persistence.repository.UserEvolutionRepository
+import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
+import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties.LevelRule
+import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
+import com.wnl.cashchat.api.domain.point.persistence.entity.PointTransactionReason
+import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.user.persistence.entity.Role
+import com.wnl.cashchat.api.domain.user.persistence.entity.User
+import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.spec.style.FunSpec
+import io.kotest.matchers.shouldBe
+import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+
+class EvolutionServiceTest : FunSpec({
+    lateinit var userEvolutionRepository: UserEvolutionRepository
+    lateinit var evolutionAttemptRepository: EvolutionAttemptRepository
+    lateinit var userPointService: UserPointService
+    lateinit var probabilityRoller: ProbabilityRoller
+    lateinit var service: EvolutionService
+
+    val userId = 1L
+    fun user() = User(id = userId, role = Role.GUEST, provider = AuthProviderType.NONE, name = "Guest")
+    val properties = EvolutionProperties(
+        rules = listOf(
+            LevelRule(fromLevel = 1, attemptCost = 500, successRate = 0.7),
+            LevelRule(fromLevel = 2, attemptCost = 1200, successRate = 0.5),
+        ),
+    )
+
+    beforeTest {
+        userEvolutionRepository = mock()
+        evolutionAttemptRepository = mock()
+        userPointService = mock()
+        probabilityRoller = mock()
+        service = EvolutionService(
+            userEvolutionRepository,
+            evolutionAttemptRepository,
+            userPointService,
+            probabilityRoller,
+            properties,
+        )
+        whenever(evolutionAttemptRepository.findByIdempotencyKey(any())).thenReturn(null)
+    }
+
+    test("getState returns current level and next transition rule") {
+        whenever(userEvolutionRepository.findByUserId(userId)).thenReturn(UserEvolution(user = user(), level = 1))
+
+        val state = service.getState(userId)
+
+        state.level shouldBe 1
+        state.isMaxLevel shouldBe false
+        state.nextAttemptCost shouldBe 500L
+        state.nextSuccessRate shouldBe 0.7
+    }
+
+    test("getState at a level with no rule is reported as max") {
+        whenever(userEvolutionRepository.findByUserId(userId)).thenReturn(UserEvolution(user = user(), level = 3))
+
+        val state = service.getState(userId)
+
+        state.isMaxLevel shouldBe true
+        state.nextAttemptCost shouldBe null
+        state.nextSuccessRate shouldBe null
+    }
+
+    test("successful attempt deducts cost, levels up, and logs success") {
+        whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(UserEvolution(user = user(), level = 1))
+        whenever(probabilityRoller.succeeds(0.7)).thenReturn(true)
+
+        val result = service.attempt(userId, "key-1")
+
+        result.success shouldBe true
+        result.fromLevel shouldBe 1
+        result.resultLevel shouldBe 2
+        result.cost shouldBe 500L
+        verify(userPointService).recordTransaction(
+            eq(userId), eq(-500L), eq(PointTransactionReason.EVOLUTION_ATTEMPT), eq("evolution:key-1"),
+        )
+        verify(evolutionAttemptRepository).save(argThat<EvolutionAttempt> {
+            this.userId == userId && fromLevel == 1 && success && resultLevel == 2 && idempotencyKey == "key-1"
+        })
+    }
+
+    test("failed attempt still deducts cost but does not level up") {
+        whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(UserEvolution(user = user(), level = 1))
+        whenever(probabilityRoller.succeeds(0.7)).thenReturn(false)
+
+        val result = service.attempt(userId, "key-2")
+
+        result.success shouldBe false
+        result.fromLevel shouldBe 1
+        result.resultLevel shouldBe 1
+        verify(userPointService).recordTransaction(
+            eq(userId), eq(-500L), eq(PointTransactionReason.EVOLUTION_ATTEMPT), eq("evolution:key-2"),
+        )
+        verify(evolutionAttemptRepository).save(argThat<EvolutionAttempt> {
+            !success && resultLevel == 1
+        })
+    }
+
+    test("attempt at a level with no rule throws AlreadyMaxLevel and never charges") {
+        whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(UserEvolution(user = user(), level = 3))
+
+        shouldThrow<AlreadyMaxLevelException> { service.attempt(userId, "key-3") }
+
+        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(evolutionAttemptRepository, never()).save(any())
+    }
+
+    test("duplicate idempotency key returns the prior attempt without charging again") {
+        whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(UserEvolution(user = user(), level = 1))
+        whenever(evolutionAttemptRepository.findByIdempotencyKey("key-4")).thenReturn(
+            EvolutionAttempt(userId = userId, fromLevel = 1, cost = 500, success = true, resultLevel = 2, idempotencyKey = "key-4")
+        )
+
+        val result = service.attempt(userId, "key-4")
+
+        result.success shouldBe true
+        result.resultLevel shouldBe 2
+        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(evolutionAttemptRepository, never()).save(any())
+    }
+
+    test("insufficient points propagates and does not level up or log") {
+        whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(UserEvolution(user = user(), level = 1))
+        whenever(userPointService.recordTransaction(any(), any(), any(), any())).thenThrow(InsufficientPointsException())
+
+        shouldThrow<InsufficientPointsException> { service.attempt(userId, "key-5") }
+
+        verify(probabilityRoller, never()).succeeds(any())
+        verify(evolutionAttemptRepository, never()).save(any())
+    }
+})
