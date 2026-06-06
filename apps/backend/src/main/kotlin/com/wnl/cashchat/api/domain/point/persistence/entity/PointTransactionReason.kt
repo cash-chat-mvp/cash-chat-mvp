@@ -7,4 +7,5 @@ enum class PointTransactionReason {
     ATTENDANCE,
     AD_REWARD,
     EVOLUTION_ATTEMPT,
+    LEDGER_REWARD,
 }
