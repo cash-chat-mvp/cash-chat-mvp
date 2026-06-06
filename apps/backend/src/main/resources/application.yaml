@@ -59,6 +59,9 @@ app:
       - source: AD
         cashable-pt: 4
         energy: 3
+  quality:
+    pool-safety-floor-centi-pt: 500000
+    premium-daily-cap-per-user: 50
 
 # OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml
 oauth:
