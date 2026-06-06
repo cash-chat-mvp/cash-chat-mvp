@@ -14,6 +14,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 
 /**
@@ -43,6 +44,7 @@ class AuthApiService(private val baseUrl: String) {
      *
      * POST /api/auth/guest?deviceToken={deviceToken}
      */
+    @Throws(CancellationException::class, Exception::class)
     suspend fun loginAsGuest(deviceToken: String): AuthResponse {
         return httpClient.post("$baseUrl/api/auth/guest") {
             parameter("deviceToken", deviceToken)
@@ -56,6 +58,7 @@ class AuthApiService(private val baseUrl: String) {
      *
      * POST /api/auth/callback/google
      */
+    @Throws(CancellationException::class, Exception::class)
     suspend fun loginWithGoogle(serverAuthCode: String, deviceToken: String): AuthResponse {
         return httpClient.post("$baseUrl/api/auth/callback/google") {
             contentType(ContentType.Application.Json)
@@ -70,6 +73,7 @@ class AuthApiService(private val baseUrl: String) {
      *
      * POST /api/auth/callback/apple
      */
+    @Throws(CancellationException::class, Exception::class)
     suspend fun loginWithApple(
         authorizationCode: String,
         identityToken: String?,
@@ -95,6 +99,7 @@ class AuthApiService(private val baseUrl: String) {
      *
      * POST /api/auth/logout
      */
+    @Throws(CancellationException::class, Exception::class)
     suspend fun logout(refreshToken: String) {
         httpClient.post("$baseUrl/api/auth/logout") {
             contentType(ContentType.Application.Json)
@@ -108,6 +113,7 @@ class AuthApiService(private val baseUrl: String) {
      *
      * POST /api/auth/refresh
      */
+    @Throws(CancellationException::class, Exception::class)
     suspend fun refreshToken(refreshToken: String): AuthResponse {
         return httpClient.post("$baseUrl/api/auth/refresh") {
             contentType(ContentType.Application.Json)

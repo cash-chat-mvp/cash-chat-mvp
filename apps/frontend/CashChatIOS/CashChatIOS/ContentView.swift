@@ -105,6 +105,8 @@ final class AppState: ObservableObject {
         } catch AppleSignInError.canceled {
             // 사용자 취소 — 토스트 없이 무시
         } catch {
+            // 근본 원인 진단용 로그 (Xcode 콘솔). Kotlin suspend 예외는 @Throws로 전파됨.
+            print("❌ Apple 로그인 실패: \(error)")
             errorMessage = "Apple 로그인에 실패했습니다. 다시 시도해주세요."
         }
     }
