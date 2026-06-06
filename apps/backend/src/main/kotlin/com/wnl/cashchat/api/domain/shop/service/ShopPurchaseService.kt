@@ -36,6 +36,7 @@ class ShopPurchaseService(
 ) {
     @Transactional
     fun purchase(userId: Long, command: PurchaseCommand): PurchaseResult {
+        // 내부 불변식 백스톱(음수/0 grant 방지). 사용자 대면 검증은 컨트롤러 @Valid @Min(1)=400 VALIDATION 가 담당.
         require(command.qty >= 1) { "qty must be >= 1, got ${command.qty}" }
 
         // 1) 멱등성 선조회: 같은 (userId, key) 주문이 이미 있으면 재차감 없이 현재 상태 반환
@@ -105,7 +106,9 @@ class ShopPurchaseService(
 
     // 현재 시점 코인 잔액 + 인벤토리(itemCode 오름차순)를 재조회해 결과를 만든다(stale 스냅샷 미반환).
     private fun buildResult(userId: Long, order: PurchaseOrder): PurchaseResult {
-        val balance = userPointRepository.findByUserId(userId)?.balance ?: 0L
+        // upsertQty 의 flush/clear 이후 재조회 → recordTransaction 이 적용·flush 한 차감 잔액을 DB 에서 다시 읽는다.
+        val balance = userPointRepository.findByUserId(userId)?.balance
+            ?: throw IllegalStateException("UserPoint not initialized for userId=$userId")
         val inventory = userInventoryRepository.findByUserIdOrderByItemCodeAsc(userId)
             .map { InventoryLine(itemCode = it.itemCode, qty = it.qty) }
         return PurchaseResult(

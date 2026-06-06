@@ -115,6 +115,13 @@ class ShopPurchaseIntegrationTest : FunSpec() {
             }
         }
 
+        test("qty < 1 is rejected by the service invariant guard") {
+            val userId = newUserWithBalance("badqty", 1000)
+            shouldThrow<IllegalArgumentException> {
+                facade.purchase(userId, PurchaseCommand("EVO_STONE", 0, "kq0"))
+            }
+        }
+
         test("idempotent replay returns current state without double-debit") {
             val userId = newUserWithBalance("idem", 1250)
 
