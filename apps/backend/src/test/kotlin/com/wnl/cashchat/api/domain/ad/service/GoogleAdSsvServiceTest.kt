@@ -300,20 +300,20 @@ class GoogleAdSsvServiceTest : FunSpec({
         verify(ledgerService).recordRevenue(eq(42L), eq(RevenueSource.AD), eq(10L), eq("ad:ssv:txn-123"))
     }
 
-    test("non-numeric userId in callback is silently skipped without ledger credit") {
+    test("non-numeric userId in callback is rejected as validation failure before storing") {
         val parser = mock<GoogleAdSsvQueryParser>()
         val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
         val repository = mock<GoogleAdSsvEventRepository>()
         val ledgerService = mock<LedgerService>()
         val callbackNonNumeric = callback(userId = "non-numeric-id")
         whenever(parser.parse(rawQuery)).thenReturn(callbackNonNumeric)
-        whenever(repository.findByTransactionId(callbackNonNumeric.transactionId)).thenReturn(null)
-        whenever(repository.saveAndFlush(any<GoogleAdSsvEvent>())).thenAnswer { it.arguments[0] }
         val service = service(parser, signatureVerifier, repository, ledgerService = ledgerService)
 
-        service.verifyAndStore(rawQuery)
+        shouldThrow<InvalidGoogleAdSsvCallbackException> {
+            service.verifyAndStore(rawQuery)
+        }
 
-        verify(repository).saveAndFlush(any<GoogleAdSsvEvent>())
+        verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
         verify(ledgerService, never()).recordRevenue(any(), any(), any(), any())
     }
 })

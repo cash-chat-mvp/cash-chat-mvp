@@ -24,25 +24,27 @@ class GoogleAdSsvService(
     fun verifyAndStore(rawQueryString: String?): GoogleAdSsvVerificationResult {
         val callback = parser.parse(rawQueryString)
         validateAdUnit(callback)
+        val internalUserId = callback.userId.toLongOrNull()
+            ?: throw InvalidGoogleAdSsvCallbackException("Google Ad SSV userId is not a numeric internal id: ${callback.userId}")
         signatureVerifier.verify(callback.signedPayload, callback.signature, callback.keyId)
 
         val existingEvent = repository.findByTransactionId(callback.transactionId)
         if (existingEvent != null) {
             logIfCoreFieldsDiffer(callback, existingEvent)
             // 멱등: ledger 적립(키 기반 멱등이라 재호출해도 중복 적립 없음)
-            creditReward(callback)
+            creditReward(internalUserId, callback)
             return GoogleAdSsvVerificationResult(callback, newlyStored = false)
         }
 
         return try {
             repository.saveAndFlush(callback.toEntity())
-            creditReward(callback)
+            creditReward(internalUserId, callback)
             GoogleAdSsvVerificationResult(callback, newlyStored = true)
         } catch (exception: DataIntegrityViolationException) {
             val duplicateEvent = repository.findByTransactionId(callback.transactionId)
             if (duplicateEvent != null) {
                 logIfCoreFieldsDiffer(callback, duplicateEvent)
-                creditReward(callback)
+                creditReward(internalUserId, callback)
                 GoogleAdSsvVerificationResult(callback, newlyStored = false)
             } else {
                 throw exception
@@ -54,19 +56,14 @@ class GoogleAdSsvService(
      * SSV 검증 성공 후 LedgerService 를 통해 유저에게 보상 적립.
      *
      * grossRevenue = callback.rewardAmount (Google SSV 콜백의 reward_amount).
-     * userId = callback.userId.toLong() (클라이언트 SDK 가 우리 내부 user.id 를 전달).
+     * internalUserId = callback.userId 로부터 파싱된 내부 user.id (클라이언트 SDK 가 Long 을 문자열로 전달).
      * idempotencyKey = "ad:ssv:<transactionId>" (SSV transactionId 를 멱등 키로 사용).
      *
      * ledgerService.recordRevenue 가 예외를 던지더라도 SSV 검증은 이미 성공했고
      * 이벤트 행도 저장됐으므로 예외를 전파하지 않는다. 전파하면 Google 이 콜백을 재시도하므로
      * 운영 추적을 위해 ERROR 로 기록하고 삼킨다(retry storm 방지).
      */
-    private fun creditReward(callback: GoogleAdSsvCallback) {
-        val internalUserId = callback.userId.toLongOrNull()
-            ?: run {
-                logger.warn("Google Ad SSV userId is not a numeric internal id: {}", callback.userId)
-                return
-            }
+    private fun creditReward(internalUserId: Long, callback: GoogleAdSsvCallback) {
         try {
             ledgerService.recordRevenue(
                 userId = internalUserId,
