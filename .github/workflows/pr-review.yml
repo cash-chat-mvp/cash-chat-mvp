@@ -135,6 +135,7 @@ jobs:
           MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
           DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_API_URL: ${{ github.event.pull_request.url }}
           RETRY_CMD: "/gemini-review"
           EVENT_ACTION: ${{ github.event.action }}
         run: |
@@ -147,18 +148,6 @@ jobs:
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")) or (.body | test("^## 💡 심층 리뷰를 권장")))) | .id' \
-              | while read -r cid; do
-                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null || true
-                done || true
-          }
-          # 코드 제안이 "제안 없음"인데 실제로는 사용량 소진인 경우 그 코멘트 삭제
-          # (주의: 반드시 localize_comments 이전·영문 상태에서 호출되어야 정상 결과를 지우지 않음)
-          delete_no_suggestions_comment() {
-            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
-            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
-              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null || true
@@ -264,15 +253,23 @@ jobs:
               # MODEL1에게 해결 여부 + 판단 근거 요청
               # thinkingBudget:0 으로 사고 토큰 소비를 막아 verdict/근거 출력을 보장
               # 응답 형식: 첫 줄 = yes/no, 둘째 줄 = 해결된 이유 (yes인 경우)
-              local prompt raw_answer
+              local prompt raw_answer gem_resp attempt
               prompt=$(printf '코드 리뷰 코멘트가 아래 diff로 해결되었나요?\n첫 줄에 "yes" 또는 "no"만 쓰고, yes라면 둘째 줄에 해결 이유를 한국어 한 문장으로 작성해 주세요.\n\n파일: %s\n코멘트: %s\n\nDiff:\n%s' \
                 "$fpath" "$body" "$fdiff")
-              raw_answer=$(curl -s --max-time 20 -X POST \
-                "https://generativelanguage.googleapis.com/v1beta/models/${gemini_model}:generateContent?key=${GEMINI_KEY}" \
-                -H "Content-Type: application/json" \
-                -d "$(jq -n --arg p "$prompt" \
-                  '{contents:[{role:"user",parts:[{text:$p}]}],generationConfig:{maxOutputTokens:256,temperature:0}}')" \
-                | jq -r '.candidates[0].content.parts[0].text // "no"' 2>/dev/null || echo "no")
+              # 분당 한도(RPM) 보호: 429면 20초 후 1회 재시도
+              gem_resp=""
+              for attempt in 1 2; do
+                gem_resp=$(curl -s --max-time 20 -X POST \
+                  "https://generativelanguage.googleapis.com/v1beta/models/${gemini_model}:generateContent?key=${GEMINI_KEY}" \
+                  -H "Content-Type: application/json" \
+                  -d "$(jq -n --arg p "$prompt" \
+                    '{contents:[{role:"user",parts:[{text:$p}]}],generationConfig:{maxOutputTokens:256,temperature:0}}')")
+                printf '%s' "$gem_resp" | grep -qiE 'RESOURCE_EXHAUSTED|"code": ?429|rate.?limit' || break
+                [ "$attempt" = "1" ] && sleep 20
+              done
+              raw_answer=$(printf '%s' "$gem_resp" | jq -r '.candidates[0].content.parts[0].text // "no"' 2>/dev/null || echo "no")
+              # 다음 스레드 판정 호출까지 간격을 두어 연속 폭주 방지
+              sleep 5
 
               # 첫 줄: yes/no 판단 / 둘째 줄: 근거
               local verdict reason
@@ -346,34 +343,54 @@ jobs:
             -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           LOG=$(mktemp)
           set +e
-          docker run --rm \
-            -e GITHUB_TOKEN \
-            -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
-            -e GITHUB_REPOSITORY="${{ github.repository }}" \
-            -e GITHUB_API_URL="${{ github.api_url }}" \
-            -e GITHUB_SERVER_URL="${{ github.server_url }}" \
-            -e GITHUB_EVENT_PATH=/github/workflow/event.json \
-            -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-            "${MODEL_ENV[@]}" \
-            -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
-            -e "GEMINI_API_KEY=$GEMINI_KEY" \
-            -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
-            -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
-            -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=false" \
-            -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
-            "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
+          if [ "$EVENT_ACTION" = "synchronize" ]; then
+            # 증분 리뷰: 마지막 리뷰 이후 새 커밋만 검토 — 토큰·쿼터 절감, 변경분에만 코멘트.
+            # 이미지 entrypoint는 args를 무시하고 github_action_runner만 실행하므로,
+            # /review -i 를 태우려면 코멘트 명령 경로를 합성 이벤트로 재현한다
+            # (pull_request_review_comment → handle_request(url, "/review -i"), disable_eyes=True).
+            SYNTH_EVENT=$(mktemp)
+            jq -n --arg url "$PR_API_URL" \
+              '{action:"created",comment:{pull_request_url:$url,body:"/review -i",id:0}}' > "$SYNTH_EVENT"
+            docker run --rm \
+              -e GITHUB_TOKEN \
+              -e GITHUB_EVENT_NAME="pull_request_review_comment" \
+              -e GITHUB_REPOSITORY="${{ github.repository }}" \
+              -e GITHUB_API_URL="${{ github.api_url }}" \
+              -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+              -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+              -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+              "${MODEL_ENV[@]}" \
+              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
+              -e "GEMINI_API_KEY=$GEMINI_KEY" \
+              -v "$SYNTH_EVENT:/github/workflow/event.json:ro" \
+              "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
+          else
+            # 최초/재오픈: PR 전체 리뷰 (github_action 자동 모드)
+            docker run --rm \
+              -e GITHUB_TOKEN \
+              -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+              -e GITHUB_REPOSITORY="${{ github.repository }}" \
+              -e GITHUB_API_URL="${{ github.api_url }}" \
+              -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+              -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+              -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+              "${MODEL_ENV[@]}" \
+              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
+              -e "GEMINI_API_KEY=$GEMINI_KEY" \
+              -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
+              -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
+              -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=false" \
+              -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
+              "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
+          fi
           docker_status=${PIPESTATUS[0]}
           set -e
+          # 실패 판정은 '하드 마커'(전 모델/재시도 소진)만으로 한다.
+          # litellm이 내부 재시도로 복구한 일시적 429/503은 마커를 남기지 않으므로,
+          # 리뷰가 정상 게시됐는데 로그에 429 흔적이 있다고 거짓 실패시키지 않는다.
           if [ "$docker_status" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; then
             notify_failure "$LOG"
             echo "::error::Gemini 리뷰 실패 — 로그를 확인하세요"
-            exit 1
-          fi
-          # 하드 실패는 아니지만 로그에 할당량 마커가 있으면 조용한 소진으로 처리
-          if grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429" "$LOG"; then
-            delete_no_suggestions_comment
-            notify_failure "$LOG"
-            echo "::error::Gemini 사용량 소진(소프트) — 로그를 확인하세요"
             exit 1
           fi
           # 리뷰 가이드 / 코드 제안 코멘트의 하드코딩 영문 라벨을 한국어로 치환
@@ -418,81 +435,6 @@ jobs:
           recommend_deep_review
 
   # ====================================================
-  # Gemini 자동 설명 (PR 생성/재오픈 시 /describe → 코멘트 게시)
-  # 제목·본문은 건드리지 않고 AI 요약을 별도 코멘트로만 추가.
-  # 모델은 model1(2순위)을 사용 — 리뷰(model0)와 분리.
-  # ====================================================
-  describe-gemini-auto:
-    name: Gemini Auto Describe
-    needs: resolve-gemini-model
-    if: |
-      github.event_name == 'pull_request_target' &&
-      (github.event.action == 'opened' || github.event.action == 'reopened')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Generate Gemini bot token
-        id: bot-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
-        with:
-          app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
-          private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
-      - name: Resolve reviewer key (PR author)
-        id: whichkey
-        env:
-          LOGIN: ${{ github.event.pull_request.user.login }}
-        run: |
-          set -euo pipefail
-          login_lc=$(printf '%s' "$LOGIN" | tr '[:upper:]' '[:lower:]')
-          case "$login_lc" in
-            gudals-kim) s=GUDALS ;;
-            seedplan005|jwchoi42) s=CHOI ;;
-            jeonj95|unistuj) s=JEON ;;
-            *) s="" ;;
-          esac
-          echo "suffix=$s" >> "$GITHUB_OUTPUT"
-          echo "::notice::자동 설명 키 소유자: ${s:-공용(기본)}"
-      - name: AI Describe (Gemini model1 → comment)
-        env:
-          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          # describe는 2순위 모델(model1)만 사용 — 리뷰(model0)와 쿼터 분리
-          MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
-          MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
-          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
-        run: |
-          set -euo pipefail
-          GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
-          # MODEL=MODEL_WEAK=model1 로 통일, 폴백 차단([])해 이미지 기본값(gpt) 방지.
-          # publish_description_as_comment / generate_ai_title=false 는 .pr_agent.toml 정적 설정.
-          MODEL_ENV=(-e "CONFIG.MODEL=$MODEL1" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]")
-          LOG=$(mktemp)
-          set +e
-          docker run --rm \
-            -e GITHUB_TOKEN \
-            -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
-            -e GITHUB_REPOSITORY="${{ github.repository }}" \
-            -e GITHUB_API_URL="${{ github.api_url }}" \
-            -e GITHUB_SERVER_URL="${{ github.server_url }}" \
-            -e GITHUB_EVENT_PATH=/github/workflow/event.json \
-            -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-            "${MODEL_ENV[@]}" \
-            -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
-            -e "GEMINI_API_KEY=$GEMINI_KEY" \
-            -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=false" \
-            -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=true" \
-            -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=false" \
-            -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
-            "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
-          docker_status=${PIPESTATUS[0]}
-          set -e
-          # describe는 보조 기능 — 실패해도 PR 체크를 깨지 않고 경고만 남긴다.
-          # PR_AGENT_FAIL_MARKERS가 비면 grep -qE "" 가 모든 줄에 매칭돼 오탐하므로 가드.
-          if [ "$docker_status" -ne 0 ] || { [ -n "${PR_AGENT_FAIL_MARKERS:-}" ] && grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG"; }; then
-            echo "::warning::Gemini 자동 설명 실패 — 제목·본문은 그대로 유지됩니다"
-          fi
-
-  # ====================================================
   # Gemini 수동 리뷰 (/gemini-review 코멘트)
   # 코멘트 본문을 /review 로 바꿔치기 후 실행
   # ====================================================
@@ -531,18 +473,6 @@ jobs:
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")) or (.body | test("^## 💡 심층 리뷰를 권장")))) | .id' \
-              | while read -r cid; do
-                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null || true
-                done || true
-          }
-          # 코드 제안이 "제안 없음"인데 실제로는 사용량 소진인 경우 그 코멘트 삭제
-          # (주의: 반드시 localize_comments 이전·영문 상태에서 호출되어야 정상 결과를 지우지 않음)
-          delete_no_suggestions_comment() {
-            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
-            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
-              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null || true
@@ -653,16 +583,6 @@ jobs:
               curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
             fi
           }
-          # 각 명령 직후 소프트 사용량 소진 검사 (/review 단계 누락 방지)
-          check_soft_quota() {
-            local log="$1"
-            if grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429" "$log"; then
-              delete_no_suggestions_comment
-              notify_failure "$log"
-              echo "::error::사용량 소진(소프트) — 로그를 확인하세요"
-              exit 1
-            fi
-          }
           cleanup_notices
           # 리뷰 진행 중 안내 — 완료/실패와 무관하게 trap으로 자동 삭제
           PROGRESS_ID=""
@@ -679,7 +599,6 @@ jobs:
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
             -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           run_command "/review"
-          check_soft_quota "$LAST_LOG"
           localize_comments
           recommend_deep_review
 
@@ -769,18 +688,6 @@ jobs:
             curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
               "$api/issues/${PR_NUMBER}/comments?per_page=100" \
               | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body == "Failed to generate code suggestions for PR" or .body == "Preparing review..." or .body == "Preparing suggestions..." or (.body | test("^## ⏳ 오늘의 AI 리뷰")) or (.body | test("^## ⚠️ AI 리뷰를 완료하지")) or (.body | test("^## 🔍 AI 코드 리뷰를 진행")) or (.body | test("^## 💡 심층 리뷰를 권장")))) | .id' \
-              | while read -r cid; do
-                  [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
-                    "$api/issues/comments/${cid}" >/dev/null || true
-                done || true
-          }
-          # 코드 제안이 "제안 없음"인데 실제로는 사용량 소진인 경우 그 코멘트 삭제
-          # (주의: 반드시 localize_comments 이전·영문 상태에서 호출되어야 정상 결과를 지우지 않음)
-          delete_no_suggestions_comment() {
-            local api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
-            curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
-              "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-              | jq -r '.[] | select(.user != null and .user.type == "Bot" and .body != null and (.body | test("PR Code Suggestions|PR 코드 개선 제안")) and (.body | test("No code suggestions found|개선할 점을 찾지 못했|개선 제안이 없습니다"))) | .id' \
               | while read -r cid; do
                   [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" \
                     "$api/issues/comments/${cid}" >/dev/null || true
@@ -891,16 +798,6 @@ jobs:
               curl -s -X PATCH -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "$api/issues/comments/${sid}" -d "$(jq -n --arg b "$body" '{body: $b}')" >/dev/null
             fi
           }
-          # 각 명령 직후 소프트 사용량 소진 검사 (/review 단계 누락 방지)
-          check_soft_quota() {
-            local log="$1"
-            if grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429|insufficient_quota" "$log"; then
-              delete_no_suggestions_comment
-              notify_failure "$log"
-              echo "::error::사용량 소진(소프트) — 로그를 확인하세요"
-              exit 1
-            fi
-          }
           cleanup_notices
           # 리뷰 진행 중 안내 — 완료/실패와 무관하게 trap으로 자동 삭제
           PROGRESS_ID=""
@@ -917,7 +814,6 @@ jobs:
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
             -d "$(jq -n --arg b "$PROGRESS_BODY" '{body:$b}')" | jq -r '.id // empty' || true)
           run_command "/review"
-          check_soft_quota "$LAST_LOG"
           localize_comments
           recommend_deep_review
 
