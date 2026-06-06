@@ -14,6 +14,8 @@ enum AppleSignInError: Error {
     case canceled
     /// authorizationCode를 추출하지 못함.
     case missingAuthorizationCode
+    /// 이미 진행 중인 요청이 있음 (중복 호출) — 상위에서 무시.
+    case alreadyInProgress
 }
 
 /// ASAuthorizationController를 async/await로 래핑한다.
@@ -27,6 +29,11 @@ final class AppleSignInCoordinator: NSObject {
         request.requestedScopes = [.fullName, .email]
 
         return try await withCheckedThrowingContinuation { continuation in
+            // 재진입 가드: 진행 중인 요청이 있으면 기존 continuation을 덮어쓰지 않고 즉시 거부.
+            guard self.continuation == nil else {
+                continuation.resume(throwing: AppleSignInError.alreadyInProgress)
+                return
+            }
             self.continuation = continuation
             let controller = ASAuthorizationController(authorizationRequests: [request])
             controller.delegate = self

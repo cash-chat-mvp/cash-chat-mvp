@@ -96,19 +96,28 @@ final class AppState: ObservableObject {
                 fullName: credential.fullName,
                 deviceToken: deviceToken
             )
-            KeychainHelper.set(response.accessToken, forKey: Keys.accessToken)
-            KeychainHelper.set(response.role, forKey: Keys.role)
-            if let refreshToken = response.refreshToken {
-                KeychainHelper.set(refreshToken, forKey: Keys.refreshToken)
-            }
-            isAuthenticated = true
+            persistSession(response)
         } catch AppleSignInError.canceled {
             // 사용자 취소 — 토스트 없이 무시
+        } catch AppleSignInError.alreadyInProgress {
+            // 이미 진행 중인 요청 — 무시 (중복 탭)
         } catch {
             // 근본 원인 진단용 로그 (Xcode 콘솔). Kotlin suspend 예외는 @Throws로 전파됨.
+            #if DEBUG
             print("❌ Apple 로그인 실패: \(error)")
+            #endif
             errorMessage = "Apple 로그인에 실패했습니다. 다시 시도해주세요."
         }
+    }
+
+    // Member 로그인 응답의 토큰을 Keychain에 저장하고 인증 상태로 전환. (Google/Apple 공통)
+    private func persistSession(_ response: AuthResponse) {
+        KeychainHelper.set(response.accessToken, forKey: Keys.accessToken)
+        KeychainHelper.set(response.role, forKey: Keys.role)
+        if let refreshToken = response.refreshToken {
+            KeychainHelper.set(refreshToken, forKey: Keys.refreshToken)
+        }
+        isAuthenticated = true
     }
 
     // TODO: Apple 로그인 API 완성 시 이 메서드 및 관련 버튼 제거
@@ -135,12 +144,7 @@ final class AppState: ObservableObject {
 
             let deviceToken = getOrCreateDeviceToken()
             let response = try await apiService.loginWithGoogle(serverAuthCode: serverAuthCode, deviceToken: deviceToken)
-            KeychainHelper.set(response.accessToken, forKey: Keys.accessToken)
-            KeychainHelper.set(response.role, forKey: Keys.role)
-            if let refreshToken = response.refreshToken {
-                KeychainHelper.set(refreshToken, forKey: Keys.refreshToken)
-            }
-            isAuthenticated = true
+            persistSession(response)
         } catch {
             errorMessage = "Google 로그인에 실패했습니다. 다시 시도해주세요."
         }
