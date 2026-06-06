@@ -62,6 +62,26 @@ app:
   quality:
     pool-safety-floor-centi-pt: 500000
     premium-daily-cap-per-user: 50
+  routing:
+    meal-margin-centi-pt: 32
+    mini-delta-centi-pt: 270
+    gpt-delta-centi-pt: 1620
+    levels:
+      - level: 1
+        mini: 0.00
+        gpt: 0.00
+      - level: 2
+        mini: 0.05
+        gpt: 0.00
+      - level: 3
+        mini: 0.20
+        gpt: 0.00
+      - level: 4
+        mini: 0.35
+        gpt: 0.05
+      - level: 5
+        mini: 0.50
+        gpt: 0.10
 
 # OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml
 oauth:
