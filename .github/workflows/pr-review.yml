@@ -24,6 +24,46 @@ env:
 
 jobs:
   # ====================================================
+  # 댓글 명령어 앵커 파싱 + 권한 게이트 (댓글 이벤트 전용 단일 소스)
+  # ====================================================
+  detect-command:
+    name: Detect Command
+    if: github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      authorized: ${{ steps.d.outputs.authorized }}
+      is_gemini_review: ${{ steps.d.outputs.is_gemini_review }}
+      is_openai_review: ${{ steps.d.outputs.is_openai_review }}
+      is_ask: ${{ steps.d.outputs.is_ask }}
+      is_resolve: ${{ steps.d.outputs.is_resolve }}
+      is_help: ${{ steps.d.outputs.is_help }}
+    steps:
+      - name: Checkout (scripts)
+        uses: actions/checkout@v5
+      - name: Parse
+        id: d
+        env:
+          BODY: ${{ github.event.comment.body }}
+          ASSOC: ${{ github.event.comment.author_association }}
+          IS_BOT: ${{ github.event.comment.user.type == 'Bot' }}
+          IS_PR: ${{ github.event.issue.pull_request != null || github.event_name == 'pull_request_review_comment' }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_cmd.sh
+          authorized=false
+          if [ "$IS_BOT" != "true" ] && [ "$IS_PR" = "true" ] && \
+             printf '%s' "$ASSOC" | grep -qxE 'OWNER|MEMBER|COLLABORATOR'; then
+            authorized=true
+          fi
+          echo "authorized=$authorized" >> "$GITHUB_OUTPUT"
+          for c in gemini-review openai-review ask resolve help; do
+            key="is_${c//-/_}"
+            if detect_command "$BODY" "$c"; then echo "$key=true" >> "$GITHUB_OUTPUT"; else echo "$key=false" >> "$GITHUB_OUTPUT"; fi
+          done
+
+  # ====================================================
   # Gemini: 사용 가능한 모델 순차 탐색 (자동·수동 공용)
   # ====================================================
   resolve-gemini-model:
@@ -34,11 +74,11 @@ jobs:
        github.event.comment.user.type != 'Bot' &&
        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
        github.event.issue.pull_request != null &&
-       (contains(github.event.comment.body, '/gemini-review') || contains(github.event.comment.body, '/ask'))) ||
+       (startsWith(github.event.comment.body, '/gemini-review') || startsWith(github.event.comment.body, '/ask'))) ||
       (github.event_name == 'pull_request_review_comment' &&
        github.event.comment.user.type != 'Bot' &&
        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
-       (contains(github.event.comment.body, '/ask') || startsWith(github.event.comment.body, '/resolve')))
+       (startsWith(github.event.comment.body, '/ask') || startsWith(github.event.comment.body, '/resolve')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -179,13 +219,8 @@ jobs:
   # ====================================================
   review-gemini-manual:
     name: Gemini Manual Review
-    needs: resolve-gemini-model
-    if: |
-      github.event_name == 'issue_comment' &&
-      github.event.comment.user.type != 'Bot' &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
-      github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '/gemini-review')
+    needs: [resolve-gemini-model, detect-command]
+    if: needs.detect-command.outputs.authorized == 'true' && needs.detect-command.outputs.is_gemini_review == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -246,12 +281,8 @@ jobs:
   # ====================================================
   resolve-openai-model:
     name: Resolve OpenAI Model
-    if: |
-      github.event_name == 'issue_comment' &&
-      github.event.comment.user.type != 'Bot' &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
-      github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '/openai-review')
+    needs: [detect-command]
+    if: needs.detect-command.outputs.authorized == 'true' && needs.detect-command.outputs.is_openai_review == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -300,13 +331,8 @@ jobs:
   # ====================================================
   review-openai-manual:
     name: OpenAI Manual Review
-    needs: resolve-openai-model
-    if: |
-      github.event_name == 'issue_comment' &&
-      github.event.comment.user.type != 'Bot' &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
-      github.event.issue.pull_request != null &&
-      contains(github.event.comment.body, '/openai-review')
+    needs: [resolve-openai-model, detect-command]
+    if: needs.detect-command.outputs.authorized == 'true' && needs.detect-command.outputs.is_openai_review == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -365,17 +391,8 @@ jobs:
   # ====================================================
   ask-gemini:
     name: Gemini Ask
-    needs: resolve-gemini-model
-    if: |
-      (github.event_name == 'issue_comment' &&
-       github.event.comment.user.type != 'Bot' &&
-       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
-       github.event.issue.pull_request != null &&
-       contains(github.event.comment.body, '/ask')) ||
-      (github.event_name == 'pull_request_review_comment' &&
-       github.event.comment.user.type != 'Bot' &&
-       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
-       contains(github.event.comment.body, '/ask'))
+    needs: [resolve-gemini-model, detect-command]
+    if: needs.detect-command.outputs.authorized == 'true' && needs.detect-command.outputs.is_ask == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -450,13 +467,8 @@ jobs:
   # ====================================================
   resolve-command:
     name: Resolve Command
-    needs: resolve-gemini-model
-    if: |
-      github.event_name == 'pull_request_review_comment' &&
-      github.event.action == 'created' &&
-      github.event.comment.user.type != 'Bot' &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
-      startsWith(github.event.comment.body, '/resolve')
+    needs: [resolve-gemini-model, detect-command]
+    if: needs.detect-command.outputs.authorized == 'true' && needs.detect-command.outputs.is_resolve == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
