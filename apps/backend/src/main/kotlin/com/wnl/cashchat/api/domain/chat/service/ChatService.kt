@@ -16,8 +16,6 @@ import com.wnl.cashchat.api.domain.chat.service.routing.ModelTier
 import com.wnl.cashchat.api.domain.chat.web.response.ChatMessageResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
-import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
-import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -37,7 +35,6 @@ class ChatService(
     private val conversationRepository: ConversationRepository,
     private val chatMessageRepository: ChatMessageRepository,
     private val userRepository: UserRepository,
-    private val userPointService: UserPointService,
     private val llmProvider: LlmProvider,
     private val chatModelRouter: ChatModelRouter,
     transactionManager: PlatformTransactionManager,
@@ -94,18 +91,14 @@ class ChatService(
      * Streams an assistant response while persisting the user input and final assistant state.
      *
      * Economic loop (CC-340): routeAndConsume runs exactly once inside the setup transaction,
-     * after the legacy point gate and before the LLM token stream starts.
-     * InsufficientEnergyException propagates up and is mapped to 409 by ChatExceptionHandler.
+     * consuming 밥(energy) and routing to the appropriate model tier.
+     * InsufficientEnergyException is the sole gate — it propagates up and is mapped to 409 by ChatExceptionHandler.
      */
     fun stream(userId: Long, conversationId: Long, content: String): Flux<String> {
         val today = LocalDate.now()
         val streamContext = transactionTemplate.execute {
             val conversation = conversationRepository.findByIdAndUserId(conversationId, userId)
                 ?: throw ConversationNotFoundException(conversationId)
-
-            if (!userPointService.hasEnoughBalance(userId)) {
-                throw InsufficientPointsException()
-            }
 
             // Economic gate + routing decision (밥 차감 → 풀 적립 → 티어 결정).
             // InsufficientEnergyException propagates; no LLM call occurs.
