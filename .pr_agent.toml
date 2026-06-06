@@ -54,6 +54,7 @@ extra_instructions = """
 [pr_code_suggestions]
 # 코드 줄에 직접 커밋가능 인라인 제안 (CodeRabbit 라인 코멘트 재현)
 commitable_code_suggestions = true
+num_code_suggestions = 7
 extra_instructions = "위 리뷰 페르소나와 동일한 친절한 한국어 톤으로, AS-IS/TO-BE를 포함해 작성하세요."
 
 [ignore]
