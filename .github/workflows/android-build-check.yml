@@ -5,27 +5,20 @@ on:
     types: [opened, synchronize, reopened]
     branches: [dev]
 
-# 같은 PR에 연속 푸시 시 이전 빌드 런 취소 (자원 절약)
 concurrency:
   group: android-build-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  build-check:
+  detect:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/frontend
-
+    outputs:
+      build: ${{ steps.f.outputs.build }}
     steps:
-      - name: Checkout
+      - name: Checkout (scripts only)
         uses: actions/checkout@v5
-
-      # 워크플로 레벨 paths: 는 PR 누적 diff 기준이라, android 변경이 한 번이라도
-      # 포함된 PR은 이후 무관한 푸시(docs 등)에도 빌드가 다시 돌았다.
-      # synchronize면 '이번 푸시(before..head)'만, 그 외엔 PR 전체(base..head)를 보고 판정한다.
       - name: Detect Android-relevant changes
-        id: filter
+        id: f
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -35,31 +28,33 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          if [ "$ACTION" = "synchronize" ] && [ -n "${BEFORE:-}" ] && ! printf '%s' "$BEFORE" | grep -qE '^0+$'; then
-            RANGE="${BEFORE}...${HEAD_SHA}"
-          else
-            RANGE="${BASE_SHA}...${HEAD_SHA}"
-          fi
+          . .github/scripts/build/detect_build_changes.sh
+          RANGE="$(changed_range)"
           echo "::notice::비교 범위 $RANGE"
           FILES=$(gh api "repos/${REPO}/compare/${RANGE}" --paginate -q '.files[].filename' 2>/dev/null || true)
           printf '변경 파일:\n%s\n' "$FILES"
-          if printf '%s\n' "$FILES" | grep -qE '^apps/frontend/(app|shared)/|^apps/frontend/.*\.gradle\.kts$|^apps/frontend/gradle/'; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::Android 관련 변경 감지 — 빌드 진행"
+          if printf '%s\n' "$FILES" | affects_android; then
+            echo "build=true" >> "$GITHUB_OUTPUT"; echo "::notice::Android 영향 변경 — 빌드 진행"
           else
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Android 관련 변경 없음 — 빌드 스킵(잡은 성공 처리)"
+            echo "build=false" >> "$GITHUB_OUTPUT"; echo "::notice::Android 영향 없음 — 빌드 잡 스킵"
           fi
 
+  build-check:
+    needs: detect
+    if: needs.detect.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
       - name: Set up JDK 21
-        if: steps.filter.outputs.build == 'true'
         uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
-
       - name: Cache Gradle
-        if: steps.filter.outputs.build == 'true'
         uses: actions/cache@v5
         with:
           path: |
@@ -68,11 +63,7 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('apps/frontend/**/*.gradle.kts', 'apps/frontend/gradle/libs.versions.toml') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-
-      # pull_request 이벤트에서는 Fork PR의 경우 시크릿 접근 불가
-      # 시크릿이 없으면 더미 파일로 빌드 검증만 수행
       - name: Write google-services.json
-        if: steps.filter.outputs.build == 'true'
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
@@ -82,44 +73,16 @@ jobs:
             echo "⚠️ 시크릿 없음 — 더미 google-services.json 생성"
             cat > app/google-services.json << 'EOF'
           {
-            "project_info": {
-              "project_number": "000000000000",
-              "project_id": "dummy-project",
-              "storage_bucket": "dummy-project.appspot.com"
-            },
+            "project_info": { "project_number": "000000000000", "project_id": "dummy-project", "storage_bucket": "dummy-project.appspot.com" },
             "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
-                  "android_client_info": {
-                    "package_name": "com.nomadclub.cashchat"
-                  }
-                },
-                "api_key": [
-                  { "current_key": "DUMMY_KEY_FOR_BUILD_CHECK" }
-                ]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:000000000000:android:0000000000000001",
-                  "android_client_info": {
-                    "package_name": "com.nomadclub.cashchat.dev"
-                  }
-                },
-                "api_key": [
-                  { "current_key": "DUMMY_KEY_FOR_BUILD_CHECK" }
-                ]
-              }
+              { "client_info": { "mobilesdk_app_id": "1:000000000000:android:0000000000000000", "android_client_info": { "package_name": "com.nomadclub.cashchat" } }, "api_key": [ { "current_key": "DUMMY_KEY_FOR_BUILD_CHECK" } ] },
+              { "client_info": { "mobilesdk_app_id": "1:000000000000:android:0000000000000001", "android_client_info": { "package_name": "com.nomadclub.cashchat.dev" } }, "api_key": [ { "current_key": "DUMMY_KEY_FOR_BUILD_CHECK" } ] }
             ],
             "configuration_version": "1"
           }
           EOF
           fi
-
       - name: Make gradlew executable
-        if: steps.filter.outputs.build == 'true'
         run: chmod +x gradlew
-
       - name: Build Debug APK (검증용)
-        if: steps.filter.outputs.build == 'true'
         run: ./gradlew :app:assembleDebug
