@@ -1,4 +1,4 @@
--- V5: 진화(evolution) 도메인 — 유저 레벨 상태 + 진화 시도 원장 (Phase 1 가설값)
+-- V6: 진화(evolution) 도메인 — 유저 레벨 상태 + 진화 시도 원장 (Phase 1 가설값)
 
 CREATE TABLE user_evolution (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
@@ -22,7 +22,7 @@ CREATE TABLE evolution_attempt (
     created_at      TIMESTAMP(6) NOT NULL,
     updated_at      TIMESTAMP(6) NOT NULL,
     PRIMARY KEY (id),
-    CONSTRAINT uq_evolution_attempt_idempotency_key UNIQUE (idempotency_key),
+    CONSTRAINT uq_evolution_attempt_user_key UNIQUE (user_id, idempotency_key),
     CONSTRAINT fk_evolution_attempt_user FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

@@ -39,7 +39,7 @@ class UserEvolution(
         private set
 
     init {
-        require(level >= 1) { "Evolution level must be >= 1" }
+        require(level in 1..MAX_LEVEL) { "Evolution level must be in 1..$MAX_LEVEL" }
     }
 
     fun isMaxLevel(): Boolean = level >= MAX_LEVEL

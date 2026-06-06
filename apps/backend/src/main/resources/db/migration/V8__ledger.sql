@@ -1,4 +1,4 @@
--- V7: 통합 회계(ledger) 도메인 — 수익 분배 감사 원장
+-- V8: 통합 회계(ledger) 도메인 — 수익 분배 감사 원장
 
 CREATE TABLE ledger_entry (
     id                  BIGINT       NOT NULL AUTO_INCREMENT,
@@ -14,7 +14,7 @@ CREATE TABLE ledger_entry (
     created_at          TIMESTAMP(6) NOT NULL,
     updated_at          TIMESTAMP(6) NOT NULL,
     PRIMARY KEY (id),
-    CONSTRAINT uq_ledger_entry_idempotency_key UNIQUE (idempotency_key),
+    CONSTRAINT uq_ledger_entry_user_key UNIQUE (user_id, idempotency_key),
     CONSTRAINT fk_ledger_entry_user FOREIGN KEY (user_id) REFERENCES users (id)
 );
 

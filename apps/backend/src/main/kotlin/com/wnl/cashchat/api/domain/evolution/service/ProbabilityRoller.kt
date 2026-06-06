@@ -15,5 +15,8 @@ class SecureRandomProbabilityRoller : ProbabilityRoller {
     private val random = SecureRandom()
 
     // nextDouble() 은 [0.0, 1.0) → rate=0.0 이면 항상 false, rate=1.0 이면 항상 true.
-    override fun succeeds(successRate: Double): Boolean = random.nextDouble() < successRate
+    override fun succeeds(successRate: Double): Boolean {
+        require(successRate in 0.0..1.0) { "successRate must be in 0.0..1.0" }
+        return random.nextDouble() < successRate
+    }
 }

@@ -1,5 +1,6 @@
 package com.wnl.cashchat.api.domain.quality.properties
 
+import jakarta.validation.constraints.Positive
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.validation.annotation.Validated
 
@@ -11,6 +12,6 @@ import org.springframework.validation.annotation.Validated
 @Validated
 @ConfigurationProperties(prefix = "app.quality")
 data class QualityProperties(
-    val poolSafetyFloorCentiPt: Long = 500_000L,
-    val premiumDailyCapPerUser: Int = 50,
+    @field:Positive val poolSafetyFloorCentiPt: Long = 500_000L,
+    @field:Positive val premiumDailyCapPerUser: Int = 50,
 )

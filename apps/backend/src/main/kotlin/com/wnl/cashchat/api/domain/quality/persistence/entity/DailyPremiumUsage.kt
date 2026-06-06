@@ -40,6 +40,10 @@ class DailyPremiumUsage(
     var count: Int = count
         private set
 
+    init {
+        require(count >= 0) { "Daily premium usage count must be non-negative" }
+    }
+
     constructor(userId: Long, usageDate: LocalDate, count: Int) : this(
         id = 0L,
         userId = userId,

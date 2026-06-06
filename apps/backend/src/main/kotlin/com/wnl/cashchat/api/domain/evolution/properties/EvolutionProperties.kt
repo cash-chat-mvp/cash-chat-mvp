@@ -1,5 +1,7 @@
 package com.wnl.cashchat.api.domain.evolution.properties
 
+import jakarta.validation.constraints.DecimalMax
+import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.Positive
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.validation.annotation.Validated
@@ -16,7 +18,7 @@ data class EvolutionProperties(
     data class LevelRule(
         val fromLevel: Int,
         @field:Positive val attemptCost: Long,
-        val successRate: Double,
+        @field:DecimalMin("0.0") @field:DecimalMax("1.0") val successRate: Double,
     )
 
     fun ruleFor(level: Int): LevelRule? = rules.firstOrNull { it.fromLevel == level }

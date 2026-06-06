@@ -26,6 +26,12 @@ data class RoutingProperties(
         val mini: Double,
         val gpt: Double,
     ) {
+        init {
+            require(mini in 0.0..1.0) { "mini probability must be in 0.0..1.0" }
+            require(gpt in 0.0..1.0) { "gpt probability must be in 0.0..1.0" }
+            require(mini + gpt <= 1.0) { "mini + gpt must be <= 1.0 (nano probability would be negative)" }
+        }
+
         val nano: Double get() = 1.0 - mini - gpt
     }
 

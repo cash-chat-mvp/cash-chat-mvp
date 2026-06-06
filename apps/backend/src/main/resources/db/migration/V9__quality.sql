@@ -1,4 +1,4 @@
--- V8: quality(공용 풀) 도메인 — 프리미엄 재원 공용 풀 + 유저별 일일 사용량
+-- V9: quality(공용 풀) 도메인 — 프리미엄 재원 공용 풀 + 유저별 일일 사용량
 
 -- 전체 유저 공용 프리미엄 재원 풀 (singleton row, id=1 고정)
 CREATE TABLE shared_quality_pool (

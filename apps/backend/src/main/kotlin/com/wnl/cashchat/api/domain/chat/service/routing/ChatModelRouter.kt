@@ -5,6 +5,7 @@ import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
 import com.wnl.cashchat.api.domain.quality.service.QualityPoolService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDate
 
 /**
@@ -38,6 +39,7 @@ class ChatModelRouter(
      *
      * @throws com.wnl.cashchat.api.domain.energy.exception.InsufficientEnergyException 밥이 부족한 경우
      */
+    @Transactional
     fun routeAndConsume(userId: Long, today: LocalDate): ModelTier {
         // 1. 밥 차감 (부족 시 예외 전파)
         energyService.consume(userId)

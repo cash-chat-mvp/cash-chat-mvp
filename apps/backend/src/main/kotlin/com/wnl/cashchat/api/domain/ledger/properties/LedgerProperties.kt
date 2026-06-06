@@ -18,6 +18,20 @@ data class LedgerProperties(
     val minProfitFloor: Long = 2,
     val rewards: List<SourceReward> = emptyList(),
 ) {
+    init {
+        require(riskRate in 0.0..1.0) { "riskRate must be in 0.0..1.0" }
+        require(serviceRate in 0.0..1.0) { "serviceRate must be in 0.0..1.0" }
+        require(minProfitRate in 0.0..1.0) { "minProfitRate must be in 0.0..1.0" }
+        require(minProfitFloor >= 0) { "minProfitFloor must be >= 0" }
+        rewards.forEach { r ->
+            require(r.cashablePt >= 0) { "reward cashablePt must be >= 0 for source ${r.source}" }
+            require(r.energy >= 0) { "reward energy must be >= 0 for source ${r.source}" }
+        }
+        require(rewards.map { it.source }.toSet().size == rewards.size) {
+            "duplicate RevenueSource in rewards"
+        }
+    }
+
     data class SourceReward(val source: RevenueSource, val cashablePt: Long, val energy: Int)
 
     fun rewardFor(source: RevenueSource): SourceReward? = rewards.firstOrNull { it.source == source }
