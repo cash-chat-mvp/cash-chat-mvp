@@ -1,5 +1,6 @@
 package com.nomadclub.cashchat.shared.auth
 
+import com.nomadclub.cashchat.shared.auth.model.AppleOAuthCallbackRequest
 import com.nomadclub.cashchat.shared.auth.model.AuthResponse
 import com.nomadclub.cashchat.shared.auth.model.GoogleOAuthCallbackRequest
 import com.nomadclub.cashchat.shared.auth.model.LogoutRequest
@@ -59,6 +60,32 @@ class AuthApiService(private val baseUrl: String) {
         return httpClient.post("$baseUrl/api/auth/callback/google") {
             contentType(ContentType.Application.Json)
             setBody(GoogleOAuthCallbackRequest(code = serverAuthCode, deviceToken = deviceToken))
+        }.body()
+    }
+
+    /**
+     * Apple OAuth 로그인 (Member 전환).
+     * iOS ASAuthorization에서 받은 authorizationCode를 BE로 전달하면
+     * BE가 Apple token endpoint와 직접 교환하여 id_token을 검증합니다.
+     *
+     * POST /api/auth/callback/apple
+     */
+    suspend fun loginWithApple(
+        authorizationCode: String,
+        identityToken: String?,
+        fullName: String?,
+        deviceToken: String
+    ): AuthResponse {
+        return httpClient.post("$baseUrl/api/auth/callback/apple") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                AppleOAuthCallbackRequest(
+                    authorizationCode = authorizationCode,
+                    identityToken = identityToken,
+                    fullName = fullName,
+                    deviceToken = deviceToken
+                )
+            )
         }.body()
     }
 
