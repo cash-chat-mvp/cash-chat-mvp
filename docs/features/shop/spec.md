@@ -49,7 +49,7 @@ And 각 아이템은 `itemCode`, `name`, `priceCoin`, `effectSummary`를 포함�
 
 Given 사용자가 진화석 2개, 보호권 1개를 보유한다
 When 사용자가 `GET /api/inventory/me`를 호출한다
-Then 응답은 `[{itemCode:"EVO_STONE", qty:2}, {itemCode:"PROTECT_TICKET", qty:1}]` 형태로 반환된다.
+Then 응답은 `{ "items": [{itemCode:"EVO_STONE", qty:2}, {itemCode:"PROTECT_TICKET", qty:1}] }` 형태로 반환된다 (정확한 스키마는 "API 계약 — `GET /api/inventory/me`" 섹션 참조).
 
 ### 정상 구매
 
@@ -82,7 +82,14 @@ And 코인 잔액, Inventory, `purchase_order` 어느 것도 변하지 않는다
 Given 사용자가 직전에 `idempotencyKey="k1"`로 진화석 1개 구매에 성공했다
 When 사용자가 동일 페이로드를 다시 호출한다
 Then 추가 차감/적재가 발생하지 않는다
-And 응답은 직전 구매의 결과(현 잔액·Inventory)와 동일하다.
+And 응답은 추가 차감 없이 **현재 시점**의 잔액·Inventory를 반환한다 (이중 차감만 방지하며, 첫 구매 이후 다른 거래가 있었다면 그 결과가 반영된 최신 값이다).
+
+### 멱등성 — 키 재사용 충돌
+
+Given 사용자가 `idempotencyKey="k1"`로 진화석 1개 구매에 성공했다
+When 동일 `idempotencyKey="k1"`로 **다른 `itemCode`/`qty`(또는 다른 사용자)**로 호출한다
+Then 백엔드는 409 `IDEMPOTENCY_KEY_CONFLICT`로 거부한다
+And 어떤 상태도 변하지 않는다.
 
 ### 잘못된 itemCode
 
@@ -170,7 +177,7 @@ Request: `{ "itemCode": "...", "qty": 1, "idempotencyKey": "<uuid>" }`
 }
 ```
 
-> 멱등성 재호출은 **첫 처리 시점의 결과**(첫 구매 직후 시점의 잔액·인벤토리)를 그대로 반환한다 — 같은 사용자에게 그 사이 다른 거래가 있더라도 본 응답 값은 변하지 않는다. 자세한 시맨틱은 인수 기준 "멱등성 — 동일 키 재호출" 참조.
+> 멱등성 재호출은 추가 차감 없이 **현재 시점의 잔액·인벤토리를 재조회**해서 반환한다 — `idempotencyKey`는 *이중 차감 방지*만 보장하며, 첫 구매 이후 다른 거래(출석·광고 보상 등)가 있었다면 그 결과가 반영된 최신 값이 반환된다(stale 스냅샷으로 클라이언트 상태를 덮어쓰지 않기 위함). 또한 같은 키가 **다른 `userId`/`itemCode`/`qty`로 재사용**되면 `IDEMPOTENCY_KEY_CONFLICT`로 거부한다. 자세한 시맨틱은 인수 기준 "멱등성 — 동일 키 재호출" / "멱등성 — 키 재사용 충돌" 참조.
 
 | 에러 | HTTP | 발생 조건 |
 | ---- | ---- | -------- |
@@ -178,6 +185,7 @@ Request: `{ "itemCode": "...", "qty": 1, "idempotencyKey": "<uuid>" }`
 | `ITEM_NOT_FOUND` | 400 | 시드에 없는 `itemCode` |
 | `ITEM_INACTIVE` | 400 | `shop_item.isActive=false` |
 | `VALIDATION` | 400 | `qty < 1`, `idempotencyKey` 형식 위반 등 |
+| `IDEMPOTENCY_KEY_CONFLICT` | 409 | 같은 `idempotencyKey`가 다른 `userId`/`itemCode`/`qty`로 재사용됨 |
 
 ### `GET /api/inventory/me`
 
@@ -233,9 +241,15 @@ sequenceDiagram
     API->>DB: BEGIN TRANSACTION
     API->>DB: purchase_order SELECT WHERE idempotencyKey=?
     alt 기존 키 존재
-        DB-->>API: 기존 COMPLETED 주문
-        API->>DB: COMMIT (no-op)
-        API-->>FE: 기존 결과 (코인 잔액 + Inventory)
+        DB-->>API: 기존 COMPLETED 주문 (재차감 없음)
+        alt 저장된 userId/itemCode/qty 불일치
+            API->>DB: ROLLBACK
+            API-->>FE: 409 IDEMPOTENCY_KEY_CONFLICT
+        else 일치
+            API->>DB: 현재 코인 잔액 + user_inventory 재조회
+            API->>DB: COMMIT (no-op)
+            API-->>FE: 현재 시점 잔액 + Inventory
+        end
     else 신규
         API->>DB: shop_item SELECT (가격/isActive 확인)
         alt itemCode 없음 또는 inactive
@@ -248,7 +262,7 @@ sequenceDiagram
                 API-->>FE: 400 INSUFFICIENT_COIN
             else 잔액 충분
                 API->>DB: user_inventory UPSERT (grant 다건 처리)
-                API->>DB: purchase_order INSERT (status=COMPLETED, snapshotPrice)
+                API->>DB: purchase_order INSERT (userId, itemCode, qty, status=COMPLETED, snapshotPrice)
                 API->>DB: COMMIT
                 API-->>FE: 200 {coinBalance, inventory}
             end

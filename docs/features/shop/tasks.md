@@ -9,7 +9,7 @@
 
 - [ ] `ShopItem` 엔티티 (`itemCode` PK, `name`, `category`, `priceCoin`, `isActive`, `displayOrder`)
 - [ ] `ShopItemGrant` 조인 엔티티 (`itemCode`, `grantItemCode`, `grantQty`) — 패키지 지원
-- [ ] `PurchaseOrder` 엔티티 (`idempotencyKey` unique, `status`, `snapshotPrice`, `createdAt`)
+- [ ] `PurchaseOrder` 엔티티 (`idempotencyKey` unique, `userId`, `itemCode`, `qty`, `status`, `snapshotPrice`, `createdAt`) — 재호출 시 저장된 `userId`/`itemCode`/`qty`가 요청과 일치하는지 검증해 키 재사용/교차 사용자 오용 차단
 - [ ] `UserInventory` 엔티티 (`userId`, `itemCode`, `qty`) — composite unique
 - [ ] Repository: JPA + 동시성 안전 UPSERT (MySQL `ON DUPLICATE KEY UPDATE` / H2 `MERGE`)
 - [ ] Inventory read API와 후속 `consume` 확장 지점을 위한 인터페이스 분리
@@ -18,12 +18,13 @@
 
 - [ ] `ShopCatalogService.listItems(category)` — `isActive=true` 필터 + `displayOrder` 정렬
 - [ ] `ShopPurchaseService.purchase(userId, itemCode, qty, idempotencyKey)`
-  - [ ] 멱등성 키 선조회 → 기존 `COMPLETED` 주문이면 그대로 결과 반환
+  - [ ] 멱등성 키 선조회 → 기존 `COMPLETED` 주문이면: 저장된 `userId`/`itemCode`/`qty`가 요청과 일치하는지 검증(불일치 시 `IDEMPOTENCY_KEY_CONFLICT`) → 재차감 없이 **현재 시점**의 잔액·인벤토리를 재조회해 반환 (stale 스냅샷 미반환)
   - [ ] `@Transactional` 안에서 `UserPointService.recordTransaction(delta=-price*qty, key="shop:purchase:{idem}")` 호출
-  - [ ] `INSUFFICIENT_COIN`, `ITEM_INACTIVE`, `ITEM_NOT_FOUND` 도메인 에러 분리
+    - 참고: `UserPointService`는 외부 API가 아니라 **동일 백엔드·동일 DB의 로컬 `@Service`**(propagation=REQUIRED)로 호출자 트랜잭션에 합류 → 코인 차감·인벤토리 적재가 단일 DB 트랜잭션으로 원자 처리됨. 기존 `AttendanceService.checkIn`과 동일 패턴이라 분산 트랜잭션/Outbox·Saga 불필요.
+  - [ ] `INSUFFICIENT_COIN`, `ITEM_INACTIVE`, `ITEM_NOT_FOUND`, `IDEMPOTENCY_KEY_CONFLICT` 도메인 에러 분리
   - [ ] `shop_item_grant` 다건 적재 (`ENHANCE_PACK` 같은 패키지)
 - [ ] `InventoryService.getMine(userId)`
-- [ ] Kotest + TestContainers 테스트: 정상 / 잔액 부족 / 비활성 / 멱등성 재호출 / 패키지 다건 grant / 동시 구매 경합
+- [ ] Kotest + TestContainers 테스트: 정상 / 잔액 부족 / 비활성 / 멱등성 재호출(현재 상태 반환) / 키 재사용 충돌 / 패키지 다건 grant / 동시 구매 경합
 
 ### BE-3. Controller
 
