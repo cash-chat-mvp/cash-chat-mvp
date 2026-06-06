@@ -204,7 +204,7 @@ Request: `{ "itemCode": "...", "qty": 1, "idempotencyKey": "<uuid>" }`
 }
 ```
 
-에러 없음 (인증 실패만 401).
+도메인 에러 없음. 인증 실패 시 `401`만 발생한다 — 현 보안 설정이 `anyRequest().authenticated()`(리소스별 인가/역할 단계 없음) + CSRF 비활성이라 인증된 요청에는 `403`이 트리거되지 않는다(공통 규칙의 401/403 중 본 엔드포인트는 401만 해당). 응답 형식은 공통 규칙의 Spring Security 기본 형식(`{ "timestamp", "status", "error", "path" }`)을 따른다.
 
 ## 사용자 흐름 (User Flow)
 
