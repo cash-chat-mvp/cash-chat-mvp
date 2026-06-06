@@ -280,6 +280,26 @@ class GoogleAdSsvServiceTest : FunSpec({
         (GoogleAdSsvQueryParser::class.java.getAnnotation(Component::class.java) != null) shouldBe true
     }
 
+    test("ledger credit failure is swallowed so SSV webhook does not receive a retry-triggering error") {
+        val parser = mock<GoogleAdSsvQueryParser>()
+        val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
+        val repository = mock<GoogleAdSsvEventRepository>()
+        val ledgerService = mock<LedgerService>()
+        val callback = callback()
+        whenever(parser.parse(rawQuery)).thenReturn(callback)
+        whenever(repository.findByTransactionId(callback.transactionId)).thenReturn(null)
+        whenever(repository.saveAndFlush(any<GoogleAdSsvEvent>())).thenAnswer { it.arguments[0] }
+        whenever(ledgerService.recordRevenue(any(), any(), any(), any()))
+            .thenThrow(IllegalArgumentException("ledger require() violated"))
+        val service = service(parser, signatureVerifier, repository, ledgerService = ledgerService)
+
+        // Must not throw — swallowed so Google gets a 2xx and does not retry
+        val result = service.verifyAndStore(rawQuery)
+
+        result.newlyStored shouldBe true
+        verify(ledgerService).recordRevenue(eq(42L), eq(RevenueSource.AD), eq(10L), eq("ad:ssv:txn-123"))
+    }
+
     test("non-numeric userId in callback is silently skipped without ledger credit") {
         val parser = mock<GoogleAdSsvQueryParser>()
         val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
