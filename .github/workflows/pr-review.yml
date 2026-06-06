@@ -541,7 +541,7 @@ jobs:
       - name: Post help card
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          PR_NUMBER: ${{ github.event.issue.number }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
         run: |
           set -euo pipefail
           . .github/scripts/review/lib_cards.sh
