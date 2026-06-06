@@ -6,20 +6,61 @@
 output_language = "ko-KR"
 # pr-agent에 토큰 한도가 등록되지 않은 최신 모델(gemini-3.5-flash 등) 허용
 custom_model_max_tokens = 1048576
-# 주의: fallback_models는 여기에 두지 않는다.
+# 주의: model / model_weak / fallback_models 는 여기에 두지 않는다.
 # pr-agent의 apply_repo_settings가 이 파일을 런타임에 다시 적용하면서
-# 워크플로우 env(CONFIG.FALLBACK_MODELS)를 덮어쓰기 때문.
-# 폴백은 각 리뷰 잡의 docker run env에서 동적으로 주입한다(빈 경우 [] 주입).
+# 워크플로 env(CONFIG.MODEL 등)를 덮어쓰기 때문. 각 잡의 docker env에서 주입한다.
 
 [pr_reviewer]
 inline_code_comments = true
 require_security_review = true
+# 리뷰가 잡는 이슈 최대 개수 (중점 리뷰 영역 / 인라인 코멘트)
+num_max_findings = 7
+# 매 리뷰 실행마다 새 코멘트 게시 — 기존 코멘트를 덮어쓰지 않음
+# (true 이면 "Persistent review updated to latest commit …" 메시지로 첫 코멘트를 수정)
+persistent_comment = false
 # 자동으로 붙는 "Review effort [1-5]" 라벨 비활성화
 enable_review_labels_effort = false
-extra_instructions = "반드시 한국어로 리뷰하세요. 보안 취약점(OWASP Top 10, SQL Injection, XSS, 인증/인가 문제, 민감 정보 노출 등)을 중점적으로 검토하고, 발견 시 심각도(높음/중간/낮음)를 명시해주세요."
+extra_instructions = """
+당신은 친절하고 유능한 시니어 동료 개발자입니다. 한국어로, 협업하듯 부드럽게,
+이모지를 적절히 섞어 리뷰하세요.
+- 변경 라인(diff)에 밀착해 가독성·성능·잠재적 edge case·보안(OWASP Top10, SQL Injection,
+  XSS, 인증/인가, 민감정보 노출)을 짚고, 보안 이슈는 심각도(높음/중간/낮음)를 명시합니다.
+- 각 코멘트에 Conventional Comments 접두사를 붙입니다:
+  [Suggestion] 개선 제안 / [Nitpick] 사소한 제안(머지 무방) / [Question] 의도 질문 /
+  [Compliment] 좋은 코드 칭찬.
+- 개선점은 AS-IS / TO-BE 코드블록으로 바로 적용 가능하게 제시합니다.
+- 너무 당연한 스타일 지적, 장황한 일반론, 변경과 무관한 훈수는 하지 마세요.
+"""
+
+[pr_description]
+# AI 설명은 pr-description.yml이 메인 PR 본문에 직접 채운다(별도 코멘트 아님).
+# pr-agent /describe 자동 잡은 제거됨 — 본문 race 방지 및 단일 소유.
+publish_description_as_comment = false
+# 제목은 pr-description.yml(Jira 프리픽스)이 소유하므로 AI 제목 생성 끔
+generate_ai_title = false
+extra_instructions = """
+한국어로 작성하세요. 리뷰어가 빠르게 맥락을 잡도록 돕는 것이 목표입니다.
+- 요약: 이 PR이 '무엇을, 왜' 바꾸는지 2~3문장. 단순 diff 나열 금지.
+- walkthrough 표: 변경을 모듈 단위(apps/backend · apps/frontend · infra 등)로 묶고,
+  각 항목은 핵심 변경만 한 줄로 적습니다.
+- 중점 리뷰 영역: 리뷰어가 특히 봐야 할 부분(복잡한 로직, 인증/인가·보안,
+  DB 스키마·마이그레이션, 외부 API 연동, 설정 변경)을 짚어줍니다.
+- 영향/주의: Breaking change, 환경변수·설정·스키마 변경, 마이그레이션 필요 여부가
+  있으면 반드시 표기하고, 없으면 해당 항목은 생략합니다.
+- 검증: 동작 확인 방법이나 테스트 범위가 드러나면 간단히 언급합니다.
+당연한 일반론·장황한 설명·변경과 무관한 내용은 피합니다.
+"""
 
 [pr_code_suggestions]
-extra_instructions = "반드시 한국어로 작성하세요."
+# 코드 줄에 직접 커밋가능 인라인 제안 (CodeRabbit 라인 코멘트 재현)
+commitable_code_suggestions = true
+extra_instructions = "위 리뷰 페르소나와 동일한 친절한 한국어 톤으로, AS-IS/TO-BE를 포함해 작성하세요."
+
+[ignore]
+glob = [
+  "**/*.lock", "**/package-lock.json", "**/pnpm-lock.yaml", "**/yarn.lock",
+  "**/build/**", "**/.gradle/**", "**/dist/**", "**/*.min.*", "**/generated/**",
+]
 
 # 자동 리뷰(pull_request_target) 시 처리할 액션 목록
 # 기본값에는 synchronize(커밋 푸시)가 없어 명시적으로 추가

@@ -1,6 +1,7 @@
 package com.wnl.cashchat.api.domain.ad.web.controller
 
 import com.wnl.cashchat.api.common.web.response.ErrorResponse
+import com.wnl.cashchat.api.domain.ad.service.AdRewardService
 import com.wnl.cashchat.api.domain.ad.service.GoogleAdSsvService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
@@ -13,12 +14,14 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
+import java.time.Instant
 
 @RestController
 @RequestMapping("/api/ads")
 @Tag(name = "Ads", description = "Advertising callback endpoints")
 class GoogleAdSsvController(
     private val googleAdSsvService: GoogleAdSsvService,
+    private val adRewardService: AdRewardService,
 ) {
     @GetMapping("/google/ssv")
     @Operation(
@@ -41,7 +44,10 @@ class GoogleAdSsvController(
         ]
     )
     fun verify(request: HttpServletRequest): ResponseEntity<Void> {
-        googleAdSsvService.verifyAndStore(request.queryString)
+        val result = googleAdSsvService.verifyAndStore(request.queryString)
+        // 모든 검증된 콜백에 대해 적립을 시도한다. grantFromCallback 은 이미 GRANTED 된 이벤트를 멱등하게 건너뛰므로,
+        // 직전 적립이 실패해 VERIFIED 로 남은 이벤트는 AdMob 재전송 시 다시 적립을 시도할 수 있다.
+        adRewardService.grantFromCallback(result.callback, Instant.now())
         return ResponseEntity.ok().build()
     }
 }

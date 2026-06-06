@@ -26,30 +26,33 @@
   - 31일+ 정식 "월간 사이클" 정책은 후속 PR 예정(Confluence 가설 존재). 현재 구현은 모든 31일+ 일차에 대해 기본 폴백으로 20코인을 지급(보너스/streak 리셋 없음)
   - **부가 보상 아이템(EVO_STONE 등)은 정의·미리보기만 제공, 실제 인벤토리 지급은 미구현** — 인벤토리/아이템 도메인(Shop/Evolution) 등장 시 연결
 
-### BE-3. 광고 도메인 (`domain/ad/`)
+### BE-3. 광고 도메인 (`domain/ad/`) ✅ (PR3 완료)
 
-- [ ] `AdRewardNonce` 엔티티 (`nonce` PK, `userId`, `expiresAt`, `used`) — 서버 발급 nonce ↔ userId 매핑 저장소 (단일 사용, 단기 TTL)
-- [ ] `AdRewardDailyQuota` 엔티티 (`(userId, kstDate)` composite PK, `usedCount`) — 일일 사용량 카운터; SSV 트랜잭션 내 `SELECT ... FOR UPDATE` 락 대상
-- [ ] `AdRewardLedger` 엔티티 (`nonce` unique, status, reason, callback_payload JSON)
-- [ ] `AdRewardNonceService.issueFor(userId)` (TTL·UUID nonce 발급)
-- [ ] `AdMobSsvVerifier`: query string parsing + AdMob 공개키 캐시 + ECDSA 서명 검증
-- [ ] `AdRewardService.grantFromSsv(callback)` — **모든 한도 검사·증가·적립을 단일 `@Transactional` 안에서 수행**
-  - [ ] 서명 검증 → `custom_data.nonce`로 `ad_reward_nonce` 조회 → userId 해석 (`custom_data` 내 userId는 신뢰 금지)
-  - [ ] nonce 없음/만료/used → `INVALID_NONCE` REJECTED (트랜잭션 진입 전)
-  - [ ] 트랜잭션 진입: `ad_reward_daily_quota` 행 UPSERT 후 `SELECT ... FOR UPDATE` (per-user-per-day 행 락) — TOCTOU 방지
-  - [ ] 락 상태에서 `usedCount >= dailyLimit` → `OVER_QUOTA` REJECTED + COMMIT
-  - [ ] 한도 미만 → `usedCount += 1` UPDATE → nonce.used=true UPDATE → recordTransaction(멱등성 키 `admob:reward:{nonce}`) → ledger GRANTED INSERT → COMMIT
-- [ ] `AdController` (`POST /api/ads/reward/issue-nonce`, `GET /api/ads/ssv/admob`, `GET /api/ads/reward/quota`)
-- [ ] Kotest + TestContainers 테스트
-  - [ ] 서명 성공/실패 / nonce 없음·만료·used / 한도 초과 / nonce 중복(이중 방어선) / 알 수 없는 key id / 위조된 userId 무시
-  - [ ] **동시성 테스트**: 한도-1 상태에서 서로 다른 nonce로 두 SSV 콜백 동시 도착 시 정확히 한쪽만 GRANT, 다른 쪽 OVER_QUOTA REJECTED (TOCTOU 회귀 방지)
+> SSV 서명 검증·콜백 수신(`GET /api/ads/google/ssv`)·이벤트 로깅(`google_ad_ssv_events`)은 **cc-242(#146)가 선제 구현**. 본 PR3은 그 위에 리워드 적립 레이어를 통합. nonce는 SSV `user_id` 필드로 전달(설계 D1), 멱등성 키 `admob:reward:{transactionId}`(D2), 적립 결과는 `GoogleAdSsvEvent.rewardStatus` 확장으로 기록(D3). 설계: `docs/superpowers/specs/2026-05-31-reward-be3-ad-reward-design.md`.
+
+- [x] `AdRewardNonce` 엔티티 (`nonce` PK, `userId`, `expiresAt`, `used`) — 서버 발급 nonce ↔ userId 매핑 (단일 사용, 단기 TTL)
+- [x] `AdRewardDailyQuota` 엔티티 (`(userId, kstDate)` composite PK, `usedCount`) — `SELECT ... FOR UPDATE` 락 대상
+- [x] ~~`AdRewardLedger` 엔티티~~ → cc-242의 `GoogleAdSsvEvent.rewardStatus`(GRANTED/REJECTED_INVALID_NONCE/REJECTED_OVER_QUOTA) 확장으로 대체(별도 ledger 불필요, D3)
+- [x] `AdRewardNonceService.issueFor(userId)` (TTL·UUID nonce 발급)
+- [x] ~~`AdMobSsvVerifier`~~ → cc-242의 `GoogleAdSsvSignatureVerifier`·`GoogleAdPublicKeyClient`·`GoogleAdSsvQueryParser`가 이미 구현
+- [x] `AdRewardService.grantFromCallback(callback, now)` — **단일 `@Transactional`**
+  - [x] 이벤트를 `findForUpdateByTransactionId`(PESSIMISTIC_WRITE)로 조회해 동일 transactionId 동시 콜백의 상태 덮어쓰기 방지. `VERIFIED` 이벤트만 적립(GRANTED·REJECTED_* 는 멱등 스킵). SSV `user_id`(=nonce)로 `ad_reward_nonce`를 `findForUpdate`(PESSIMISTIC_WRITE 행 락)로 조회 → userId 해석 (클라이언트 식별값 미신뢰; 동일 nonce 동시 요청 직렬화로 중복 적립 방지, 커밋 5d45958)
+  - [x] nonce 없음/만료/used → `REJECTED_INVALID_NONCE`
+  - [x] `ad_reward_daily_quota` 행 멱등 INSERT 후 `findForUpdate`(per-user-per-day 행 락) — event·nonce 행 락과 함께 **다중 락**(순서 event→nonce→quota→user_point)으로 TOCTOU·중복 적립·상태 덮어쓰기 방지
+  - [x] 락 상태에서 `usedCount >= dailyLimit` → nonce.used=true(단일 사용 보장) → `REJECTED_OVER_QUOTA`
+  - [x] 한도 미만 → `usedCount += 1` → nonce.used=true → recordTransaction(멱등성 키 `admob:reward:{transactionId}`) → 이벤트 `GRANTED`
+- [x] `AdRewardController` (`POST /api/ads/reward/issue-nonce`, `GET /api/ads/reward/quota`); SSV 콜백은 cc-242 `GoogleAdSsvController`(`GET /api/ads/google/ssv`)에 적립 연동
+- [x] Kotest + TestContainers 테스트
+  - [x] 서명 성공/실패(cc-242 기존) / nonce 없음·만료·used / 한도 초과 / 중복 transactionId(이중 방어선) / 위조 userId 무시(nonce 해석)
+  - [x] **동시성 테스트**: 한도-1 상태에서 서로 다른 nonce로 동시 적립 시 정확히 한쪽만 GRANT, 나머지 OVER_QUOTA (TOCTOU 회귀 방지)
+  - 설정값: `app.ads.reward.*`(coin-amount 40, daily-limit 10, nonce-ttl 10m). spec의 `reward.admob.*`/`/api/ads/ssv/admob`는 cc-242 네이밍(`app.ads.*`/`/api/ads/google/ssv`)에 맞춰 정리
 
 ### BE-4. 설정 및 마이그레이션
 
 > 도메인별 PR 분할 결정에 따라 테이블/시드는 한 번에 만들지 않고 각 도메인 PR에서 생성한다.
 > Flyway 자체는 PR1에서 도입 완료 (V1 기존 스키마 베이스라인 + `ddl-auto=validate`, dev H2는 MySQL 호환 모드).
 
-- [ ] `application.yml`에 `reward.admob.daily-limit`, `reward.admob.public-keys-url`, `reward.admob.reward-coin` 추가 — BE-3(광고) PR
+- [x] 광고 리워드 설정 추가 (BE-3 PR) — `app.ads.reward.*`(coin-amount/daily-limit/nonce-ttl). 공개키 URL은 cc-242의 `app.ads.google.ssv-public-keys-uri`가 담당하므로 `reward.admob.public-keys-url`은 도입하지 않음
 - [x] Flyway 도입 + V1 베이스라인 + **`point_transaction`(V2)** 마이그레이션 (PR1) — `attendance_*`는 BE-2 PR, `ad_reward_*`는 BE-3 PR에서 추가
 - [x] 시드 데이터 SQL: 출석 보상 테이블 (Phase 1 종자값 — spec 부록 표) — BE-2(출석) PR에서 V3로 제공 완료
 

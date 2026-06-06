@@ -21,7 +21,7 @@ class GoogleAdSsvService(
     private val ledgerService: LedgerService,
 ) {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    fun verifyAndStore(rawQueryString: String?) {
+    fun verifyAndStore(rawQueryString: String?): GoogleAdSsvVerificationResult {
         val callback = parser.parse(rawQueryString)
         validateAdUnit(callback)
         signatureVerifier.verify(callback.signedPayload, callback.signature, callback.keyId)
@@ -29,24 +29,25 @@ class GoogleAdSsvService(
         val existingEvent = repository.findByTransactionId(callback.transactionId)
         if (existingEvent != null) {
             logIfCoreFieldsDiffer(callback, existingEvent)
-            // Idempotent: credit via ledger (LedgerService itself is idempotent on key)
+            // 멱등: ledger 적립(키 기반 멱등이라 재호출해도 중복 적립 없음)
             creditReward(callback)
-            return
+            return GoogleAdSsvVerificationResult(callback, newlyStored = false)
         }
 
-        try {
+        return try {
             repository.saveAndFlush(callback.toEntity())
+            creditReward(callback)
+            GoogleAdSsvVerificationResult(callback, newlyStored = true)
         } catch (exception: DataIntegrityViolationException) {
             val duplicateEvent = repository.findByTransactionId(callback.transactionId)
             if (duplicateEvent != null) {
                 logIfCoreFieldsDiffer(callback, duplicateEvent)
                 creditReward(callback)
-                return
+                GoogleAdSsvVerificationResult(callback, newlyStored = false)
+            } else {
+                throw exception
             }
-            throw exception
         }
-
-        creditReward(callback)
     }
 
     /**
