@@ -41,6 +41,14 @@ class InventoryControllerTest : FunSpec() {
                 .andExpect(jsonPath("$.items[0].itemCode").value("EVO_STONE"))
                 .andExpect(jsonPath("$.items[0].qty").value(2))
                 .andExpect(jsonPath("$.items[1].itemCode").value("PROTECT_TICKET"))
+                .andExpect(jsonPath("$.items[1].qty").value(1))
+        }
+
+        test("GET /api/inventory/me returns empty items when user has no inventory") {
+            whenever(inventoryService.getMine(eq(1L))).thenReturn(emptyList())
+            mockMvc.perform(get("/api/inventory/me").principal(principal))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.items.length()").value(0))
         }
     }
 }

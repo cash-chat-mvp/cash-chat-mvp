@@ -102,6 +102,16 @@ class ShopControllerTest : FunSpec() {
                 .andExpect(jsonPath("$.code").value("VALIDATION"))
         }
 
+        test("POST purchase with qty over the max returns 400 VALIDATION") {
+            mockMvc.perform(
+                post("/api/shop/purchase").principal(principal)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""{"itemCode":"EVO_STONE","qty":10000,"idempotencyKey":"$validUuid"}""")
+            )
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("VALIDATION"))
+        }
+
         test("POST purchase with non-UUID idempotencyKey returns 400 VALIDATION") {
             mockMvc.perform(
                 post("/api/shop/purchase").principal(principal)

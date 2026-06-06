@@ -20,7 +20,8 @@ CREATE TABLE shop_item_grant (
     grant_qty       INT         NOT NULL,
     PRIMARY KEY (id),
     CONSTRAINT uk_shop_item_grant_item_grant UNIQUE (item_code, grant_item_code),
-    CONSTRAINT fk_shop_item_grant_item FOREIGN KEY (item_code) REFERENCES shop_item (item_code)
+    CONSTRAINT fk_shop_item_grant_item FOREIGN KEY (item_code) REFERENCES shop_item (item_code),
+    CONSTRAINT ck_shop_item_grant_qty CHECK (grant_qty >= 1)
 );
 
 -- 구매 주문(트랜잭션 데이터): (user_id, idempotency_key) 복합 유니크 = 멱등성 스코프
@@ -50,7 +51,8 @@ CREATE TABLE user_inventory (
     updated_at TIMESTAMP(6) NOT NULL,
     PRIMARY KEY (id),
     CONSTRAINT uk_user_inventory_user_item UNIQUE (user_id, item_code),
-    CONSTRAINT fk_user_inventory_user FOREIGN KEY (user_id) REFERENCES users (id)
+    CONSTRAINT fk_user_inventory_user FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT ck_user_inventory_qty CHECK (qty >= 0)
 );
 
 -- 시드: 강화재료 5종 (spec 부록 표)
