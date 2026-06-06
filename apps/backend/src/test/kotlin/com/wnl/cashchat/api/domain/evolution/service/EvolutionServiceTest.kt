@@ -56,7 +56,7 @@ class EvolutionServiceTest : FunSpec({
             properties,
             energyService,
         )
-        whenever(evolutionAttemptRepository.findByIdempotencyKey(any())).thenReturn(null)
+        whenever(evolutionAttemptRepository.findByUserIdAndIdempotencyKey(any(), any())).thenReturn(null)
     }
 
     test("getState returns current level and next transition rule") {
@@ -91,7 +91,7 @@ class EvolutionServiceTest : FunSpec({
         result.resultLevel shouldBe 2
         result.cost shouldBe 500L
         verify(userPointService).recordTransaction(
-            eq(userId), eq(-500L), eq(PointTransactionReason.EVOLUTION_ATTEMPT), eq("evolution:key-1"),
+            eq(userId), eq(-500L), eq(PointTransactionReason.EVOLUTION_ATTEMPT), eq("evolution:$userId:key-1"),
         )
         verify(evolutionAttemptRepository).save(argThat<EvolutionAttempt> {
             this.userId == userId && fromLevel == 1 && success && resultLevel == 2 && idempotencyKey == "key-1"
@@ -109,7 +109,7 @@ class EvolutionServiceTest : FunSpec({
         result.fromLevel shouldBe 1
         result.resultLevel shouldBe 1
         verify(userPointService).recordTransaction(
-            eq(userId), eq(-500L), eq(PointTransactionReason.EVOLUTION_ATTEMPT), eq("evolution:key-2"),
+            eq(userId), eq(-500L), eq(PointTransactionReason.EVOLUTION_ATTEMPT), eq("evolution:$userId:key-2"),
         )
         verify(evolutionAttemptRepository).save(argThat<EvolutionAttempt> {
             !success && resultLevel == 1
@@ -129,7 +129,7 @@ class EvolutionServiceTest : FunSpec({
 
     test("duplicate idempotency key returns the prior attempt without charging again") {
         whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(UserEvolution(user = user(), level = 1))
-        whenever(evolutionAttemptRepository.findByIdempotencyKey("key-4")).thenReturn(
+        whenever(evolutionAttemptRepository.findByUserIdAndIdempotencyKey(userId, "key-4")).thenReturn(
             EvolutionAttempt(userId = userId, fromLevel = 1, cost = 500, success = true, resultLevel = 2, idempotencyKey = "key-4")
         )
 

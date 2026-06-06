@@ -53,7 +53,7 @@ class EvolutionService(
         val evo = userEvolutionRepository.findByUserIdForUpdate(userId)
             ?: throw IllegalStateException("UserEvolution not initialized for userId=$userId")
 
-        evolutionAttemptRepository.findByIdempotencyKey(idempotencyKey)?.let { return it.toResult() }
+        evolutionAttemptRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)?.let { return it.toResult() }
 
         val rule = evolutionProperties.ruleFor(evo.level) ?: throw AlreadyMaxLevelException()
         val fromLevel = evo.level
@@ -62,7 +62,7 @@ class EvolutionService(
             userId = userId,
             delta = -rule.attemptCost,
             reason = PointTransactionReason.EVOLUTION_ATTEMPT,
-            idempotencyKey = "evolution:$idempotencyKey",
+            idempotencyKey = "evolution:$userId:$idempotencyKey",
         )
 
         val success = probabilityRoller.succeeds(rule.successRate)

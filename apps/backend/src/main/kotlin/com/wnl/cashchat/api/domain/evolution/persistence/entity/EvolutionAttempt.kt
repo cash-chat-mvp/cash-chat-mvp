@@ -17,7 +17,7 @@ import jakarta.persistence.UniqueConstraint
 @Table(
     name = "evolution_attempt",
     uniqueConstraints = [
-        UniqueConstraint(name = "uq_evolution_attempt_idempotency_key", columnNames = ["idempotency_key"])
+        UniqueConstraint(name = "uq_evolution_attempt_user_key", columnNames = ["user_id", "idempotency_key"])
     ],
     indexes = [
         Index(name = "idx_evolution_attempt_user_id", columnList = "user_id")

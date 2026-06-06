@@ -20,7 +20,7 @@ import jakarta.persistence.UniqueConstraint
 @Table(
     name = "ledger_entry",
     uniqueConstraints = [
-        UniqueConstraint(name = "uq_ledger_entry_idempotency_key", columnNames = ["idempotency_key"])
+        UniqueConstraint(name = "uq_ledger_entry_user_key", columnNames = ["user_id", "idempotency_key"])
     ],
     indexes = [
         Index(name = "idx_ledger_entry_user_id", columnList = "user_id")

@@ -45,7 +45,7 @@ class LedgerServiceTest : FunSpec({
             energyService = energyService,
             properties = properties,
         )
-        whenever(ledgerEntryRepository.findByIdempotencyKey(any())).thenReturn(null)
+        whenever(ledgerEntryRepository.findByUserIdAndIdempotencyKey(any(), any())).thenReturn(null)
         whenever(ledgerEntryRepository.save(any<LedgerEntry>())).thenAnswer { it.arguments[0] }
     }
 
@@ -73,7 +73,7 @@ class LedgerServiceTest : FunSpec({
             eq(userId),
             eq(4L),
             eq(PointTransactionReason.LEDGER_REWARD),
-            eq("ledger:AD:$key"),
+            eq("ledger:AD:$userId:$key"),
         )
         verify(energyService).charge(eq(userId), eq(3))
         verify(ledgerEntryRepository).save(argThat<LedgerEntry> {
@@ -104,7 +104,7 @@ class LedgerServiceTest : FunSpec({
             energyAwarded = 3,
             idempotencyKey = key,
         )
-        whenever(ledgerEntryRepository.findByIdempotencyKey(key)).thenReturn(existingEntry)
+        whenever(ledgerEntryRepository.findByUserIdAndIdempotencyKey(userId, key)).thenReturn(existingEntry)
 
         val result = service.recordRevenue(userId, RevenueSource.AD, grossRevenue, key)
 

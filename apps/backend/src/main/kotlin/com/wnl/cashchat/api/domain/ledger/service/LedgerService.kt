@@ -39,7 +39,7 @@ class LedgerService(
         idempotencyKey: String,
     ): RevenueDistribution {
         // 멱등: 이미 처리된 키는 기존 분배 그대로 반환
-        ledgerEntryRepository.findByIdempotencyKey(idempotencyKey)?.let { return it.toDistribution() }
+        ledgerEntryRepository.findByUserIdAndIdempotencyKey(userId, idempotencyKey)?.let { return it.toDistribution() }
 
         val reward = properties.rewardFor(source)
             ?: throw IllegalStateException("no reward config for $source")
@@ -59,7 +59,7 @@ class LedgerService(
             userId,
             reward.cashablePt,
             PointTransactionReason.LEDGER_REWARD,
-            "ledger:$source:$idempotencyKey",
+            "ledger:$source:$userId:$idempotencyKey",
         )
         if (reward.energy > 0) {
             energyService.charge(userId, reward.energy)
