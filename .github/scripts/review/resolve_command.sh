@@ -8,7 +8,7 @@
 parse_resolve_reason() {
   local r
   r=$(printf '%s' "${1:-}" | sed -E 's#^/resolve[[:space:]]*##' | head -1)
-  r=$(printf '%s' "$r" | sed -E 's/^["""'"'"']//; s/["""'"'"']$//; s/[[:space:]]*$//')
+  r=$(printf '%s' "$r" | LC_ALL=C.UTF-8 sed -E 's/^["“”'"'"']//; s/["“”'"'"']$//; s/[[:space:]]*$//')
   [ -z "$r" ] && r="추후 일괄 수정 예정"
   printf '%s' "$r"
 }
@@ -37,6 +37,10 @@ gh_reply() { curl -s --max-time 15 -X POST -H "Authorization: Bearer $GITHUB_TOK
 
 run_resolve_command() {
   local API="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+  # Jira 인증을 config 파일로 전달 — --user/-H 는 argv(ps)에 노출되므로 회피
+  local JIRA_CFG; JIRA_CFG=$(mktemp); chmod 600 "$JIRA_CFG"
+  printf 'user = "%s:%s"\n' "$JIRA_EMAIL" "$JIRA_TOKEN" > "$JIRA_CFG"
+  trap 'rm -f "$JIRA_CFG"' RETURN
   local REASON ROOT_ID ROOT_JSON ORIG_BODY ORIG_PATH ROOT_NODE_ID FDIFF
   REASON="$(parse_resolve_reason "$COMMENT_BODY")"
   ROOT_ID="${IN_REPLY_TO:-$COMMENT_ID}"
@@ -59,10 +63,10 @@ run_resolve_command() {
     gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 티켓(CC-###)을 못 찾아 서브태스크 없이 스레드만 리졸브할게요."
   else
     PROJECT_KEY="${PARENT%%-*}"
-    SUBTASK_TYPE_ID=$(curl -s --max-time 20 --user "${JIRA_EMAIL}:${JIRA_TOKEN}" -H "Accept: application/json" \
+    SUBTASK_TYPE_ID=$(curl -s --max-time 20 --config "$JIRA_CFG" -H "Accept: application/json" \
       "${JIRA_BASE_URL}/rest/api/3/issue/createmeta/${PROJECT_KEY}/issuetypes" \
       | jq -r '[(.values // .issueTypes // [])[]|select(.subtask==true)][0].id // empty')
-    [ -z "$SUBTASK_TYPE_ID" ] && SUBTASK_TYPE_ID=$(curl -s --max-time 20 --user "${JIRA_EMAIL}:${JIRA_TOKEN}" -H "Accept: application/json" \
+    [ -z "$SUBTASK_TYPE_ID" ] && SUBTASK_TYPE_ID=$(curl -s --max-time 20 --config "$JIRA_CFG" -H "Accept: application/json" \
       "${JIRA_BASE_URL}/rest/api/3/issuetype" | jq -r '[.[]|select(.subtask==true)][0].id // empty')
     if [ -n "$SUBTASK_TYPE_ID" ]; then
       local SUMMARY DESCRIPTION PAYLOAD RESP CODE RBODY NEW_KEY NEW_URL
@@ -79,7 +83,7 @@ run_resolve_command() {
         ]}')
       PAYLOAD=$(jq -n --arg pk "$PROJECT_KEY" --arg parent "$PARENT" --arg tid "$SUBTASK_TYPE_ID" --arg summary "$SUMMARY" --argjson desc "$DESCRIPTION" \
         '{fields:{project:{key:$pk},parent:{key:$parent},issuetype:{id:$tid},summary:$summary,description:$desc}}')
-      RESP=$(curl -s --max-time 25 --user "${JIRA_EMAIL}:${JIRA_TOKEN}" -w $'\n%{http_code}' -X POST \
+      RESP=$(curl -s --max-time 25 --config "$JIRA_CFG" -w $'\n%{http_code}' -X POST \
         -H "Content-Type: application/json" -H "Accept: application/json" "${JIRA_BASE_URL}/rest/api/3/issue" --data "$PAYLOAD")
       CODE=$(printf '%s' "$RESP" | tail -1); RBODY=$(printf '%s' "$RESP" | sed '$d')
       if [ "$CODE" = "201" ]; then
