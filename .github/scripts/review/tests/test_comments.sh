@@ -15,4 +15,10 @@ is_notice_body "$(render_card error t b)"; assert_rc $? 0 "error 카드 → noti
 is_notice_body 'Preparing review...'; assert_rc $? 0 "pr-agent 영문 notice → notice"
 is_notice_body "$(render_card help t b)"; assert_rc $? 1 "help 카드 → notice 아님"
 is_notice_body '## PR 리뷰 가이드'; assert_rc $? 1 "리뷰 결과 → notice 아님"
+# 진행/실패 카드 본문 빌더(네트워크 분리된 순수 함수)
+assert_eq "$(progress_card | grep -c '<!-- cashchat-ai-review:progress -->')" "1" "progress_card 마커"
+assert_eq "$(progress_card | grep -c '^> \[!NOTE\]')" "1" "progress_card NOTE"
+assert_eq "$(failure_card quota '/gemini-review' | grep -c '^> \[!WARNING\]')" "1" "quota → WARNING"
+assert_eq "$(failure_card quota '/gemini-review' | grep -c '`/gemini-review`')" "1" "quota 카드에 재시도 명령"
+assert_eq "$(failure_card transient '/openai-review' | grep -c '^> \[!CAUTION\]')" "1" "transient → CAUTION"
 t_summary
