@@ -11,6 +11,7 @@ import com.wnl.cashchat.api.domain.auth.oauth.model.OAuthUserInfo
 import com.wnl.cashchat.api.domain.auth.oauth.properties.OAuthProperties
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.auth.persistence.repository.RefreshTokenRepository
+import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
 import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
@@ -32,6 +33,7 @@ class AuthServiceTest : FunSpec({
         val refreshTokenRepository = mock<RefreshTokenRepository>()
         val jwtTokenHandler = mock<JwtTokenHandler>()
         val userPointService = mock<UserPointService>()
+        val evolutionService = mock<EvolutionService>()
         val authService = AuthService(
             userRepository = userRepository,
             refreshTokenRepository = refreshTokenRepository,
@@ -39,6 +41,7 @@ class AuthServiceTest : FunSpec({
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = evolutionService,
             appleTokenClient = mock<AppleTokenClient>(),
             appleIdTokenValidator = mock<AppleIdTokenValidator>(),
             appleUserInfoExtractor = mock<AppleUserInfoExtractor>(),
@@ -64,6 +67,11 @@ class AuthServiceTest : FunSpec({
                 id == 1L && deviceToken == "device-1"
             }
         )
+        verify(evolutionService).ensureInitialized(
+            argThat<User> {
+                id == 1L && deviceToken == "device-1"
+            }
+        )
     }
 
     test("logout deletes the submitted refresh token for the caller") {
@@ -78,6 +86,7 @@ class AuthServiceTest : FunSpec({
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = mock<EvolutionService>(),
             appleTokenClient = mock<AppleTokenClient>(),
             appleIdTokenValidator = mock<AppleIdTokenValidator>(),
             appleUserInfoExtractor = mock<AppleUserInfoExtractor>(),
@@ -102,6 +111,7 @@ class AuthServiceTest : FunSpec({
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = mock<EvolutionService>(),
             appleTokenClient = mock<AppleTokenClient>(),
             appleIdTokenValidator = mock<AppleIdTokenValidator>(),
             appleUserInfoExtractor = mock<AppleUserInfoExtractor>(),
@@ -126,6 +136,7 @@ class AuthServiceTest : FunSpec({
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = mock<EvolutionService>(),
             appleTokenClient = mock<AppleTokenClient>(),
             appleIdTokenValidator = mock<AppleIdTokenValidator>(),
             appleUserInfoExtractor = mock<AppleUserInfoExtractor>(),
@@ -143,6 +154,7 @@ class AuthServiceTest : FunSpec({
         val refreshTokenRepository = mock<RefreshTokenRepository>()
         val jwtTokenHandler = mock<JwtTokenHandler>()
         val userPointService = mock<UserPointService>()
+        val evolutionService = mock<EvolutionService>()
         val appleTokenClient = mock<AppleTokenClient>()
         val appleIdTokenValidator = mock<AppleIdTokenValidator>()
         val appleUserInfoExtractor = mock<AppleUserInfoExtractor>()
@@ -153,6 +165,7 @@ class AuthServiceTest : FunSpec({
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = evolutionService,
             appleTokenClient = appleTokenClient,
             appleIdTokenValidator = appleIdTokenValidator,
             appleUserInfoExtractor = appleUserInfoExtractor,
@@ -199,6 +212,7 @@ class AuthServiceTest : FunSpec({
         response.userId shouldBe 1L
         response.role shouldBe Role.MEMBER
         verify(userPointService).ensureInitialized(guest)
+        verify(evolutionService).ensureInitialized(guest)
     }
 
     test("loginWithApple returns existing Apple user without creating duplicate") {
@@ -206,6 +220,7 @@ class AuthServiceTest : FunSpec({
         val refreshTokenRepository = mock<RefreshTokenRepository>()
         val jwtTokenHandler = mock<JwtTokenHandler>()
         val userPointService = mock<UserPointService>()
+        val evolutionService = mock<EvolutionService>()
         val appleTokenClient = mock<AppleTokenClient>()
         val appleIdTokenValidator = mock<AppleIdTokenValidator>()
         val appleUserInfoExtractor = mock<AppleUserInfoExtractor>()
@@ -216,6 +231,7 @@ class AuthServiceTest : FunSpec({
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = evolutionService,
             appleTokenClient = appleTokenClient,
             appleIdTokenValidator = appleIdTokenValidator,
             appleUserInfoExtractor = appleUserInfoExtractor,
@@ -257,6 +273,7 @@ class AuthServiceTest : FunSpec({
         response.userId shouldBe 2L
         response.role shouldBe Role.MEMBER
         verify(userPointService).ensureInitialized(existingUser)
+        verify(evolutionService).ensureInitialized(existingUser)
     }
 
     test("loginWithApple rejects missing Apple id token before creating or upgrading user") {
@@ -264,6 +281,7 @@ class AuthServiceTest : FunSpec({
         val refreshTokenRepository = mock<RefreshTokenRepository>()
         val jwtTokenHandler = mock<JwtTokenHandler>()
         val userPointService = mock<UserPointService>()
+        val evolutionService = mock<EvolutionService>()
         val appleTokenClient = mock<AppleTokenClient>()
         val appleIdTokenValidator = mock<AppleIdTokenValidator>()
         val appleUserInfoExtractor = mock<AppleUserInfoExtractor>()
@@ -274,6 +292,7 @@ class AuthServiceTest : FunSpec({
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = evolutionService,
             appleTokenClient = appleTokenClient,
             appleIdTokenValidator = appleIdTokenValidator,
             appleUserInfoExtractor = appleUserInfoExtractor,
@@ -293,5 +312,6 @@ class AuthServiceTest : FunSpec({
 
         verify(userRepository, never()).save(any())
         verify(userPointService, never()).ensureInitialized(any())
+        verify(evolutionService, never()).ensureInitialized(any())
     }
 })
