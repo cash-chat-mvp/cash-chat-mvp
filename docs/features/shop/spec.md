@@ -123,6 +123,7 @@ And Phase 1 동안 해당 카테고리 아이템은 카탈로그에 노출되지
 - **idempotencyKey**: UUID v4 권장 (서버는 형식만 검증). 클라이언트가 같은 요청에 같은 키를 재사용하면 멱등 처리.
 - **멱등성 스코프**: 멱등성 키는 `(userId, idempotencyKey)` **복합 유니크**로 사용자별로 격리한다. `point_transaction` 멱등성 키도 `shop:purchase:<userId>:<idem>`로 사용자 스코프를 부여해(기존 `attendance:<userId>:<date>` 컨벤션과 동일) 두 레이어 스코프를 일치시킨다 — 키 선점(squatting)·교차 사용자 정보노출을 구조적으로 차단한다.
 - **동시성**: 같은 사용자의 동시 구매(서로 다른 키 포함)는 `UserPointService`가 포인트 행에 비관적 락(`SELECT … FOR UPDATE`)을 걸고 **락 획득 후** 잔액을 검증하므로 직렬화되어 잔액 음수가 발생하지 않는다. `user_inventory` 다건 UPSERT(패키지 grant)는 항상 `itemCode` 오름차순으로 정렬해 락 순서를 고정함으로써 동시 요청 간 데드락을 방지한다.
+- **전역 락 획득 순서**: 트랜잭션 내 테이블 락은 `point`(`SELECT … FOR UPDATE`) → `user_inventory`(UPSERT) → `purchase_order`(INSERT) 순서로 고정한다. 향후 진화/소모(consume) 등 다른 도메인 트랜잭션도 **반드시 이 전역 순서**를 따라 락을 획득해야 교차 도메인 데드락(예: 한쪽은 `Inventory→Point`, 다른 쪽은 `Point→Inventory`)을 방지할 수 있다.
 
 ### 엔드포인트 요약
 
@@ -182,6 +183,8 @@ Request: `{ "itemCode": "...", "qty": 1, "idempotencyKey": "<uuid>" }`
 ```
 
 > 멱등성 재호출은 추가 차감 없이 **현재 시점의 잔액·인벤토리를 재조회**해서 반환한다 — `idempotencyKey`는 *이중 차감 방지*만 보장하며, 첫 구매 이후 다른 거래(출석·광고 보상 등)가 있었다면 그 결과가 반영된 최신 값이 반환된다(stale 스냅샷으로 클라이언트 상태를 덮어쓰지 않기 위함). 조회는 `(userId, idempotencyKey)` 복합 키로 하며, **같은 사용자**가 같은 키를 **다른 `itemCode`/`qty`**로 재사용하면 `IDEMPOTENCY_KEY_CONFLICT`로 거부한다. 자세한 시맨틱은 인수 기준 "멱등성 — 동일 키 재호출" / "멱등성 — 키 재사용 충돌 (동일 사용자)" 참조.
+>
+> **동시 INSERT 경합**: 같은 `(userId, idempotencyKey)`로 거의 동시에 들어온 두 요청이 둘 다 선조회를 통과해 INSERT가 경합하면, 복합 유니크 제약으로 한쪽만 성공하고 패자는 제약 위반(`DataIntegrityViolationException`)을 받는다. 이를 catch해 커밋된 주문을 재조회한 뒤 **위와 동일한 멱등 경로**로 처리한다(payload 일치 → 현재 상태 반환, 불일치 → `IDEMPOTENCY_KEY_CONFLICT`) — 클라이언트에 `500`이 노출되지 않는다.
 
 | 에러 | HTTP | 발생 조건 |
 | ---- | ---- | -------- |
