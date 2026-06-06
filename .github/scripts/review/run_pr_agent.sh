@@ -11,6 +11,7 @@ has_fail_marker() { grep -qE "$PR_AGENT_FAIL_MARKERS" "$1"; }
 run_pr_agent() {
   local event_name="$1" event_file="$2" out="$3"; shift 3
   [ "$1" = "--" ] && shift
+  local _had_e; case $- in *e*) _had_e=1;; *) _had_e=0;; esac
   local attempt st
   for attempt in 1 2; do
     set +e
@@ -25,7 +26,7 @@ run_pr_agent() {
       -v "${event_file}:/github/workflow/event.json:ro" \
       "$PR_AGENT_IMAGE" 2>&1 | tee "$out"
     st=${PIPESTATUS[0]}
-    set -e
+    [ "$_had_e" -eq 1 ] && set -e
     if [ "$st" -eq 0 ] && ! has_fail_marker "$out"; then return 0; fi
     # 하드 실패 → 첫 시도면 백오프 후 재실행
     [ "$attempt" -eq 1 ] && { echo "::warning::pr-agent 하드 실패 — 30초 후 1회 재시도"; sleep 30; }

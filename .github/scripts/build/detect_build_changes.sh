@@ -10,8 +10,8 @@ affects_ios() { grep -qE "$_IOS_RE"; }
 # 필요 env: ACTION, BEFORE, HEAD_SHA, BASE_SHA
 changed_range() {
   if [ "${ACTION:-}" = "synchronize" ] && [ -n "${BEFORE:-}" ] && ! printf '%s' "$BEFORE" | grep -qE '^0+$'; then
-    echo "${BEFORE}...${HEAD_SHA}"
+    echo "${BEFORE:-}...${HEAD_SHA:-}"
   else
-    echo "${BASE_SHA}...${HEAD_SHA}"
+    echo "${BASE_SHA:-}...${HEAD_SHA:-}"
   fi
 }

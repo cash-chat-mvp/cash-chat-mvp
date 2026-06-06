@@ -56,9 +56,9 @@ cleanup_notices() {
 # ── 진행 코멘트 게시(전역 PROGRESS_ID 설정); clear_progress를 trap에 등록해 사용 ──
 post_progress() {
   local api; api="$(_api)"
-  local body='## 🔍 AI 코드 리뷰를 진행하고 있어요\n\n⏳ 변경된 코드를 살펴보는 중입니다 — 보통 1~2분 정도 걸려요.\n\n리뷰가 끝나면 이 안내는 자동으로 사라지고 결과가 게시됩니다.'
+  local body=$'## 🔍 AI 코드 리뷰를 진행하고 있어요\n\n⏳ 변경된 코드를 살펴보는 중입니다 — 보통 1~2분 정도 걸려요.\n\n리뷰가 끝나면 이 안내는 자동으로 사라지고 결과가 게시됩니다.'
   PROGRESS_ID=$(curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
-    "$api/issues/${PR_NUMBER}/comments" -d "$(jq -n --arg b "$(printf "$body")" '{body:$b}')" | jq -r '.id // empty' || true)
+    "$api/issues/${PR_NUMBER}/comments" -d "$(jq -n --arg b "$body" '{body:$b}')" | jq -r '.id // empty' || true)
 }
 clear_progress() {
   [ -z "${PROGRESS_ID:-}" ] && return 0
