@@ -5,6 +5,8 @@ import com.wnl.cashchat.api.domain.evolution.exception.AlreadyMaxLevelException
 import com.wnl.cashchat.api.domain.evolution.persistence.entity.UserEvolution
 import com.wnl.cashchat.api.domain.evolution.persistence.repository.EvolutionAttemptRepository
 import com.wnl.cashchat.api.domain.evolution.persistence.repository.UserEvolutionRepository
+import com.wnl.cashchat.api.domain.energy.persistence.repository.UserEnergyRepository
+import com.wnl.cashchat.api.domain.energy.service.EnergyService
 import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
 import com.wnl.cashchat.api.domain.evolution.service.ProbabilityRoller
 import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
@@ -36,7 +38,9 @@ class EvolutionIntegrationTest : FunSpec() {
     @Autowired lateinit var pointTransactionRepository: PointTransactionRepository
     @Autowired lateinit var userEvolutionRepository: UserEvolutionRepository
     @Autowired lateinit var evolutionAttemptRepository: EvolutionAttemptRepository
+    @Autowired lateinit var userEnergyRepository: UserEnergyRepository
     @Autowired lateinit var userPointService: UserPointService
+    @Autowired lateinit var energyService: EnergyService
     @Autowired lateinit var evolutionService: EvolutionService
 
     // Replace the real SecureRandomProbabilityRoller with a controllable mock.
@@ -49,12 +53,14 @@ class EvolutionIntegrationTest : FunSpec() {
             pointTransactionRepository.deleteAll()
             userEvolutionRepository.deleteAll()
             userPointRepository.deleteAll()
+            userEnergyRepository.deleteAll()
             userRepository.deleteAll()
         }
 
         test("successful attempt increments level +1, writes one EVOLUTION_ATTEMPT tx and one evolution_attempt row") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "evo-success"))
             userPointService.ensureInitialized(user)
+            energyService.ensureInitialized(user)
             // Give enough balance for the attempt cost (Lv1→2 costs 500; initial balance is 1 → top up)
             userPointService.recordTransaction(user.id, 600L, PointTransactionReason.ATTENDANCE, "seed:${user.id}")
             val balanceBefore = userPointRepository.findByUserId(user.id)!!.balance
@@ -83,6 +89,7 @@ class EvolutionIntegrationTest : FunSpec() {
         test("same idempotencyKey called twice — second is no-op, rows stay at 1, same result") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "evo-idem"))
             userPointService.ensureInitialized(user)
+            energyService.ensureInitialized(user)
             userPointService.recordTransaction(user.id, 600L, PointTransactionReason.ATTENDANCE, "seed:${user.id}")
             val balanceBefore = userPointRepository.findByUserId(user.id)!!.balance
 
