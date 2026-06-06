@@ -512,3 +512,40 @@ jobs:
           . .github/scripts/review/resolve_command.sh
           export GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
           run_resolve_command
+
+  # ====================================================
+  # /help — 명령어 도움말 카드 (AI 호출 없음, 비용 0)
+  # ====================================================
+  help:
+    name: Help
+    needs: detect-command
+    if: needs.detect-command.outputs.authorized == 'true' && needs.detect-command.outputs.is_help == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (scripts)
+        uses: actions/checkout@v5
+      - name: Generate Gemini bot token
+        id: bot-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        with:
+          app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
+          private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Post help card
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_cards.sh
+          . .github/scripts/review/lib_help.sh
+          api="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}"
+          # 기존 help 카드 정리(중복 게시 방지) — help 마커만 대상
+          curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$api/issues/${PR_NUMBER}/comments?per_page=100" \
+            | jq -r '.[]|select(.user!=null and .user.type=="Bot" and .body!=null and (.body|test("<!-- cashchat-ai-review:help -->")))|.id' \
+            | while read -r cid; do [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" "$api/issues/comments/${cid}" >/dev/null || true; done || true
+          body="$(render_help_card)"
+          curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+            "$api/issues/${PR_NUMBER}/comments" -d "$(jq -n --arg b "$body" '{body:$b}')" >/dev/null
