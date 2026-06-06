@@ -2,10 +2,16 @@
 # 리뷰 코멘트 공용: 안내 코멘트 정리 / 실패 알림 / 진행 코멘트 / 한국어 라벨 치환.
 # 필요 env: GITHUB_TOKEN, GITHUB_API_URL, GITHUB_REPOSITORY, PR_NUMBER
 
-# ── 안내성 코멘트(진행/실패/사용량/심층권장) 본문 판별: notice면 rc0 ──
+# 카드 렌더 의존(같은 디렉터리)
+. "$(dirname "${BASH_SOURCE[0]}")/lib_cards.sh"
+
+# ── 정리 대상(notice) 판별: 리뷰 흐름 카드(progress/quota/error) 또는 pr-agent 영문 notice → rc0 ──
+# help/clean 은 제외(리뷰 실행이 도움말/정상완료 안내를 지우지 않도록).
 is_notice_body() {
-  printf '%s' "${1:-}" | grep -qE \
-    '^(Failed to generate code suggestions for PR|Preparing review\.\.\.|Preparing suggestions\.\.\.)$|^## ⏳ 오늘의 AI 리뷰|^## ⚠️ AI 리뷰를 완료하지|^## 🔍 AI 코드 리뷰를 진행|^## 💡 심층 리뷰를 권장'
+  local b="${1:-}"
+  printf '%s' "$b" | grep -qE '<!-- cashchat-ai-review:(progress|quota|error) -->' && return 0
+  printf '%s' "$b" | grep -qE '^(Failed to generate code suggestions for PR|Preparing review\.\.\.|Preparing suggestions\.\.\.)$' && return 0
+  return 1
 }
 
 # ── 리뷰 가이드 본문 영문 라벨 → 한국어 (stdin → stdout) ──
@@ -47,7 +53,11 @@ cleanup_notices() {
   local api; api="$(_api)"
   curl -s -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
     "$api/issues/${PR_NUMBER}/comments?per_page=100" \
-    | jq -r '.[] | select(.user!=null and .user.type=="Bot" and .body!=null and ((.body=="Failed to generate code suggestions for PR") or (.body=="Preparing review...") or (.body=="Preparing suggestions...") or (.body|test("^## ⏳ 오늘의 AI 리뷰")) or (.body|test("^## ⚠️ AI 리뷰를 완료하지")) or (.body|test("^## 🔍 AI 코드 리뷰를 진행")) or (.body|test("^## 💡 심층 리뷰를 권장")))) | .id' \
+    | jq -r '.[] | select(.user!=null and .user.type=="Bot" and .body!=null and (
+        (.body|test("<!-- cashchat-ai-review:(progress|quota|error) -->")) or
+        (.body=="Failed to generate code suggestions for PR") or
+        (.body=="Preparing review...") or (.body=="Preparing suggestions...")
+      )) | .id' \
     | while read -r cid; do
         [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" "$api/issues/comments/${cid}" >/dev/null || true
       done || true
