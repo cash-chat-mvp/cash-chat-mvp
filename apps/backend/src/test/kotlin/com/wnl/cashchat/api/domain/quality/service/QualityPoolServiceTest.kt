@@ -74,15 +74,18 @@ class QualityPoolServiceTest : FunSpec({
         verify(dailyRepo, never()).saveAndFlush(any())
     }
 
-    test("tryConsumePremium returns false when daily cap is reached without touching pool") {
+    test("tryConsumePremium returns false when daily cap is reached without touching pool balance") {
+        val pool = SharedQualityPool(balanceCentiPt = 1000L)
         val cappedUsage = DailyPremiumUsage(userId = userId, usageDate = today, count = 50)
+        whenever(poolRepo.findForUpdate()).thenReturn(pool)
         whenever(dailyRepo.findByUserIdAndUsageDate(userId, today)).thenReturn(cappedUsage)
 
         val result = service.tryConsumePremium(userId, 300L, today)
 
         result shouldBe false
-        // Pool must NOT be consulted at all
-        verify(poolRepo, never()).findForUpdate()
+        // Pool lock IS acquired (to serialize concurrent requests) but balance must be untouched
+        verify(poolRepo).findForUpdate()
+        pool.balanceCentiPt shouldBe 1000L
         verify(dailyRepo, never()).saveAndFlush(any())
     }
 

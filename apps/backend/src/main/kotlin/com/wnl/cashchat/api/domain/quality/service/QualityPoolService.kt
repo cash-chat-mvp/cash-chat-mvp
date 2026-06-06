@@ -13,7 +13,7 @@ import java.time.LocalDate
  * 공용 프리미엄 재원 풀 관리 서비스.
  *
  * accrue: 채팅 마진을 풀에 적립한다.
- * tryConsumePremium: 일일 캡 → 풀 게이트 → 사용량 증가 순으로 프리미엄 인출을 시도한다.
+ * tryConsumePremium: 풀 잠금 → 일일 캡 → 풀 게이트 → 사용량 증가 순으로 프리미엄 인출을 시도한다.
  *   반환값 false = 차단됨(캡 초과 또는 풀 부족). 예외 없음.
  * throttleScale: 풀 잔액 / safetyFloor (0.0~1.0). CC-340 에서 요금 조절에 사용한다.
  *
@@ -40,25 +40,29 @@ class QualityPoolService(
      * 유저([userId])의 프리미엄 요청을 게이팅한다.
      *
      * 처리 순서:
-     * 1) 일일 캡 체크 — usage.count >= premiumDailyCapPerUser 이면 즉시 false 반환.
-     * 2) 풀 게이트 — pool.tryConsume(deltaCentiPt) == false 이면 false 반환.
-     * 3) 사용량 +1 — 행이 없으면 INSERT(count=1); uq 경합 시 DataIntegrityViolation 을 잡아 재조회 후 increment.
+     * 1) 풀 잠금 — findForUpdate() 로 전역 풀 행을 SELECT FOR UPDATE 로 획득한다.
+     *    동시 요청이 모두 이 지점에서 직렬화되므로 이후 캡·게이트·사용량 증가가 원자적으로 수행된다.
+     * 2) 일일 캡 체크 — usage.count >= premiumDailyCapPerUser 이면 즉시 false 반환.
+     * 3) 풀 게이트 — pool.tryConsume(deltaCentiPt) == false 이면 false 반환.
+     * 4) 사용량 +1 — 행이 없으면 INSERT(count=1); uq 경합 시 DataIntegrityViolation 을 잡아 재조회 후 increment.
      *
      * @return true = 인출 성공, false = 거부됨 (음수 진입 없음)
      * @throws IllegalStateException 풀 행이 시드되지 않은 경우
      */
     @Transactional
     fun tryConsumePremium(userId: Long, deltaCentiPt: Long, today: LocalDate): Boolean {
-        // 1) 일일 캡 체크
+        // 1) 풀 잠금 — 이 지점에서 모든 동시 요청이 직렬화된다
+        val pool = poolRepo.findForUpdate()
+            ?: throw IllegalStateException("SharedQualityPool not seeded (id=1 row missing)")
+
+        // 2) 일일 캡 체크
         var usage = dailyRepo.findByUserIdAndUsageDate(userId, today)
         if (usage != null && usage.count >= props.premiumDailyCapPerUser) return false
 
-        // 2) 풀 게이트
-        val pool = poolRepo.findForUpdate()
-            ?: throw IllegalStateException("SharedQualityPool not seeded (id=1 row missing)")
+        // 3) 풀 게이트
         if (!pool.tryConsume(deltaCentiPt)) return false
 
-        // 3) 사용량 +1
+        // 4) 사용량 +1
         if (usage == null) {
             try {
                 dailyRepo.saveAndFlush(DailyPremiumUsage(userId = userId, usageDate = today, count = 1))
