@@ -19,7 +19,7 @@
 - [ ] `ShopCatalogService.listItems(category)` — `isActive=true` 필터 + `displayOrder` 정렬
 - [ ] `ShopPurchaseService.purchase(userId, itemCode, qty, idempotencyKey)`
   - [ ] 멱등성 선조회 (`WHERE userId=? AND idempotencyKey=?`) → 기존 `COMPLETED` 주문이면: 저장된 `itemCode`/`qty`가 요청과 일치하는지 검증(불일치 시 `IDEMPOTENCY_KEY_CONFLICT`) → 재차감 없이 **현재 시점**의 잔액·인벤토리를 재조회해 반환 (stale 스냅샷 미반환)
-    - 동시 INSERT 경합(같은 `(userId, key)` 더블클릭 등 — 둘 다 선조회 통과): `purchase_order` 복합 유니크 제약으로 한쪽이 `DataIntegrityViolationException`을 받음 → 이를 catch해 커밋된 주문을 재조회 후 위 멱등 경로로 처리(일치 → 현재 상태 반환, 불일치 → `IDEMPOTENCY_KEY_CONFLICT`/409). 클라이언트에 `500` 미노출.
+    - 동시 INSERT 경합(같은 `(userId, key)` 더블클릭 등 — 둘 다 선조회 통과): `purchase_order` 복합 유니크 제약으로 한쪽이 `DataIntegrityViolationException`을 받음 → **`@Transactional` 경계 바깥(Facade/Controller)에서 catch**(실패 트랜잭션은 `rollback-only` 마킹 → 내부에서 복구하면 커밋 시 `UnexpectedRollbackException`) → 트랜잭션 롤백 후 **별도 트랜잭션**으로 커밋된 주문을 재조회해 위 멱등 경로 처리(일치 → 현재 상태 반환, 불일치 → `IDEMPOTENCY_KEY_CONFLICT`/409). 클라이언트에 `500` 미노출.
   - [ ] `@Transactional` 안에서 `UserPointService.recordTransaction(delta=-price*qty, key="shop:purchase:{userId}:{idem}")` 호출 — 포인트 키도 사용자 스코프를 부여해 `purchase_order` 복합 키와 스코프 일치(기존 `attendance:{userId}:{date}` 컨벤션과 동일)
     - 참고: `UserPointService`는 외부 API가 아니라 **동일 백엔드·동일 DB의 로컬 `@Service`**(propagation=REQUIRED)로 호출자 트랜잭션에 합류 → 코인 차감·인벤토리 적재가 단일 DB 트랜잭션으로 원자 처리됨. 기존 `AttendanceService.checkIn`과 동일 패턴이라 분산 트랜잭션/Outbox·Saga 불필요.
     - 동시성: `recordTransaction`은 포인트 행에 비관적 락(`findByUserIdForUpdate` = `SELECT … FOR UPDATE`)을 걸고 **락 후** 잔액을 검증하므로, 같은 사용자의 동시 구매(서로 다른 키 포함)가 직렬화되어 잔액 음수가 발생하지 않는다.

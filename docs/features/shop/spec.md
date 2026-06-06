@@ -184,7 +184,7 @@ Request: `{ "itemCode": "...", "qty": 1, "idempotencyKey": "<uuid>" }`
 
 > 멱등성 재호출은 추가 차감 없이 **현재 시점의 잔액·인벤토리를 재조회**해서 반환한다 — `idempotencyKey`는 *이중 차감 방지*만 보장하며, 첫 구매 이후 다른 거래(출석·광고 보상 등)가 있었다면 그 결과가 반영된 최신 값이 반환된다(stale 스냅샷으로 클라이언트 상태를 덮어쓰지 않기 위함). 조회는 `(userId, idempotencyKey)` 복합 키로 하며, **같은 사용자**가 같은 키를 **다른 `itemCode`/`qty`**로 재사용하면 `IDEMPOTENCY_KEY_CONFLICT`로 거부한다. 자세한 시맨틱은 인수 기준 "멱등성 — 동일 키 재호출" / "멱등성 — 키 재사용 충돌 (동일 사용자)" 참조.
 >
-> **동시 INSERT 경합**: 같은 `(userId, idempotencyKey)`로 거의 동시에 들어온 두 요청이 둘 다 선조회를 통과해 INSERT가 경합하면, 복합 유니크 제약으로 한쪽만 성공하고 패자는 제약 위반(`DataIntegrityViolationException`)을 받는다. 이를 catch해 커밋된 주문을 재조회한 뒤 **위와 동일한 멱등 경로**로 처리한다(payload 일치 → 현재 상태 반환, 불일치 → `IDEMPOTENCY_KEY_CONFLICT`) — 클라이언트에 `500`이 노출되지 않는다.
+> **동시 INSERT 경합**: 같은 `(userId, idempotencyKey)`로 거의 동시에 들어온 두 요청이 둘 다 선조회를 통과해 INSERT가 경합하면, 복합 유니크 제약으로 한쪽만 성공하고 패자는 제약 위반(`DataIntegrityViolationException`)을 받는다. 이를 catch해 커밋된 주문을 재조회한 뒤 **위와 동일한 멱등 경로**로 처리한다(payload 일치 → 현재 상태 반환, 불일치 → `IDEMPOTENCY_KEY_CONFLICT`) — 클라이언트에 `500`이 노출되지 않는다. **단, 이 catch·재조회는 반드시 `@Transactional` 경계 바깥(Facade/Controller)에서 수행한다**: 제약 위반이 발생한 트랜잭션은 Spring이 `rollback-only`로 마킹하므로 같은 트랜잭션 안에서 복구를 시도하면 커밋 시점에 `UnexpectedRollbackException`이 발생한다 → 트랜잭션이 정상 롤백된 뒤 **별도(신규) 트랜잭션**으로 최신 주문을 재조회해야 한다.
 
 | 에러 | HTTP | 발생 조건 |
 | ---- | ---- | -------- |
