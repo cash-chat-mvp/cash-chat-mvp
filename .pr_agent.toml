@@ -33,10 +33,9 @@ extra_instructions = """
 """
 
 [pr_description]
-# 본문/제목을 덮어쓰지 않고 AI 설명을 별도 코멘트로만 게시 (기존 PR 템플릿 보존)
-publish_description_as_comment = true
-# 코멘트 1개를 갱신 — 재오픈 시 도배 방지
-publish_description_as_comment_persistent = true
+# AI 설명은 pr-description.yml이 메인 PR 본문에 직접 채운다(별도 코멘트 아님).
+# pr-agent /describe 자동 잡은 제거됨 — 본문 race 방지 및 단일 소유.
+publish_description_as_comment = false
 # 제목은 pr-description.yml(Jira 프리픽스)이 소유하므로 AI 제목 생성 끔
 generate_ai_title = false
 extra_instructions = """
