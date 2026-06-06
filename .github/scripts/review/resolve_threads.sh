@@ -40,7 +40,7 @@ resolve_threads() {
     payload=$(mktemp); out=$(mktemp)
     jq -n --arg p "$prompt" '{contents:[{role:"user",parts:[{text:$p}]}],generationConfig:{maxOutputTokens:256,temperature:0}}' > "$payload"
     if ! ai_retry gemini_generate "$GEMINI_KEY" "$model" "$payload" "$out"; then
-      echo "::warning::스레드 판단 실패(쿼터/오류) — 건너뜀: $fpath"; sleep 3; continue
+      echo "::warning::스레드 판단 실패(쿼터/오류) — 건너뜀: $fpath"; rm -f "$payload" "$out"; sleep 3; continue
     fi
     raw=$(jq -r '.candidates[0].content.parts[0].text // "no"' "$out" 2>/dev/null || echo "no")
     sleep 3   # RPM 보호
@@ -63,6 +63,7 @@ resolve_threads() {
         -d "$(jq -n --arg b "$(printf '🤖 **변경 검토**\n\n%s\n\n_아직 해결되지 않았거나 추가 확인이 필요해 보여 리졸브하지 않았습니다._' "${reason:-남은 우려가 있어 보입니다.}")" '{body:$b}')" >/dev/null 2>&1 || true
       echo "::notice::↺ 미해결 유지: $fpath"
     fi
+    rm -f "$payload" "$out"
   done <<< "$unresolved"
   echo "::notice::총 ${resolved}개 자동 리졸브"
   return 0

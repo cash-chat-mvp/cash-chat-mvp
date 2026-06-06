@@ -15,18 +15,19 @@ parse_resolve_reason() {
 extract_jira_parent() { printf '%s %s' "${1:-}" "${2:-}" | grep -oE 'CC-[0-9]+' | head -1 || true; }
 
 # AI 판단: rc0=resolve 타당(yes), rc1=부당(no). 근거는 전역 RESOLVE_REASON_AI에 저장.
-RESOLVE_REASON_AI=""
 ai_judge_resolve() { # $1=사유 $2=원본코멘트 $3=diff
+  RESOLVE_REASON_AI=""
   local model="${GEMINI_MODEL##gemini/}" payload out prompt raw verdict
   prompt=$(printf '리뷰어가 아래 사유로 이 코드리뷰 스레드를 resolve 요청했습니다.\n사유가 타당한지(코드가 실제로 반영되었거나, 추후 처리로 분류하는 게 합리적인지) 판단하세요.\n첫 줄에 "yes"(리졸브 타당) 또는 "no"(아직 이르다)만, 둘째 줄에 한국어 한 문장 근거.\n\n사유: %s\n원본 코멘트: %s\n\nDiff:\n%s' "$1" "$2" "$3")
   payload=$(mktemp); out=$(mktemp)
   jq -n --arg p "$prompt" '{contents:[{role:"user",parts:[{text:$p}]}],generationConfig:{maxOutputTokens:256,temperature:0}}' > "$payload"
   if ! ai_retry gemini_generate "$GEMINI_KEY" "$model" "$payload" "$out"; then
-    RESOLVE_REASON_AI="AI 판단을 가져오지 못해 사유를 신뢰해 처리합니다."; return 0   # 폴백: 타당 처리
+    RESOLVE_REASON_AI="AI 판단을 가져오지 못해 사유를 신뢰해 처리합니다."; rm -f "$payload" "$out"; return 0   # 폴백: 타당 처리
   fi
   raw=$(jq -r '.candidates[0].content.parts[0].text // "yes"' "$out" 2>/dev/null || echo "yes")
   verdict=$(printf '%s' "$raw" | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ' *`')
   RESOLVE_REASON_AI=$(printf '%s' "$raw" | sed -n '2p' | sed 's/^[[:space:]]*//')
+  rm -f "$payload" "$out"
   [[ "$verdict" == yes* ]]
 }
 
@@ -87,6 +88,8 @@ run_resolve_command() {
       else
         gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 서브태스크 생성 실패(HTTP ${CODE}). 스레드만 리졸브할게요."
       fi
+    else
+      gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 서브태스크 이슈 타입을 찾지 못해 스레드만 리졸브할게요."
     fi
   fi
 
