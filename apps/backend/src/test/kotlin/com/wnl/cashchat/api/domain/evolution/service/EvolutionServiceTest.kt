@@ -1,6 +1,7 @@
 package com.wnl.cashchat.api.domain.evolution.service
 
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
+import com.wnl.cashchat.api.domain.energy.service.EnergyService
 import com.wnl.cashchat.api.domain.evolution.exception.AlreadyMaxLevelException
 import com.wnl.cashchat.api.domain.evolution.persistence.entity.EvolutionAttempt
 import com.wnl.cashchat.api.domain.evolution.persistence.entity.UserEvolution
@@ -29,6 +30,7 @@ class EvolutionServiceTest : FunSpec({
     lateinit var evolutionAttemptRepository: EvolutionAttemptRepository
     lateinit var userPointService: UserPointService
     lateinit var probabilityRoller: ProbabilityRoller
+    lateinit var energyService: EnergyService
     lateinit var service: EvolutionService
 
     val userId = 1L
@@ -45,12 +47,14 @@ class EvolutionServiceTest : FunSpec({
         evolutionAttemptRepository = mock()
         userPointService = mock()
         probabilityRoller = mock()
+        energyService = mock()
         service = EvolutionService(
             userEvolutionRepository,
             evolutionAttemptRepository,
             userPointService,
             probabilityRoller,
             properties,
+            energyService,
         )
         whenever(evolutionAttemptRepository.findByIdempotencyKey(any())).thenReturn(null)
     }
@@ -92,6 +96,7 @@ class EvolutionServiceTest : FunSpec({
         verify(evolutionAttemptRepository).save(argThat<EvolutionAttempt> {
             this.userId == userId && fromLevel == 1 && success && resultLevel == 2 && idempotencyKey == "key-1"
         })
+        verify(energyService).applyPostEvolutionBoost(userId)
     }
 
     test("failed attempt still deducts cost but does not level up") {
@@ -109,6 +114,7 @@ class EvolutionServiceTest : FunSpec({
         verify(evolutionAttemptRepository).save(argThat<EvolutionAttempt> {
             !success && resultLevel == 1
         })
+        verify(energyService, never()).applyPostEvolutionBoost(any())
     }
 
     test("attempt at a level with no rule throws AlreadyMaxLevel and never charges") {
@@ -118,6 +124,7 @@ class EvolutionServiceTest : FunSpec({
 
         verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
         verify(evolutionAttemptRepository, never()).save(any())
+        verify(energyService, never()).applyPostEvolutionBoost(any())
     }
 
     test("duplicate idempotency key returns the prior attempt without charging again") {
@@ -132,6 +139,7 @@ class EvolutionServiceTest : FunSpec({
         result.resultLevel shouldBe 2
         verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
         verify(evolutionAttemptRepository, never()).save(any())
+        verify(energyService, never()).applyPostEvolutionBoost(any())
     }
 
     test("insufficient points propagates and does not level up or log") {
@@ -142,5 +150,6 @@ class EvolutionServiceTest : FunSpec({
 
         verify(probabilityRoller, never()).succeeds(any())
         verify(evolutionAttemptRepository, never()).save(any())
+        verify(energyService, never()).applyPostEvolutionBoost(any())
     }
 })

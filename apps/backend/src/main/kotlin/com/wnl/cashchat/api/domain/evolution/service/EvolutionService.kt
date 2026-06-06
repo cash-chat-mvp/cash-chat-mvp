@@ -1,5 +1,6 @@
 package com.wnl.cashchat.api.domain.evolution.service
 
+import com.wnl.cashchat.api.domain.energy.service.EnergyService
 import com.wnl.cashchat.api.domain.evolution.exception.AlreadyMaxLevelException
 import com.wnl.cashchat.api.domain.evolution.persistence.entity.EvolutionAttempt
 import com.wnl.cashchat.api.domain.evolution.persistence.entity.UserEvolution
@@ -29,6 +30,7 @@ class EvolutionService(
     private val userPointService: UserPointService,
     private val probabilityRoller: ProbabilityRoller,
     private val evolutionProperties: EvolutionProperties,
+    private val energyService: EnergyService,
 ) {
     fun ensureInitialized(user: User): UserEvolution =
         userEvolutionRepository.findByUserId(user.id) ?: createInitial(user)
@@ -64,7 +66,10 @@ class EvolutionService(
         )
 
         val success = probabilityRoller.succeeds(rule.successRate)
-        if (success) evo.levelUp()
+        if (success) {
+            evo.levelUp()
+            energyService.applyPostEvolutionBoost(userId)
+        }
 
         evolutionAttemptRepository.save(
             EvolutionAttempt(
