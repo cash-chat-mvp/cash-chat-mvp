@@ -118,8 +118,8 @@ And Phase 1 동안 해당 카테고리 아이템은 카탈로그에 노출되지
 
 ### 공통 규칙
 
-- **인증**: 모든 endpoint는 `Authorization: Bearer <jwt>` 필수 (기존 `domain/auth` 발급 access token; 추가 scope 요구 없음). 누락·만료 시 `401 UNAUTHORIZED` (기존 Security 필터 응답 형식 그대로).
-- **에러 응답 공통 본문**: `{ "code": "<DOMAIN_ENUM>", "message": "<설명>" }`. 도메인 enum은 인수 기준에 명시된 식별자(`INSUFFICIENT_COIN` 등)와 1:1 일치.
+- **인증**: 모든 endpoint는 `Authorization: Bearer <jwt>` 필수 (기존 `domain/auth` 발급 access token; 추가 scope 요구 없음). 누락·만료 시 `401 UNAUTHORIZED`, 권한 부족 시 `403 FORBIDDEN` — **이 인증/인가 응답은 아래 도메인 에러 공통 본문(`{code, message}`)을 따르지 않고**, 기존 Spring Security 기본 에러 형식(`{ "timestamp", "status", "error", "path" }`, `SecurityConfig`의 `sendError`)을 그대로 사용한다.
+- **도메인 에러 응답 공통 본문**: 상점/인벤토리 도메인 에러는 `{ "code": "<DOMAIN_ENUM>", "message": "<설명>" }`(공통 `ErrorResponse`). 도메인 enum은 인수 기준에 명시된 식별자(`INSUFFICIENT_COIN` 등)와 1:1 일치. (인증/인가 401·403은 위 항목 참조 — 별도 형식)
 - **idempotencyKey**: UUID v4 권장 (서버는 형식만 검증). 클라이언트가 같은 요청에 같은 키를 재사용하면 멱등 처리.
 - **멱등성 스코프**: 멱등성 키는 `(userId, idempotencyKey)` **복합 유니크**로 사용자별로 격리한다. `point_transaction` 멱등성 키도 `shop:purchase:<userId>:<idem>`로 사용자 스코프를 부여해(기존 `attendance:<userId>:<date>` 컨벤션과 동일) 두 레이어 스코프를 일치시킨다 — 키 선점(squatting)·교차 사용자 정보노출을 구조적으로 차단한다.
 - **동시성**: 같은 사용자의 동시 구매(서로 다른 키 포함)는 `UserPointService`가 포인트 행에 비관적 락(`SELECT … FOR UPDATE`)을 걸고 **락 획득 후** 잔액을 검증하므로 직렬화되어 잔액 음수가 발생하지 않는다. `user_inventory` 다건 UPSERT(패키지 grant)는 항상 `itemCode` 오름차순으로 정렬해 락 순서를 고정함으로써 동시 요청 간 데드락을 방지한다.
@@ -185,11 +185,13 @@ Request: `{ "itemCode": "...", "qty": 1, "idempotencyKey": "<uuid>" }`
 
 | 에러 | HTTP | 발생 조건 |
 | ---- | ---- | -------- |
-| `INSUFFICIENT_COIN` | 400 | 잔액 < `priceCoin * qty` |
+| `INSUFFICIENT_COIN` | 400 | 잔액 < `priceCoin * qty` (포인트 레이어 `InsufficientPointsException`/402를 Shop이 catch→변환, 아래 주 참조) |
 | `ITEM_NOT_FOUND` | 400 | 시드에 없는 `itemCode` |
 | `ITEM_INACTIVE` | 400 | `shop_item.isActive=false` |
 | `VALIDATION` | 400 | `qty < 1`, `idempotencyKey` 형식 위반 등 |
 | `IDEMPOTENCY_KEY_CONFLICT` | 409 | **같은 사용자**가 같은 `idempotencyKey`를 다른 `itemCode`/`qty`로 재사용 (멱등성 스코프 = `(userId, idempotencyKey)`) |
+
+> **`INSUFFICIENT_COIN` 변환 주**: 잔액 부족은 `UserPointService.recordTransaction`이 던지는 `InsufficientPointsException`으로 발생한다. 포인트 레이어의 기본 매핑은 `402 INSUFFICIENT_POINTS`(`PointExceptionHandler`)지만, **`ShopPurchaseService`가 이를 catch해 상점 도메인 에러 `INSUFFICIENT_COIN`(400)으로 변환**한다 — 상점 API는 코인 도메인 언어로 일관 응답하고 프론트의 `INSUFFICIENT_COIN` 매핑(FE-3)을 유지한다.
 
 ### `GET /api/inventory/me`
 

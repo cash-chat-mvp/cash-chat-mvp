@@ -23,6 +23,7 @@
     - 참고: `UserPointService`는 외부 API가 아니라 **동일 백엔드·동일 DB의 로컬 `@Service`**(propagation=REQUIRED)로 호출자 트랜잭션에 합류 → 코인 차감·인벤토리 적재가 단일 DB 트랜잭션으로 원자 처리됨. 기존 `AttendanceService.checkIn`과 동일 패턴이라 분산 트랜잭션/Outbox·Saga 불필요.
     - 동시성: `recordTransaction`은 포인트 행에 비관적 락(`findByUserIdForUpdate` = `SELECT … FOR UPDATE`)을 걸고 **락 후** 잔액을 검증하므로, 같은 사용자의 동시 구매(서로 다른 키 포함)가 직렬화되어 잔액 음수가 발생하지 않는다.
   - [ ] `INSUFFICIENT_COIN`, `ITEM_INACTIVE`, `ITEM_NOT_FOUND`, `IDEMPOTENCY_KEY_CONFLICT` 도메인 에러 분리
+    - `InsufficientPointsException`(포인트 레이어 기본 매핑 `402 INSUFFICIENT_POINTS`)을 catch해 상점 도메인 에러 `INSUFFICIENT_COIN`(400)으로 변환 — 상점 API는 코인 도메인 언어로 일관 응답
   - [ ] `shop_item_grant` 다건 적재 (`ENHANCE_PACK` 같은 패키지) — `itemCode` 오름차순 정렬 후 순차 UPSERT로 데드락 방지
 - [ ] `InventoryService.getMine(userId)`
 - [ ] Kotest + TestContainers 테스트: 정상 / 잔액 부족 / 비활성 / 멱등성 재호출(현재 상태 반환) / 키 재사용 충돌 / 패키지 다건 grant / 동시 구매 경합
