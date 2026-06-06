@@ -54,9 +54,15 @@ class ShopExceptionHandler {
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(ErrorResponse("VALIDATION", "Malformed request body"))
 
-    // category enum 범위 밖(예: ?category=FOO) → 400 INVALID_CATEGORY
+    // 타입 변환 실패 → 파라미터별 정확한 코드/메시지. shop 의 유일한 enum 파라미터는 category 다.
+    // (다른 타입 파라미터가 추가되면 category 로 오라벨링하지 않고 VALIDATION + 파라미터명으로 응답)
     @ExceptionHandler(MethodArgumentTypeMismatchException::class)
     fun handleTypeMismatch(e: MethodArgumentTypeMismatchException): ResponseEntity<ErrorResponse> =
-        ResponseEntity.status(HttpStatus.BAD_REQUEST)
-            .body(ErrorResponse("INVALID_CATEGORY", "Invalid category: ${e.value}"))
+        ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+            if (e.name == "category") {
+                ErrorResponse("INVALID_CATEGORY", "Invalid category: ${e.value}")
+            } else {
+                ErrorResponse("VALIDATION", "Invalid value for '${e.name}': ${e.value}")
+            },
+        )
 }

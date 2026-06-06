@@ -9,7 +9,8 @@ CREATE TABLE shop_item (
     effect_summary VARCHAR(255) NOT NULL,
     is_active      BOOLEAN      NOT NULL,
     display_order  INT          NOT NULL,
-    PRIMARY KEY (item_code)
+    PRIMARY KEY (item_code),
+    CONSTRAINT ck_shop_item_price CHECK (price_coin >= 0)
 );
 
 -- 다건 grant 조인(참조 데이터)
@@ -37,7 +38,9 @@ CREATE TABLE purchase_order (
     updated_at      TIMESTAMP(6) NOT NULL,
     PRIMARY KEY (id),
     CONSTRAINT uk_purchase_order_user_idem UNIQUE (user_id, idempotency_key),
-    CONSTRAINT fk_purchase_order_user FOREIGN KEY (user_id) REFERENCES users (id)
+    CONSTRAINT fk_purchase_order_user FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT ck_purchase_order_qty CHECK (qty >= 1),
+    CONSTRAINT ck_purchase_order_snapshot_price CHECK (snapshot_price >= 0)
 );
 CREATE INDEX idx_purchase_order_user_id ON purchase_order (user_id);
 
