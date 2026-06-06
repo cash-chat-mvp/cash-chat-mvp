@@ -41,6 +41,20 @@ app:
       ssv-public-keys-uri: ${APP_ADS_GOOGLE_SSV_PUBLIC_KEYS_URI:https://www.gstatic.com/admob/reward/verifier-keys.json}
       public-key-cache-ttl: ${APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL:24h}
       rewarded-ad-unit-id: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID:}
+  evolution:
+    rules:
+      - from-level: 1
+        attempt-cost: 500
+        success-rate: 0.7
+      - from-level: 2
+        attempt-cost: 1200
+        success-rate: 0.5
+      - from-level: 3
+        attempt-cost: 3000
+        success-rate: 0.25
+      - from-level: 4
+        attempt-cost: 8000
+        success-rate: 0.1
 
 # O-Auth (Open Authorization)
 # OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml
