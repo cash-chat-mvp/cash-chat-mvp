@@ -57,8 +57,8 @@ Given 사용자 코인 잔액 = 1,250, 진화석 가격 = 200
 When 사용자가 `POST /api/shop/purchase`를 `{itemCode:"EVO_STONE", qty:1, idempotencyKey:"k1"}`로 호출한다
 Then 단일 DB 트랜잭션 안에서 코인이 200 차감되어 1,050이 된다
 And `user_inventory.EVO_STONE.qty`가 1 증가한다
-And `purchase_order`에 `status=COMPLETED`, `idempotencyKey="k1"` 행이 1개 생성된다
-And `point_transaction`에 멱등성 키 `shop:purchase:k1`로 차감 트랜잭션이 기록된다
+And `purchase_order`에 `status=COMPLETED`, 복합 키 `(userId, idempotencyKey="k1")` 행이 1개 생성된다
+And `point_transaction`에 멱등성 키 `shop:purchase:<userId>:k1`(사용자 스코프)로 차감 트랜잭션이 기록된다
 And 응답에는 갱신된 코인 잔액과 갱신된 보유 수량이 포함된다.
 
 ### 패키지 구매 (다건 grant)
@@ -84,12 +84,14 @@ When 사용자가 동일 페이로드를 다시 호출한다
 Then 추가 차감/적재가 발생하지 않는다
 And 응답은 추가 차감 없이 **현재 시점**의 잔액·Inventory를 반환한다 (이중 차감만 방지하며, 첫 구매 이후 다른 거래가 있었다면 그 결과가 반영된 최신 값이다).
 
-### 멱등성 — 키 재사용 충돌
+### 멱등성 — 키 재사용 충돌 (동일 사용자)
 
 Given 사용자가 `idempotencyKey="k1"`로 진화석 1개 구매에 성공했다
-When 동일 `idempotencyKey="k1"`로 **다른 `itemCode`/`qty`(또는 다른 사용자)**로 호출한다
+When **같은 사용자**가 동일 `idempotencyKey="k1"`로 **다른 `itemCode`/`qty`**로 호출한다
 Then 백엔드는 409 `IDEMPOTENCY_KEY_CONFLICT`로 거부한다
 And 어떤 상태도 변하지 않는다.
+
+> 멱등성 스코프는 `(userId, idempotencyKey)` 복합이다. **다른 사용자가 같은 키 값**을 쓰는 경우는 충돌이 아니라 사용자별로 독립된 별개 주문으로 처리된다(키 선점·교차 사용자 정보노출 불가).
 
 ### 잘못된 itemCode
 
@@ -119,6 +121,8 @@ And Phase 1 동안 해당 카테고리 아이템은 카탈로그에 노출되지
 - **인증**: 모든 endpoint는 `Authorization: Bearer <jwt>` 필수 (기존 `domain/auth` 발급 access token; 추가 scope 요구 없음). 누락·만료 시 `401 UNAUTHORIZED` (기존 Security 필터 응답 형식 그대로).
 - **에러 응답 공통 본문**: `{ "code": "<DOMAIN_ENUM>", "message": "<설명>" }`. 도메인 enum은 인수 기준에 명시된 식별자(`INSUFFICIENT_COIN` 등)와 1:1 일치.
 - **idempotencyKey**: UUID v4 권장 (서버는 형식만 검증). 클라이언트가 같은 요청에 같은 키를 재사용하면 멱등 처리.
+- **멱등성 스코프**: 멱등성 키는 `(userId, idempotencyKey)` **복합 유니크**로 사용자별로 격리한다. `point_transaction` 멱등성 키도 `shop:purchase:<userId>:<idem>`로 사용자 스코프를 부여해(기존 `attendance:<userId>:<date>` 컨벤션과 동일) 두 레이어 스코프를 일치시킨다 — 키 선점(squatting)·교차 사용자 정보노출을 구조적으로 차단한다.
+- **동시성**: 같은 사용자의 동시 구매(서로 다른 키 포함)는 `UserPointService`가 포인트 행에 비관적 락(`SELECT … FOR UPDATE`)을 걸고 **락 획득 후** 잔액을 검증하므로 직렬화되어 잔액 음수가 발생하지 않는다. `user_inventory` 다건 UPSERT(패키지 grant)는 항상 `itemCode` 오름차순으로 정렬해 락 순서를 고정함으로써 동시 요청 간 데드락을 방지한다.
 
 ### 엔드포인트 요약
 
@@ -177,7 +181,7 @@ Request: `{ "itemCode": "...", "qty": 1, "idempotencyKey": "<uuid>" }`
 }
 ```
 
-> 멱등성 재호출은 추가 차감 없이 **현재 시점의 잔액·인벤토리를 재조회**해서 반환한다 — `idempotencyKey`는 *이중 차감 방지*만 보장하며, 첫 구매 이후 다른 거래(출석·광고 보상 등)가 있었다면 그 결과가 반영된 최신 값이 반환된다(stale 스냅샷으로 클라이언트 상태를 덮어쓰지 않기 위함). 또한 같은 키가 **다른 `userId`/`itemCode`/`qty`로 재사용**되면 `IDEMPOTENCY_KEY_CONFLICT`로 거부한다. 자세한 시맨틱은 인수 기준 "멱등성 — 동일 키 재호출" / "멱등성 — 키 재사용 충돌" 참조.
+> 멱등성 재호출은 추가 차감 없이 **현재 시점의 잔액·인벤토리를 재조회**해서 반환한다 — `idempotencyKey`는 *이중 차감 방지*만 보장하며, 첫 구매 이후 다른 거래(출석·광고 보상 등)가 있었다면 그 결과가 반영된 최신 값이 반환된다(stale 스냅샷으로 클라이언트 상태를 덮어쓰지 않기 위함). 조회는 `(userId, idempotencyKey)` 복합 키로 하며, **같은 사용자**가 같은 키를 **다른 `itemCode`/`qty`**로 재사용하면 `IDEMPOTENCY_KEY_CONFLICT`로 거부한다. 자세한 시맨틱은 인수 기준 "멱등성 — 동일 키 재호출" / "멱등성 — 키 재사용 충돌 (동일 사용자)" 참조.
 
 | 에러 | HTTP | 발생 조건 |
 | ---- | ---- | -------- |
@@ -185,7 +189,7 @@ Request: `{ "itemCode": "...", "qty": 1, "idempotencyKey": "<uuid>" }`
 | `ITEM_NOT_FOUND` | 400 | 시드에 없는 `itemCode` |
 | `ITEM_INACTIVE` | 400 | `shop_item.isActive=false` |
 | `VALIDATION` | 400 | `qty < 1`, `idempotencyKey` 형식 위반 등 |
-| `IDEMPOTENCY_KEY_CONFLICT` | 409 | 같은 `idempotencyKey`가 다른 `userId`/`itemCode`/`qty`로 재사용됨 |
+| `IDEMPOTENCY_KEY_CONFLICT` | 409 | **같은 사용자**가 같은 `idempotencyKey`를 다른 `itemCode`/`qty`로 재사용 (멱등성 스코프 = `(userId, idempotencyKey)`) |
 
 ### `GET /api/inventory/me`
 
@@ -239,10 +243,10 @@ sequenceDiagram
     FE->>API: POST /api/shop/purchase {itemCode, qty, idempotencyKey}
 
     API->>DB: BEGIN TRANSACTION
-    API->>DB: purchase_order SELECT WHERE idempotencyKey=?
-    alt 기존 키 존재
+    API->>DB: purchase_order SELECT WHERE userId=? AND idempotencyKey=?
+    alt 기존 (userId, 키) 존재
         DB-->>API: 기존 COMPLETED 주문 (재차감 없음)
-        alt 저장된 userId/itemCode/qty 불일치
+        alt 저장된 itemCode/qty 불일치
             API->>DB: ROLLBACK
             API-->>FE: 409 IDEMPOTENCY_KEY_CONFLICT
         else 일치
@@ -256,13 +260,13 @@ sequenceDiagram
             API->>DB: ROLLBACK
             API-->>FE: 400 ITEM_NOT_FOUND or ITEM_INACTIVE
         else 유효 아이템
-            API->>API: recordTransaction(delta=-price*qty, key="shop:purchase:{idem}")
+            API->>API: recordTransaction(delta=-price*qty, key="shop:purchase:{userId}:{idem}")
             alt 잔액 부족
                 API->>DB: ROLLBACK
                 API-->>FE: 400 INSUFFICIENT_COIN
             else 잔액 충분
-                API->>DB: user_inventory UPSERT (grant 다건 처리)
-                API->>DB: purchase_order INSERT (userId, itemCode, qty, status=COMPLETED, snapshotPrice)
+                API->>DB: user_inventory UPSERT (grant 다건, itemCode 정렬 순서로 데드락 방지)
+                API->>DB: purchase_order INSERT ((userId, idempotencyKey) 복합, itemCode, qty, status=COMPLETED, snapshotPrice)
                 API->>DB: COMMIT
                 API-->>FE: 200 {coinBalance, inventory}
             end
