@@ -20,3 +20,13 @@
   - apps/frontend/app/src/main/java/com/nomadclub/cashchat/feature/rewards/BenefitZoneScreen.kt (LazyColumn 블록 교체, PhasePlaceholder 삭제, Alignment import 추가)
 - 검증: `./gradlew :app:assembleDebug -q` → BUILD SUCCESSFUL (app-debug.apk 재생성 확인)
 - 인계 메모: BenefitBadge(label, bg, fg) enum { NEXT, SOON }; BenefitInfoCard(icon, title, badge, description, dimmed, onClick, modifier). 회색 PhasePlaceholder 3개를 BenefitInfoCard 3개(리워드 광고/데일리 미션/TNK 오퍼월)로 교체, 헤더 우측에 코인 칩(🪙 balance, 라운드 배경) 적용. 기존 LaunchedEffect(loadMonthly/rewardEvents/errorMessage 토스트) 그대로 유지.
+
+## UI Task 4: iOS 주간 히어로 + 소개카드
+- 상태: ⚠️ (빌드 미검증 — 사용자 Xcode)
+- 변경 파일:
+  - apps/frontend/CashChatIOS/CashChatIOS/BenefitZone/AttendanceViewModel.swift (streak @Published 추가, AttendanceWidgetView 전체를 주간 히어로 카드로 교체, BenefitInfoCardView 신규 추가)
+- 검증: Swift 문법검토만 (xcodebuild 불가 환경)
+  - vm.streak: `self.streak = Int(s.currentStreak)` — Kotlin `Int` → Swift `Int32` → `Int(...)` 일치 (KMM 공통 변환 패턴, AttendanceModels.kt currentStreak: Int 확인)
+  - 기존 daysInMonth/cellColor/dayCell/todayNum/columns/GridItem/LazyVGrid 헬퍼 전부 제거 확인 (grep 결과 없음)
+  - 중괄호 균형 확인 (open 38 / close 38)
+- 인계 메모: BenefitInfoCardView(icon:title:badge:description:dimmed:) 시그니처는 Task 5(RewardsView) 호출부와 일치해야 함. weekCells()는 vm.month 기준으로 checkedDays를 매칭하므로 월 경계(주가 두 달에 걸칠 때) 표시 로직 주의.
