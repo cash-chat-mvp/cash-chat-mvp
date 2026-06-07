@@ -38,6 +38,7 @@ kotlin {
             implementation(libs.ktor.client.core)
             implementation(libs.ktor.client.content.negotiation)
             implementation(libs.ktor.serialization.kotlinx.json)
+            implementation(libs.ktor.client.auth)
 
             // 직렬화
             implementation(libs.kotlinx.serialization.json)
@@ -61,6 +62,12 @@ kotlin {
             implementation(libs.ktor.client.darwin)
             // SQLDelight iOS Native 드라이버
             implementation(libs.sqldelight.native.driver)
+        }
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.ktor.client.mock)
+            implementation(libs.kotlinx.coroutines.test)
         }
     }
 }
