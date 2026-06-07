@@ -1074,6 +1074,26 @@ struct OnboardingView: View {
                 .padding(.bottom, 16)
             }
             .background(Color(.systemGroupedBackground))
+            .safeAreaInset(edge: .bottom) {
+                if let toast = attendanceVM.toast {
+                    Text(toast)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background(Color(red: 0.1, green: 0.1, blue: 0.16).opacity(0.92))
+                        .clipShape(Capsule())
+                        .padding(.bottom, 8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.25), value: attendanceVM.toast)
+            .onChange(of: attendanceVM.toast) { _, newValue in
+                guard newValue != nil else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    attendanceVM.toast = nil
+                }
+            }
             .opacity(animateIn ? 1 : 0)
             .offset(y: animateIn ? 0 : 14)
             .animation(.easeOut(duration: 0.34), value: animateIn)

@@ -10,6 +10,7 @@ final class AttendanceViewModel: ObservableObject {
     @Published var checkedDays: Set<Int> = []
     @Published var todayChecked = false
     @Published var nextRewardCoin: Int64 = 0
+    @Published var nextRewardBonus: String = ""
     @Published var balance: Int64 = 0
     @Published var toast: String? = nil
 
@@ -32,6 +33,9 @@ final class AttendanceViewModel: ObservableObject {
                 self.streak = Int(s.currentStreak)
                 self.todayChecked = s.todayChecked
                 self.nextRewardCoin = s.nextReward?.coin ?? 0
+                self.nextRewardBonus = (s.nextReward?.bonusItems ?? [])
+                    .map { "📦 \($0.itemCode) \($0.quantity)개" }
+                    .joined(separator: " ")
                 if let err = s.errorMessage {
                     self.toast = err
                 }
@@ -124,7 +128,7 @@ struct AttendanceWidgetView: View {
                 }
             }
 
-            Text("🎁 오늘 보상 🪙+\(vm.nextRewardCoin)")
+            Text("🎁 오늘 보상 🪙+\(vm.nextRewardCoin)" + (vm.nextRewardBonus.isEmpty ? "" : "  \(vm.nextRewardBonus)"))
                 .font(.system(size: 12.5))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
