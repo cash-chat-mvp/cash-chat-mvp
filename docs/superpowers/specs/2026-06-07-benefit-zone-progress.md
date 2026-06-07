@@ -35,3 +35,16 @@
   - Task 3 구현 1차 시도에서 `request.url.encodedPath` 가 Unresolved reference 컴파일 에러 발생
     → `encodedPath` 는 `io.ktor.http` 의 URLBuilder 확장 프로퍼티로, 명시적 import(`io.ktor.http.encodedPath`) 필요. import 추가 후 컴파일/테스트 모두 통과.
 - 인계 메모: AuthenticatedApiClient(config, tokenProvider, engine) 시그니처와 `.httpClient` 프로퍼티는 스펙대로 유지됨 — 후속 Koin 모듈에서 `AuthenticatedApiClient(get(), get(), engineProvider())`, `get<AuthenticatedApiClient>().httpClient` 형태로 바로 사용 가능.
+
+## Task 4: Android TokenProvider 어댑터
+- 상태: ✅
+- 변경 파일:
+  - `apps/frontend/app/src/main/java/com/nomadclub/cashchat/core/data/DataStoreTokenProvider.kt` (신규)
+  - `apps/frontend/app/src/main/java/com/nomadclub/cashchat/core/data/TokenDataStore.kt` (수정: `updateTokensBlocking` 추가)
+- 검증: `./gradlew :app:compileDebugKotlin -q` → 성공 (출력 없음, 에러 없음)
+  - 참고: 이 모듈에는 dev/prod flavor가 없어 `compileDevDebugKotlin` 태스크가 존재하지 않음 → `compileDebugKotlin` 사용
+- 인계 메모:
+  - 실제 키 상수명은 `KEY_ACCESS_TOKEN`, `KEY_REFRESH_TOKEN` (둘 다 `stringPreferencesKey`, private companion object) — 스펙과 일치.
+  - `getOrCreateDeviceTokenBlocking()`이 실제로 존재함 (스펙 그대로 사용).
+  - `androidx.datastore.preferences.core.edit`는 이미 import 되어 있어 추가 import 불필요. `runBlocking`도 기존 import 재사용.
+  - `updateTokensBlocking`은 기존 `*Blocking` 함수들 바로 아래(파일 끝)에 추가함.
