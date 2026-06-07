@@ -59,3 +59,16 @@
   - `BonusItem`, `RewardPreview`, `MonthlyAttendance`, `CheckInResult` 4개 데이터 클래스 모두 `@Serializable` 적용, 필드명/타입 스펙과 정확히 일치(coin/awardedCoin: Long, dayCount/year/month/currentStreak/streakDayCount/quantity: Int, todayChecked: Boolean).
   - 기존 빈 디렉터리 `attendance/`가 이미 존재했으나 그 하위 `model/` 패키지 및 파일은 신규 생성.
   - 후속 Task(AttendanceApiService, AttendanceStore)는 이 패키지(`com.nomadclub.cashchat.shared.attendance.model`)에서 바로 import 가능.
+
+## Task 6-7: AttendanceApiService (TDD)
+- 상태: ✅
+- 변경 파일:
+  - `apps/frontend/shared/src/commonTest/kotlin/com/nomadclub/cashchat/shared/attendance/AttendanceApiServiceTest.kt` (신규, Task 6)
+  - `apps/frontend/shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/attendance/AttendanceApiService.kt` (신규, Task 7)
+- 검증:
+  - RED: `./gradlew :shared:testDebugUnitTest --tests "*AttendanceApiServiceTest*"` → 컴파일 실패 (`Unresolved reference 'AttendanceApiService'`, `'itemCode'`) — 예상대로 실패 확인
+  - GREEN: 동일 명령 재실행 → BUILD SUCCESSFUL, 테스트 결과 XML에서 `tests="2" failures="0" errors="0"` 확인 (getMonthly/checkIn 둘 다 PASS)
+- 인계 메모:
+  - 시그니처 `AttendanceApiService(config: ApiConfig, httpClient: HttpClient)`로 스펙과 일치 — 후속 Koin 모듈에서 `AttendanceApiService(get(), get<AuthenticatedApiClient>().httpClient)` 형태로 바로 사용 가능.
+  - `getMonthly`/`checkIn` 모두 `@Throws(CancellationException::class, Exception::class)` 적용 (iOS 크래시 방지).
+  - `getMonthly(year, month)`는 둘 다 nullable이며 null이면 쿼리 파라미터를 생략 — MockEngine 테스트에서는 항상 값이 전달되므로 경로(`/api/attendance/me`)만 검증.
