@@ -7,41 +7,41 @@
 
 ### BE-1. 도메인 모델 (`domain/shop/`, `domain/inventory/`)
 
-- [ ] `ShopItem` 엔티티 (`itemCode` PK, `name`, `category`, `priceCoin`, `isActive`, `displayOrder`)
-- [ ] `ShopItemGrant` 조인 엔티티 (`itemCode`, `grantItemCode`, `grantQty`) — 패키지 지원
-- [ ] `PurchaseOrder` 엔티티 (`(userId, idempotencyKey)` **복합 unique**, `itemCode`, `qty`, `status`, `snapshotPrice`, `createdAt`) — 멱등성 스코프를 사용자별로 격리(키 선점·교차 사용자 오용 차단). 재호출 시 저장된 `itemCode`/`qty`가 요청과 일치하는지 검증(불일치 → `IDEMPOTENCY_KEY_CONFLICT`)
-- [ ] `UserInventory` 엔티티 (`userId`, `itemCode`, `qty`) — composite unique
-- [ ] Repository: JPA + 동시성 안전 UPSERT (MySQL `ON DUPLICATE KEY UPDATE` / H2 `MERGE`) — 다건 UPSERT는 `itemCode` 오름차순 정렬 후 처리(락 순서 고정 → 데드락 방지)
-- [ ] Inventory read API와 후속 `consume` 확장 지점을 위한 인터페이스 분리
+- [x] `ShopItem` 엔티티 (`itemCode` PK, `name`, `category`, `priceCoin`, `isActive`, `displayOrder`)
+- [x] `ShopItemGrant` 조인 엔티티 (`itemCode`, `grantItemCode`, `grantQty`) — 패키지 지원
+- [x] `PurchaseOrder` 엔티티 (`(userId, idempotencyKey)` **복합 unique**, `itemCode`, `qty`, `status`, `snapshotPrice`, `createdAt`) — 멱등성 스코프를 사용자별로 격리(키 선점·교차 사용자 오용 차단). 재호출 시 저장된 `itemCode`/`qty`가 요청과 일치하는지 검증(불일치 → `IDEMPOTENCY_KEY_CONFLICT`)
+- [x] `UserInventory` 엔티티 (`userId`, `itemCode`, `qty`) — composite unique
+- [x] Repository: JPA + 동시성 안전 UPSERT (MySQL `ON DUPLICATE KEY UPDATE`, H2 MySQL 모드 동일 구문 — dev/prod 양쪽 검증) — 다건 UPSERT는 `itemCode` 오름차순 정렬 후 처리(락 순서 고정 → 데드락 방지)
+- [x] Inventory read API(`InventoryService.getMine`) + 후속 `consume` 확장 지점을 `domain/inventory` 도메인으로 분리
 
 ### BE-2. 서비스 / 트랜잭션
 
-- [ ] `ShopCatalogService.listItems(category)` — `isActive=true` 필터 + `displayOrder` 정렬
-- [ ] `ShopPurchaseService.purchase(userId, itemCode, qty, idempotencyKey)`
-  - [ ] 멱등성 선조회 (`WHERE userId=? AND idempotencyKey=?`) → 기존 `COMPLETED` 주문이면: 저장된 `itemCode`/`qty`가 요청과 일치하는지 검증(불일치 시 `IDEMPOTENCY_KEY_CONFLICT`) → 재차감 없이 **현재 시점**의 잔액·인벤토리를 재조회해 반환 (stale 스냅샷 미반환)
+- [x] `ShopCatalogService.listItems(category)` — `isActive=true` 필터 + `displayOrder` 정렬
+- [x] `ShopPurchaseService.purchase(userId, itemCode, qty, idempotencyKey)`
+  - [x] 멱등성 선조회 (`WHERE userId=? AND idempotencyKey=?`) → 기존 `COMPLETED` 주문이면: 저장된 `itemCode`/`qty`가 요청과 일치하는지 검증(불일치 시 `IDEMPOTENCY_KEY_CONFLICT`) → 재차감 없이 **현재 시점**의 잔액·인벤토리를 재조회해 반환 (stale 스냅샷 미반환)
     - 동시 INSERT 경합(같은 `(userId, key)` 더블클릭 등 — 둘 다 선조회 통과): `purchase_order` 복합 유니크 제약으로 한쪽이 `DataIntegrityViolationException`을 받음 → **`@Transactional` 경계 바깥(Facade/Controller)에서 catch**(실패 트랜잭션은 `rollback-only` 마킹 → 내부에서 복구하면 커밋 시 `UnexpectedRollbackException`) → 트랜잭션 롤백 후 **별도 트랜잭션**으로 커밋된 주문을 재조회해 위 멱등 경로 처리(일치 → 현재 상태 반환, 불일치 → `IDEMPOTENCY_KEY_CONFLICT`/409). 클라이언트에 `500` 미노출.
-  - [ ] `@Transactional` 안에서 `UserPointService.recordTransaction(delta=-price*qty, key="shop:purchase:{userId}:{idem}")` 호출 — 포인트 키도 사용자 스코프를 부여해 `purchase_order` 복합 키와 스코프 일치(기존 `attendance:{userId}:{date}` 컨벤션과 동일)
+  - [x] `@Transactional` 안에서 `UserPointService.recordTransaction(delta=-price*qty, key="shop:purchase:{userId}:{idem}")` 호출 — 포인트 키도 사용자 스코프를 부여해 `purchase_order` 복합 키와 스코프 일치(기존 `attendance:{userId}:{date}` 컨벤션과 동일)
     - 참고: `UserPointService`는 외부 API가 아니라 **동일 백엔드·동일 DB의 로컬 `@Service`**(propagation=REQUIRED)로 호출자 트랜잭션에 합류 → 코인 차감·인벤토리 적재가 단일 DB 트랜잭션으로 원자 처리됨. 기존 `AttendanceService.checkIn`과 동일 패턴이라 분산 트랜잭션/Outbox·Saga 불필요.
     - 동시성: `recordTransaction`은 포인트 행에 비관적 락(`findByUserIdForUpdate` = `SELECT … FOR UPDATE`)을 걸고 **락 후** 잔액을 검증하므로, 같은 사용자의 동시 구매(서로 다른 키 포함)가 직렬화되어 잔액 음수가 발생하지 않는다.
     - 전역 락 순서 `point`(FOR UPDATE) → `user_inventory`(UPSERT) → `purchase_order`(INSERT)를 지키며, 타 도메인(진화/소모)도 동일 순서를 준수한다(spec "공통 규칙 — 전역 락 획득 순서" 참조).
-  - [ ] `INSUFFICIENT_COIN`, `ITEM_INACTIVE`, `ITEM_NOT_FOUND`, `IDEMPOTENCY_KEY_CONFLICT` 도메인 에러 분리
+  - [x] `INSUFFICIENT_COIN`, `ITEM_INACTIVE`, `ITEM_NOT_FOUND`, `IDEMPOTENCY_KEY_CONFLICT` 도메인 에러 분리
     - `InsufficientPointsException`(포인트 레이어 기본 매핑 `402 INSUFFICIENT_POINTS`)을 catch해 상점 도메인 에러 `INSUFFICIENT_COIN`(400)으로 변환 — 상점 API는 코인 도메인 언어로 일관 응답
-  - [ ] `shop_item_grant` 다건 적재 (`ENHANCE_PACK` 같은 패키지) — `itemCode` 오름차순 정렬 후 순차 UPSERT로 데드락 방지
-- [ ] `InventoryService.getMine(userId)`
-- [ ] Kotest + TestContainers 테스트: 정상 / 잔액 부족 / 비활성 / 멱등성 재호출(현재 상태 반환) / 키 재사용 충돌 / 패키지 다건 grant / 동시 구매 경합
+  - [x] `shop_item_grant` 다건 적재 (`ENHANCE_PACK` 같은 패키지) — `itemCode` 오름차순 정렬 후 순차 UPSERT로 데드락 방지
+- [x] `InventoryService.getMine(userId)`
+- [x] Kotest + TestContainers 테스트: 정상 / 잔액 부족 / 비활성 / 멱등성 재호출(현재 상태 반환) / 키 재사용 충돌 / 패키지 다건 grant / 동시 구매 경합
 
 ### BE-3. Controller
 
-- [ ] `ShopController` (`GET /api/shop/items`, `POST /api/shop/purchase`)
-- [ ] `InventoryController` (`GET /api/inventory/me`)
-- [ ] Request 검증: `qty >= 1`, `idempotencyKey` UUID 형식, `category` enum
-- [ ] Phase 1 비대상 카테고리 처리 (`COSMETIC`, `VOUCHER` → 빈 배열 + `phase1Active:false`)
-- [ ] Web 테스트: 200 / 400 / 도메인 에러 매핑
+- [x] `ShopController` (`GET /api/shop/items`, `POST /api/shop/purchase`)
+- [x] `InventoryController` (`GET /api/inventory/me`)
+- [x] Request 검증: `qty >= 1`, `idempotencyKey` UUID 형식, `category` enum
+- [x] Phase 1 비대상 카테고리 처리 (`COSMETIC`, `VOUCHER` → 빈 배열 + `phase1Active:false`)
+- [x] Web 테스트: 200 / 400 / 도메인 에러 매핑
 
 ### BE-4. 마이그레이션 / 시드
 
-- [ ] Flyway 마이그레이션 (dev H2 + prod MySQL): `shop_item`, `shop_item_grant`, `purchase_order`, `user_inventory` — `purchase_order`에 `(user_id, idempotency_key)` 복합 unique 인덱스, `user_inventory`에 `(user_id, item_code)` 복합 unique 인덱스 포함
-- [ ] Phase 1 시드 SQL: 5종 ENHANCE 아이템 + `shop_item_grant` 6행 (spec 부록 표)
+- [x] Flyway 마이그레이션 (dev H2 + prod MySQL): `shop_item`, `shop_item_grant`, `purchase_order`, `user_inventory` — `purchase_order`에 `(user_id, idempotency_key)` 복합 unique 인덱스, `user_inventory`에 `(user_id, item_code)` 복합 unique 인덱스 포함
+- [x] Phase 1 시드 SQL: 5종 ENHANCE 아이템 + `shop_item_grant` 6행 (spec 부록 표)
 
 ## Front-End
 
