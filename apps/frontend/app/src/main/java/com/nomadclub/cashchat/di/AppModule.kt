@@ -1,6 +1,7 @@
 package com.nomadclub.cashchat.di
 
 import com.nomadclub.cashchat.BuildConfig
+import com.nomadclub.cashchat.core.data.DataStoreTokenProvider
 import com.nomadclub.cashchat.core.data.ThemePreferenceStore
 import com.nomadclub.cashchat.core.data.TokenDataStore
 import com.nomadclub.cashchat.core.network.ApiService
@@ -20,6 +21,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 val appModule = module {
 
     single { TokenDataStore(androidContext()) }
+
+    single { DataStoreTokenProvider(get()) }
 
     single { ThemePreferenceStore(androidContext()) }
 

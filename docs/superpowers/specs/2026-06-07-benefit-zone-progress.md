@@ -101,3 +101,15 @@
   - `apps/frontend/shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/di/SharedModule.kt` (신규)
 - 검증: `./gradlew :shared:compileKotlinMetadata -q` → 성공(출력 없음, 에러 없음). `./gradlew :shared:compileKotlinIosSimulatorArm64 -q`(JAVA_HOME=Android Studio JBR 21 사용) → 성공(출력 없음, 에러 없음). `single { tokenProvider }`처럼 외부 캡처 인스턴스를 직접 등록하는 패턴도 문제없이 컴파일됨.
 - 인계 메모: 플랫폼이 baseUrl/TokenProvider/engineProvider 주입 필요 (Android Task 12, iOS Task 17)
+
+## Task 12: Android DI 배선
+- 상태: ✅
+- 변경 파일:
+  - app/src/main/java/com/nomadclub/cashchat/CashChatApplication.kt (sharedModule을 startKoin modules에 결합)
+  - app/src/main/java/com/nomadclub/cashchat/di/AppModule.kt (DataStoreTokenProvider single 추가)
+  - app/build.gradle.kts (implementation(libs.ktor.client.okhttp) 추가)
+- 검증: `./gradlew :app:assembleDebug -q` → BUILD SUCCESSFUL (app-debug.apk 생성 확인)
+- 인계 메모:
+  - Application 클래스: com.nomadclub.cashchat.CashChatApplication (단일 startKoin 호출 지점)
+  - 실제 빌드 태스크명: :app:assembleDebug (product flavor 없음, compileDebugKotlin 경유)
+  - ktor-client-okhttp: app/build.gradle.kts에 신규 추가함 (기존엔 없었음, OkHttp.create() 사용 위해 필요)
