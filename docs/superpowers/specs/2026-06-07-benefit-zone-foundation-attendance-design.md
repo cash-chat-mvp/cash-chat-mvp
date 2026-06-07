@@ -113,6 +113,8 @@
 - **Phase 3 — 데일리 미션:** 계약 `GET /api/missions/me`, `POST /api/missions/{id}/claim`, `POST /api/missions/refresh`(광고 1회/일 소모). 미션 풀(채팅 N회·친구초대·진화 시도·상점 방문·광고 시청·쿠팡 클릭) 중 랜덤 3개. KST 자정 갱신. BE 부재 동안 어댑터/목.
 - **Phase 4 — TNK 오퍼월:** `expect/actual OfferwallProvider { init(appId); setUserName(userId); showOfferwall() }`. Android `com.tnkfactory:rwd`(`TnkSession.applicationStarted`, `offerwall.startOfferwallActivity`/`getAdListView`), iOS xcframework(`TnkSession.initInstance(appId)`, `AdOfferwallView`). 적립은 TNK→BE webhook→코인(별도 BE 티켓). **TNK 앱 등록·키 발급은 선행 필요** — 미확보 시 SDK 호출부는 스텁, 구조(인터페이스·임베드 지점)만 완성.
 
+> **미구현 BE API는 별도 요구 명세서로 정리:** `docs/superpowers/specs/2026-06-07-benefit-zone-be-api-requests.md` (포인트 잔액 · 데일리 미션 · TNK webhook 계약). FE는 인터페이스 뒤로 격리 후 BE 준비 시 교체.
+
 ## 7. 미결정 / 위험
 
 - `GET /api/points/me` 응답 스펙 BE와 합의 필요(잔액만 vs 거래내역 포함).
