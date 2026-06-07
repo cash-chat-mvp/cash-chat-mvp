@@ -113,3 +113,13 @@
   - Application 클래스: com.nomadclub.cashchat.CashChatApplication (단일 startKoin 호출 지점)
   - 실제 빌드 태스크명: :app:assembleDebug (product flavor 없음, compileDebugKotlin 경유)
   - ktor-client-okhttp: app/build.gradle.kts에 신규 추가함 (기존엔 없었음, OkHttp.create() 사용 위해 필요)
+
+## Task 13: AttendanceWidget Composable
+- 상태: ✅
+- 변경 파일:
+  - apps/frontend/app/src/main/java/com/nomadclub/cashchat/feature/rewards/AttendanceWidget.kt (신규)
+- 검증: `./gradlew :app:compileDebugKotlin -q` → BUILD SUCCESSFUL (출력 없음, 에러 없음)
+- 인계 메모:
+  - 시그니처 `AttendanceWidget(state: AttendanceUiState, onCheckIn: () -> Unit, modifier: Modifier = Modifier)` — Task 14(BenefitZoneScreen `AttendanceWidget(state = state, onCheckIn = store::checkIn)`)와 일치.
+  - 컬러: 완료 #5C6BFA(Primary), 오늘 #FFB800(Accent), 미출석 #E0DCEF(Unchecked), 배경 그라데이션 #E8E1FF→#FAFBFF, 버튼 48dp/Primary.
+  - import는 스펙의 `androidx.compose.foundation.layout.*` 와일드카드 대신 명시적 import(Box, Column, Spacer, Arrangement, fillMaxWidth, height, padding, size)로 작성 — 동일하게 컴파일 성공.
