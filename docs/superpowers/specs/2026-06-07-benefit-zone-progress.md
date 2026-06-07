@@ -13,3 +13,14 @@
   - 기존 coroutines 버전 키 이름은 `kotlinxCoroutines` (값 `1.9.0`)이며, 일반적인 `coroutines` 키는 toml에 없음. 플랜 문서의 `coroutines = "1.8.1"` 안내는 이 저장소 상황과 다르므로 **새 키를 만들지 않고 기존 `kotlinxCoroutines` ref를 재사용**함 — `kotlinx-coroutines-test`도 `version.ref = "kotlinxCoroutines"`로 선언됨.
   - ktor 버전 키 이름은 `ktor` (값 `2.3.12`).
   - `commonTest` 블록은 기존 파일 스타일(`commonMain.dependencies {}` 축약형)에 맞춰 `commonTest.dependencies {}`로 추가함.
+
+## Task 1: TokenProvider + ApiConfig
+- 상태: ✅
+- 변경 파일:
+  - `apps/frontend/shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/core/network/TokenProvider.kt` (신규)
+  - `apps/frontend/shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/core/network/ApiConfig.kt` (신규)
+- 검증:
+  - `./gradlew :shared:compileKotlinMetadata -q` → 성공 (출력 없음, 에러 없음)
+- 인계 메모:
+  - 시그니처는 플랜 명세 그대로 구현(메서드명/파라미터명 변경 없음). `core/network` 패키지 신규 생성.
+  - 후속 Task(AuthenticatedApiClient, Android DataStoreTokenProvider, iOS KeychainTokenProvider, Koin 모듈)는 이 인터페이스에 의존 가능.
