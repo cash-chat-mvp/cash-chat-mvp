@@ -14,6 +14,8 @@ import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.auth.persistence.entity.RefreshToken
 import com.wnl.cashchat.api.domain.auth.persistence.repository.RefreshTokenRepository
 import com.wnl.cashchat.api.domain.auth.web.response.AuthResponse
+import com.wnl.cashchat.api.domain.energy.service.EnergyService
+import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
 import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
@@ -37,6 +39,8 @@ class AuthService(
     private val oAuthProperties: OAuthProperties,
     private val restClient: RestClient,
     private val userPointService: UserPointService,
+    private val evolutionService: EvolutionService,
+    private val energyService: EnergyService,
     private val appleTokenClient: AppleTokenClient,
     private val appleIdTokenValidator: AppleIdTokenValidator,
     private val appleUserInfoExtractor: AppleUserInfoExtractor,
@@ -56,6 +60,8 @@ class AuthService(
         }
 
         userPointService.ensureInitialized(user)
+        evolutionService.ensureInitialized(user)
+        energyService.ensureInitialized(user)
 
         val accessToken = jwtTokenHandler.createAccessToken(user.id, user.role)
 
@@ -206,6 +212,8 @@ class AuthService(
     private fun buildAuthResponse(user: User): AuthResponse {
 
         userPointService.ensureInitialized(user)
+        evolutionService.ensureInitialized(user)
+        energyService.ensureInitialized(user)
 
         val accessToken = jwtTokenHandler.createAccessToken(user.id, user.role)
         val refreshToken = generateRefreshToken(user)
