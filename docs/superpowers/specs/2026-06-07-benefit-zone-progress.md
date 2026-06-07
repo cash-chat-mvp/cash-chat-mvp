@@ -129,3 +129,9 @@
 - 변경 파일: app/src/main/java/com/nomadclub/cashchat/feature/rewards/BenefitZoneScreen.kt (신규 생성)
 - 검증: `./gradlew :app:compileDebugKotlin -q` → BUILD SUCCESSFUL
 - 인계 메모: koinInject는 별도 의존성 추가 없이 해결됨. `koin-androidx-compose:3.5.6`이 `koin-compose:1.1.5`를 transitively 가져오며 여기에 `org.koin.compose.koinInject`가 포함되어 있음(koin-compose 아티팩트는 3.x가 아닌 1.x 버전 체계 사용 — `version.ref = "koinCompose"`(=3.5.6)로 alias를 추가했더니 `Could not find io.insert-koin:koin-compose:3.5.6` 에러 발생, 즉시 롤백). gradle/libs.versions.toml과 app/build.gradle.kts는 변경 없이 원상 유지. `BenefitZoneScreen()` 무인자 호출 가능(Task 15 라우팅 대비), AttendanceWidget 연결·rewardEvents 토스트("출석 완료! 🪙+{amount}")·balance 표시 모두 스펙대로 구현.
+
+## Task 15: MainScreen 라우팅 교체
+- 상태: ✅
+- 변경 파일: apps/frontend/app/src/main/java/com/nomadclub/cashchat/feature/main/MainScreen.kt (import RewardsScreen → BenefitZoneScreen 교체, REWARDS 탭 composable 블록을 `BenefitZoneScreen()` 무인자 호출로 교체)
+- 검증: `./gradlew :app:compileDebugKotlin -q` → BUILD SUCCESSFUL(출력 없음). `./gradlew :app:assembleDebug -q` → BUILD SUCCESSFUL (app-debug.apk 생성 확인, app/build/outputs/apk/debug/app-debug.apk)
+- 인계 메모: 수동 런타임 검증 PENDING(기기 필요) — 로그인→혜택존 탭→출석 도장→토스트/코인/버튼 비활성 확인 필요. RewardsScreen.kt 파일은 보존됨(grep 결과 MainScreen.kt 외 다른 곳에서 사용되지 않아 import만 교체, 파일 삭제 안 함).
