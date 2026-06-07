@@ -103,6 +103,10 @@ jobs:
           APPLE_REDIRECT_URI: ${{ secrets.APPLE_REDIRECT_URI }}
           APP_SWAGGER_ENABLED: ${{ secrets.APP_SWAGGER_ENABLED }}
           APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID }}
+          SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+          SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+          SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: ${{ secrets.SPRING_DATASOURCE_DRIVER_CLASS_NAME }}
         run: |
           SPRING_PROFILE="${BACKEND_SPRING_PROFILES_ACTIVE}"
           if [ -z "${SPRING_PROFILE}" ]; then
@@ -116,6 +120,9 @@ jobs:
 
           if [ "${SPRING_PROFILE}" = "prod" ]; then
             missing_vars=()
+            if [ -z "${SPRING_DATASOURCE_URL}" ]; then missing_vars+=("SPRING_DATASOURCE_URL"); fi
+            if [ -z "${SPRING_DATASOURCE_USERNAME}" ]; then missing_vars+=("SPRING_DATASOURCE_USERNAME"); fi
+            if [ -z "${SPRING_DATASOURCE_PASSWORD}" ]; then missing_vars+=("SPRING_DATASOURCE_PASSWORD"); fi
             if [ -z "${OPENAI_API_KEY}" ]; then missing_vars+=("OPENAI_API_KEY"); fi
             if [ -z "${GOOGLE_CLIENT_ID}" ]; then missing_vars+=("GOOGLE_CLIENT_ID"); fi
             if [ -z "${GOOGLE_CLIENT_SECRET}" ]; then missing_vars+=("GOOGLE_CLIENT_SECRET"); fi
@@ -131,6 +138,11 @@ jobs:
               echo "Missing required prod secrets: ${missing_vars[*]}" >&2
               exit 1
             fi
+          fi
+
+          DATASOURCE_DRIVER="${SPRING_DATASOURCE_DRIVER_CLASS_NAME}"
+          if [ -z "${DATASOURCE_DRIVER}" ]; then
+            DATASOURCE_DRIVER="com.mysql.cj.jdbc.Driver"
           fi
 
           write_env() {
@@ -150,6 +162,10 @@ jobs:
           {
             write_env "BACKEND_IMAGE" "${{ steps.backend-image.outputs.name }}:latest"
             write_env "SPRING_PROFILES_ACTIVE" "${SPRING_PROFILE}"
+            write_env "SPRING_DATASOURCE_URL" "${SPRING_DATASOURCE_URL}"
+            write_env "SPRING_DATASOURCE_USERNAME" "${SPRING_DATASOURCE_USERNAME}"
+            write_env "SPRING_DATASOURCE_PASSWORD" "${SPRING_DATASOURCE_PASSWORD}"
+            write_env "SPRING_DATASOURCE_DRIVER_CLASS_NAME" "${DATASOURCE_DRIVER}"
             write_env "OPENAI_API_KEY" "${OPENAI_API_KEY}"
             write_env "GOOGLE_CLIENT_ID" "${GOOGLE_CLIENT_ID}"
             write_env "GOOGLE_CLIENT_SECRET" "${GOOGLE_CLIENT_SECRET}"
