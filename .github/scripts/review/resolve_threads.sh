@@ -3,6 +3,8 @@
 # yes → 근거 답글 + resolve / no → 코멘트만(파생이슈 가능). lib_ai.sh를 먼저 source할 것.
 # 필요 env: GITHUB_TOKEN, GITHUB_API_URL, GITHUB_REPOSITORY, PR_NUMBER, GEMINI_KEY, GEMINI_MODEL(=model1)
 
+. "$(dirname "${BASH_SOURCE[0]}")/lib_cards.sh"
+
 parse_verdict() { printf '%s' "${1:-}" | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ' *`' ; }
 parse_reason()  { printf '%s' "${1:-}" | sed -n '2p' | sed 's/^[[:space:]]*//' ; }
 
@@ -50,7 +52,7 @@ resolve_threads() {
       [ -n "$cdb" ] && [ "$cdb" != "null" ] && curl -s --max-time 10 -X POST \
         -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
         "$api/pulls/${PR_NUMBER}/comments/${cdb}/replies" \
-        -d "$(jq -n --arg b "$(printf '🤖 **자동 리졸브 판단**\n\n%s\n\n_최신 변경에서 해결된 것으로 판단되어 자동 리졸브합니다. (%s)_' "${reason:-최신 변경에서 해결된 것으로 판단됩니다.}" "$model")" '{body:$b}')" >/dev/null 2>&1 || true
+        -d "$(jq -n --arg b "$(render_card approve '자동 리졸브 판단' "$(printf '%s\n최신 변경에서 해결된 것으로 판단되어 자동 리졸브합니다. (%s)' "${reason:-최신 변경에서 해결된 것으로 판단됩니다.}" "$model")" '')" '{body:$b}')" >/dev/null 2>&1 || true
       curl -s --max-time 10 -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
         "https://api.github.com/graphql" \
         -d "$(jq -n --arg id "$tid" '{query:"mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}",variables:{id:$id}}')" >/dev/null 2>&1 || true
@@ -60,7 +62,7 @@ resolve_threads() {
       [ -n "$cdb" ] && [ "$cdb" != "null" ] && curl -s --max-time 10 -X POST \
         -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
         "$api/pulls/${PR_NUMBER}/comments/${cdb}/replies" \
-        -d "$(jq -n --arg b "$(printf '🤖 **변경 검토**\n\n%s\n\n_아직 해결되지 않았거나 추가 확인이 필요해 보여 리졸브하지 않았습니다._' "${reason:-남은 우려가 있어 보입니다.}")" '{body:$b}')" >/dev/null 2>&1 || true
+        -d "$(jq -n --arg b "$(render_card hold '변경 검토' "$(printf '%s\n아직 해결되지 않았거나 추가 확인이 필요해 보여 리졸브하지 않았습니다.' "${reason:-남은 우려가 있어 보입니다.}")" '')" '{body:$b}')" >/dev/null 2>&1 || true
       echo "::notice::↺ 미해결 유지: $fpath"
     fi
     rm -f "$payload" "$out"

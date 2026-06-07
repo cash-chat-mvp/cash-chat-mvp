@@ -5,6 +5,8 @@
 #   PR_NUMBER, PR_TITLE, HEAD_REF, PR_HTML_URL, COMMENT_BODY, COMMENT_ID, IN_REPLY_TO, COMMENTER,
 #   GEMINI_KEY, GEMINI_MODEL(=model1), JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN
 
+. "$(dirname "${BASH_SOURCE[0]}")/lib_cards.sh"
+
 parse_resolve_reason() {
   local r
   r=$(printf '%s' "${1:-}" | sed -E 's#^/resolve[[:space:]]*##' | head -1)
@@ -52,7 +54,7 @@ run_resolve_command() {
 
   # ── AI 판단 ──
   if ! ai_judge_resolve "$REASON" "$ORIG_BODY" "$FDIFF"; then
-    gh_reply "$ROOT_ID" "$(printf '🤖 **resolve 보류**\n\n%s\n\n아직 리졸브하기 이르다고 판단했어요. 반영 후 다시 `/resolve \"사유\"` 해주세요.' "${RESOLVE_REASON_AI:-제시한 사유만으로는 해결을 확인하기 어렵습니다.}")"
+    gh_reply "$ROOT_ID" "$(render_card hold 'resolve 보류' "$(printf '%s\n아직 리졸브하기 이르다고 판단했어요. 반영 후 다시 `/resolve \"사유\"` 해주세요.' "${RESOLVE_REASON_AI:-제시한 사유만으로는 해결을 확인하기 어렵습니다.}")" '')"
     echo "::notice::AI 판단: 보류"; return 0
   fi
 
@@ -88,7 +90,7 @@ run_resolve_command() {
       CODE=$(printf '%s' "$RESP" | tail -1); RBODY=$(printf '%s' "$RESP" | sed '$d')
       if [ "$CODE" = "201" ]; then
         NEW_KEY=$(printf '%s' "$RBODY" | jq -r '.key'); NEW_URL="${JIRA_BASE_URL}/browse/${NEW_KEY}"
-        gh_reply "$ROOT_ID" "$(printf '🤖 **resolve 승인** — %s\n\n📌 추후 처리 항목을 Jira 서브태스크로 등록했어요.\n- 서브태스크: [%s](%s)\n- 상위 티켓: %s\n- 사유: %s\n\n이 스레드는 리졸브됩니다. 🙏' "${RESOLVE_REASON_AI:-반영 확인}" "$NEW_KEY" "$NEW_URL" "$PARENT" "$REASON")"
+      gh_reply "$ROOT_ID" "$(render_card approve 'resolve 승인 — 추후 처리 항목 등록' "$(printf '%s\n\n- 서브태스크: [%s](%s)\n- 상위 티켓: %s\n- 사유: %s\n\n이 스레드는 리졸브됩니다. 🙏' "${RESOLVE_REASON_AI:-반영 확인}" "$NEW_KEY" "$NEW_URL" "$PARENT" "$REASON")" '')"
       else
         gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 서브태스크 생성 실패(HTTP ${CODE}). 스레드만 리졸브할게요."
       fi
