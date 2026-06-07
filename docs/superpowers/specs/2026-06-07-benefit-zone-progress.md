@@ -94,3 +94,10 @@
   - **해결**: `isLoading = true` / `isCheckingIn = true` 설정을 `scope.launch {}` 호출 *직전*, 즉 동기 컨텍스트에서 수행하도록 변경(네트워크 호출과 결과 반영만 launch 내부에 유지). 이렇게 하면 `loadMonthly()`/`checkIn()` 호출 시점에 StateFlow가 즉시 로딩 상태로 전이되어 `first { !it.isLoading }`/순차 호출이 올바른 순서로 동기화됨. 테스트 단언/시그니처는 변경하지 않음.
   - `checkIn`은 `todayChecked || isCheckingIn` 가드로 중복 출석 방지.
   - 시그니처 `AttendanceStore(service, pointsRepository, scope)`, 노출 `state: StateFlow<AttendanceUiState>`, `rewardEvents: SharedFlow<CheckInRewardEvent>`, `loadMonthly(year?, month?)`, `checkIn()` — 후속 Koin(`AttendanceStore(get(), get(), get())`)/UI(`store.state`, `store.rewardEvents`, `store.loadMonthly()`, `store::checkIn`) 패턴과 일치.
+
+## Task 11: Koin shared 모듈
+- 상태: ✅
+- 변경 파일:
+  - `apps/frontend/shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/di/SharedModule.kt` (신규)
+- 검증: `./gradlew :shared:compileKotlinMetadata -q` → 성공(출력 없음, 에러 없음). `./gradlew :shared:compileKotlinIosSimulatorArm64 -q`(JAVA_HOME=Android Studio JBR 21 사용) → 성공(출력 없음, 에러 없음). `single { tokenProvider }`처럼 외부 캡처 인스턴스를 직접 등록하는 패턴도 문제없이 컴파일됨.
+- 인계 메모: 플랫폼이 baseUrl/TokenProvider/engineProvider 주입 필요 (Android Task 12, iOS Task 17)
