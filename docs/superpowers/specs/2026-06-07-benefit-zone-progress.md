@@ -123,3 +123,9 @@
   - 시그니처 `AttendanceWidget(state: AttendanceUiState, onCheckIn: () -> Unit, modifier: Modifier = Modifier)` — Task 14(BenefitZoneScreen `AttendanceWidget(state = state, onCheckIn = store::checkIn)`)와 일치.
   - 컬러: 완료 #5C6BFA(Primary), 오늘 #FFB800(Accent), 미출석 #E0DCEF(Unchecked), 배경 그라데이션 #E8E1FF→#FAFBFF, 버튼 48dp/Primary.
   - import는 스펙의 `androidx.compose.foundation.layout.*` 와일드카드 대신 명시적 import(Box, Column, Spacer, Arrangement, fillMaxWidth, height, padding, size)로 작성 — 동일하게 컴파일 성공.
+
+## Task 14: BenefitZoneScreen
+- 상태: ✅
+- 변경 파일: app/src/main/java/com/nomadclub/cashchat/feature/rewards/BenefitZoneScreen.kt (신규 생성)
+- 검증: `./gradlew :app:compileDebugKotlin -q` → BUILD SUCCESSFUL
+- 인계 메모: koinInject는 별도 의존성 추가 없이 해결됨. `koin-androidx-compose:3.5.6`이 `koin-compose:1.1.5`를 transitively 가져오며 여기에 `org.koin.compose.koinInject`가 포함되어 있음(koin-compose 아티팩트는 3.x가 아닌 1.x 버전 체계 사용 — `version.ref = "koinCompose"`(=3.5.6)로 alias를 추가했더니 `Could not find io.insert-koin:koin-compose:3.5.6` 에러 발생, 즉시 롤백). gradle/libs.versions.toml과 app/build.gradle.kts는 변경 없이 원상 유지. `BenefitZoneScreen()` 무인자 호출 가능(Task 15 라우팅 대비), AttendanceWidget 연결·rewardEvents 토스트("출석 완료! 🪙+{amount}")·balance 표시 모두 스펙대로 구현.
