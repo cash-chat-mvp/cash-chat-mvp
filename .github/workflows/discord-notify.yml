@@ -8,6 +8,10 @@ on:
     workflows: ["Android Build Check", "iOS Build Check"]
     types: [completed]
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -18,6 +22,28 @@ jobs:
           ISSUE_KEY=$(echo "${{ github.head_ref }} ${{ github.event.pull_request.title }}" \
             | grep -oE '[A-Z]+-[0-9]+' | head -1)
           echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+
+      # 빌드 체크 워크플로는 detect(항상 실행) + build-check(모바일 변경시만) 구조라,
+      # 모바일 무관 PR도 워크플로 전체 결론은 success 가 된다. 워크플로 결론이 아니라
+      # 실제 build-check 잡의 결론으로 판정해야 "스킵"과 "통과"를 구분할 수 있다.
+      - name: Checkout (scripts only)
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@v5
+
+      - name: Resolve build-check job conclusion
+        id: build
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/build/detect_build_changes.sh
+          CONC=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs" --paginate \
+            -q '.jobs[] | select(.name=="build-check") | .conclusion' | head -1 || true)
+          echo "::notice::build-check 결론: ${CONC:-<없음>} → $(notify_decision "$CONC")"
+          echo "action=$(notify_decision "$CONC")" >> "$GITHUB_OUTPUT"
 
       - name: PR 오픈 알림
         if: |
@@ -135,10 +161,11 @@ jobs:
       - name: Android 빌드 체크 결과 알림
         if: |
           github.event_name == 'workflow_run' &&
-          github.event.workflow_run.name == 'Android Build Check'
+          github.event.workflow_run.name == 'Android Build Check' &&
+          steps.build.outputs.action != 'skip'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          ACTION: ${{ steps.build.outputs.action }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           COMMIT_MSG: ${{ github.event.workflow_run.head_commit.message }}
           ACTOR: ${{ github.event.workflow_run.actor.login }}
@@ -148,7 +175,7 @@ jobs:
             echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
             exit 0
           fi
-          if [ "$CONCLUSION" = "success" ]; then
+          if [ "$ACTION" = "pass" ]; then
             COLOR=5763719
             TITLE="✅  Android 빌드 체크 통과"
           else
@@ -180,10 +207,11 @@ jobs:
       - name: iOS 빌드 체크 결과 알림
         if: |
           github.event_name == 'workflow_run' &&
-          github.event.workflow_run.name == 'iOS Build Check'
+          github.event.workflow_run.name == 'iOS Build Check' &&
+          steps.build.outputs.action != 'skip'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          ACTION: ${{ steps.build.outputs.action }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           COMMIT_MSG: ${{ github.event.workflow_run.head_commit.message }}
           ACTOR: ${{ github.event.workflow_run.actor.login }}
@@ -193,7 +221,7 @@ jobs:
             echo "ℹ️ DISCORD_WEBHOOK 없음 — 알림 건너뜀"
             exit 0
           fi
-          if [ "$CONCLUSION" = "success" ]; then
+          if [ "$ACTION" = "pass" ]; then
             COLOR=5763719
             TITLE="✅  iOS 빌드 체크 통과"
           else
