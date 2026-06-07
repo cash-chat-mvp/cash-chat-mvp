@@ -159,3 +159,28 @@
   1. 신규 파일 2개(`KeychainTokenProvider.swift`, `BenefitZone/AttendanceViewModel.swift`)를 Xcode 타깃 멤버십에 추가 (File > Add Files to "CashChatIOS", Target Membership 체크) — pbxproj 미반영 시 컴파일 안 됨. `.xcodeproj/project.pbxproj`는 의도적으로 수정하지 않음.
   2. `JAVA_HOME=$(/usr/libexec/java_home -v 21)` 설정 후 `:shared:embedAndSignAppleFrameworkForXcode` 실행 → Xcode 빌드.
   3. 런타임: 로그인 → 리워드 탭 진입 → 출석 위젯이 ScrollView 최상단에 렌더되는지 → "출석 도장 찍기" 탭 → 토스트("출석 완료! 🪙+N") / 잔액 / 버튼 비활성("오늘 출석 완료")로 전환 확인.
+
+---
+
+## ✅ Phase F + Phase 1 완료 요약 (Task 19)
+
+### 완료 상태
+- **shared 인증 네트워킹(Phase F)**: TokenProvider, ApiConfig, AuthenticatedApiClient(Bearer+401 refresh), Android DataStore 어댑터, iOS Keychain 어댑터, Koin 모듈. — ✅ 빌드+테스트
+- **출석 도메인(Phase 1)**: DTO, AttendanceApiService, PointsRepository(잔액 격리), AttendanceStore, Koin 배선. — ✅ 빌드+테스트
+- **Android UI**: AttendanceWidget, BenefitZoneScreen, MainScreen 라우팅 교체. — ✅ assembleDebug APK 빌드
+- **iOS**: KoinIos/IosBridges(Kotlin, ✅ iOS 컴파일), KeychainTokenProvider/AttendanceViewModel/RewardsView 연동(Swift, ⚠️ 빌드 미검증).
+
+### 최종 검증 (컨트롤러 직접 실행)
+- `./gradlew :shared:testDebugUnitTest` → 6/6 PASS (AuthenticatedApiClient 2, AttendanceApiService 2, AttendanceStore 2)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL (APK 생성)
+- `./gradlew :shared:compileKotlinIosSimulatorArm64` → BUILD SUCCESSFUL
+
+### 미결 / 인계 (PENDING)
+1. **iOS Xcode 검증 (사용자)**: 신규 Swift 2파일 pbxproj 타깃 멤버십 추가 → embedAndSign → 빌드 → 런타임(로그인→리워드 탭→출석 도장→토스트/잔액/버튼). 
+   - ⚠️ 빌드 시 likely fix: `FlowCollector.collectBalance` 콜백 파라미터가 `KotlinLong`으로 박싱되면 `AttendanceViewModel`의 `self.balance = value`를 `value.int64Value`로 수정.
+2. **Android 런타임 수동 검증 (사용자)**: 기기/에뮬레이터에서 출석 플로우 확인.
+3. **BE 대기**: `GET /api/points/me` 미구현 → `LocalPointsRepository`(잠정, 초기 1250 + 적립 누적)로 동작. BE 준비 시 `RemotePointsRepository`로 교체(인터페이스 불변). 미션/TNK는 후속 Phase. (요구 명세: `2026-06-07-benefit-zone-be-api-requests.md`)
+4. **환경 메모**: 이 머신은 `/usr/libexec/java_home -v 21` 실패 → iOS Gradle 빌드 시 `JAVA_HOME=/Applications/Android Studio.app/Contents/jbr/Contents/Home` 사용. app 모듈은 product flavor 없음(`:app:assembleDebug`).
+
+### 후속 Phase (별도 spec/plan)
+- Phase 2 리워드 광고(AdMob+SSV), Phase 3 데일리 미션, Phase 4 TNK 오퍼월. + 기존 Android Retrofit 인증 경로의 shared 클라이언트 통합.
