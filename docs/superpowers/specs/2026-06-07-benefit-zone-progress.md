@@ -24,3 +24,14 @@
 - 인계 메모:
   - 시그니처는 플랜 명세 그대로 구현(메서드명/파라미터명 변경 없음). `core/network` 패키지 신규 생성.
   - 후속 Task(AuthenticatedApiClient, Android DataStoreTokenProvider, iOS KeychainTokenProvider, Koin 모듈)는 이 인터페이스에 의존 가능.
+
+## Task 2-3: AuthenticatedApiClient (TDD)
+- 상태: ✅
+- 변경 파일:
+  - shared/src/commonTest/kotlin/com/nomadclub/cashchat/shared/core/network/AuthenticatedApiClientTest.kt (신규)
+  - shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/core/network/AuthenticatedApiClient.kt (신규)
+- 검증: `./gradlew :shared:testDebugUnitTest --tests "*AuthenticatedApiClientTest*"` → 테스트 2개 PASS (BUILD SUCCESSFUL)
+  - Task 2 단계: AuthenticatedApiClient 미존재로 컴파일 에러 FAIL 확인 후 진행
+  - Task 3 구현 1차 시도에서 `request.url.encodedPath` 가 Unresolved reference 컴파일 에러 발생
+    → `encodedPath` 는 `io.ktor.http` 의 URLBuilder 확장 프로퍼티로, 명시적 import(`io.ktor.http.encodedPath`) 필요. import 추가 후 컴파일/테스트 모두 통과.
+- 인계 메모: AuthenticatedApiClient(config, tokenProvider, engine) 시그니처와 `.httpClient` 프로퍼티는 스펙대로 유지됨 — 후속 Koin 모듈에서 `AuthenticatedApiClient(get(), get(), engineProvider())`, `get<AuthenticatedApiClient>().httpClient` 형태로 바로 사용 가능.
