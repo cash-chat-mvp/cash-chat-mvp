@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -46,25 +47,51 @@ fun BenefitZoneScreen(
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text("혜택존", fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = MaterialTheme.colorScheme.onBackground)
-                Text("🪙 ${balance}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFB07C00))
+                Text(
+                    "🪙 $balance",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = Color(0xFFB07C00),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(Color(0xFFFFF7E6))
+                        .padding(horizontal = 11.dp, vertical = 5.dp),
+                )
             }
         }
         item { AttendanceWidget(state = state, onCheckIn = store::checkIn) }
-        item { PhasePlaceholder("데일리 미션 (Phase 3)") }
-        item { PhasePlaceholder("리워드 광고 (Phase 2)") }
-        item { PhasePlaceholder("TNK Factory 오퍼월 (Phase 4)") }
+        item {
+            BenefitInfoCard(
+                icon = "📺", title = "리워드 광고", badge = BenefitBadge.NEXT,
+                description = "광고 1회 시청 → 🪙+40 코인 · 하루 10회까지",
+                dimmed = false,
+                onClick = { Toast.makeText(context, "곧 만나요!", Toast.LENGTH_SHORT).show() },
+            )
+        }
+        item {
+            BenefitInfoCard(
+                icon = "🎯", title = "데일리 미션", badge = BenefitBadge.SOON,
+                description = "매일 바뀌는 3가지 미션을 완료하고 코인 적립",
+                dimmed = true,
+                onClick = { Toast.makeText(context, "곧 만나요!", Toast.LENGTH_SHORT).show() },
+            )
+        }
+        item {
+            BenefitInfoCard(
+                icon = "🎮", title = "TNK 오퍼월", badge = BenefitBadge.SOON,
+                description = "앱 설치·설문 참여로 대량 코인 (최대 🪙+1,500)",
+                dimmed = true,
+                onClick = { Toast.makeText(context, "곧 만나요!", Toast.LENGTH_SHORT).show() },
+            )
+        }
     }
-}
-
-@Composable
-private fun PhasePlaceholder(label: String) {
-    Box(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFFF2F1F7)).padding(20.dp)
-    ) { Text(label, color = Color(0xFFB0ADBE), fontWeight = FontWeight.Bold) }
 }
