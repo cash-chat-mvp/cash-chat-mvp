@@ -1049,6 +1049,7 @@ struct OnboardingView: View {
     
     private struct RewardsView: View {
         @EnvironmentObject private var appState: AppState
+        @StateObject private var attendanceVM = AttendanceViewModel()
         @State private var animateIn = false
         @State private var claimedIDs: Set<String> = []
         private let targetPoints = 4500
@@ -1061,6 +1062,9 @@ struct OnboardingView: View {
         var body: some View {
             ScrollView {
                 VStack(spacing: 14) {
+                    AttendanceWidgetView(vm: attendanceVM)
+                        .padding(.horizontal, 20)
+
                     VStack(alignment: .leading, spacing: 16) {
                         Text("리워드 미션")
                             .font(.system(size: 30, weight: .black))
@@ -1144,6 +1148,7 @@ struct OnboardingView: View {
             .animation(.easeOut(duration: 0.34), value: animateIn)
             .onAppear {
                 animateIn = false
+                attendanceVM.load()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
                     withAnimation(.easeOut(duration: 0.34)) {
                         animateIn = true
@@ -1155,7 +1160,7 @@ struct OnboardingView: View {
             }
         }
     }
-    
+
     private enum ShopCategory: String, CaseIterable {
         case all = "전체"
         case cafe = "카페"

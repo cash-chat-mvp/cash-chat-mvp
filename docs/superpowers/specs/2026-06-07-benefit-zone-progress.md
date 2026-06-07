@@ -143,3 +143,19 @@
   - `apps/frontend/shared/src/iosMain/kotlin/com/nomadclub/cashchat/shared/di/IosBridges.kt`
 - 검증: `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew :shared:compileKotlinIosSimulatorArm64 -q` → BUILD SUCCESSFUL (출력 없음, 에러 없음)
 - 인계 메모: Swift에서 `KoinIosKt.doInitKoin(baseUrl:tokenProvider:)`, `KoinHelper().attendanceStore()/pointsRepository()`, `FlowCollector().collectAttendance/collectRewards/collectBalance`로 사용 가능. `Dispatchers.Main`은 iOS 네이티브 타깃에서 컴파일/링크 문제 없이 그대로 사용됨(별도 대응 불필요).
+
+## Task 16 + 18 (iOS Swift): KeychainTokenProvider + 출석 ViewModel + RewardsView 연동
+- 상태: ⚠️ (빌드 미검증 — 사용자 Xcode 필요)
+- 변경 파일:
+  - `apps/frontend/CashChatIOS/CashChatIOS/KeychainTokenProvider.swift` (신규)
+  - `apps/frontend/CashChatIOS/CashChatIOS/BenefitZone/AttendanceViewModel.swift` (신규, `AttendanceViewModel` + `AttendanceWidgetView`)
+  - `apps/frontend/CashChatIOS/CashChatIOS/CashChatIOSApp.swift` (수정: `import CashChatShared` 추가, `init()`에서 `KoinIosKt.doInitKoin(baseUrl:tokenProvider:)` 1회 호출)
+  - `apps/frontend/CashChatIOS/CashChatIOS/ContentView.swift` (수정: `RewardsView`에 `@StateObject private var attendanceVM = AttendanceViewModel()` 추가, ScrollView > VStack(spacing:14) 최상단에 `AttendanceWidgetView(vm: attendanceVM).padding(.horizontal, 20)` 삽입, 기존 `.onAppear` 애니메이션 블록 안에 `attendanceVM.load()` 한 줄 추가. mock 미션 카드는 그대로 유지)
+- 검증: 빌드 불가 환경 — 문법/시그니처/타입변환만 신중히 재검토함.
+  - `IosBridges.kt`/`AttendanceStore.kt`/`AttendanceModels.kt`/`PointsRepository.kt`/`KoinIos.kt`/`TokenProvider.kt` 실제 소스를 직접 읽고 대조함 (추측 금지).
+  - **중요 발견**: 작업 지시서의 KMM 타입 변환 가정과 실제 소스가 다름 — `AttendanceUiState.month: Int`(→ Swift `Int32`, non-optional), `checkedDays: List<Int>`(→ `[KotlinInt]`, `.intValue` 필요), `RewardPreview.coin: Long`(→ `Int64` non-optional, `KotlinLong` 아님), `CheckInRewardEvent.awardedCoin: Long`(→ `Int64`), `PointsRepository.balance: StateFlow<Long>`(→ FlowCollector 콜백 파라미터 `Int64` non-optional). `FlowCollector`의 콜백 시그니처(`(AttendanceUiState) -> Unit` 등)도 모두 non-null이므로 `guard let ... else` 옵셔널 언래핑이 불필요·컴파일 에러 유발 — 제거하고 `.coin ?? 0`(RewardPreview? 만 옵셔널), `value`(Int64 그대로), `Int(s.month)`(Int32→Int)로 직접 사용하도록 작성함.
+  - `KeychainTokenProvider`는 `TokenProvider` 인터페이스(`fun accessToken(): String?` 등 비-suspend 4메서드 + `updateTokens`)와 정확히 일치. `KoinIosKt.doInitKoin(baseUrl:tokenProvider:)` 시그니처도 `KoinIos.kt`와 일치 확인.
+- 인계 메모 (사용자 Xcode 필요 작업):
+  1. 신규 파일 2개(`KeychainTokenProvider.swift`, `BenefitZone/AttendanceViewModel.swift`)를 Xcode 타깃 멤버십에 추가 (File > Add Files to "CashChatIOS", Target Membership 체크) — pbxproj 미반영 시 컴파일 안 됨. `.xcodeproj/project.pbxproj`는 의도적으로 수정하지 않음.
+  2. `JAVA_HOME=$(/usr/libexec/java_home -v 21)` 설정 후 `:shared:embedAndSignAppleFrameworkForXcode` 실행 → Xcode 빌드.
+  3. 런타임: 로그인 → 리워드 탭 진입 → 출석 위젯이 ScrollView 최상단에 렌더되는지 → "출석 도장 찍기" 탭 → 토스트("출석 완료! 🪙+N") / 잔액 / 버튼 비활성("오늘 출석 완료")로 전환 확인.
