@@ -184,3 +184,27 @@
 
 ### 후속 Phase (별도 spec/plan)
 - Phase 2 리워드 광고(AdMob+SSV), Phase 3 데일리 미션, Phase 4 TNK 오퍼월. + 기존 Android Retrofit 인증 경로의 shared 클라이언트 통합.
+
+---
+
+## 코드리뷰 후속 수정
+- Fix 1(iOS 잔액 KotlinLong→int64Value), Fix 2(구독 1회 가드), Fix 3(errorMessage Android Toast/iOS toast), Fix 4(RewardsScreen dead 마커), Fix 5(월별 실제 일수)
+
+### 적용 결과
+- **Fix 1**: `AttendanceViewModel.swift` `collectBalance` 콜백의 `self.balance = value` → `self.balance = value.int64Value` (KotlinLong 박싱 해제). collectRewards/collectAttendance의 객체 프로퍼티 접근(`ev.awardedCoin`, `s.nextReward?.coin`)은 이미 Int64라 변경 안 함.
+- **Fix 2**: `AttendanceViewModel`에 `private var didLoad = false` 추가. `load()`에서 `store.loadMonthly(...)`는 매번 실행, `guard !didLoad else { return }; didLoad = true` 가드 이후에 collector 구독 3건(collectAttendance/collectRewards/collectBalance) 배치 — 탭 재진입 시 데이터 새로고침은 유지하면서 구독 누적 방지.
+- **Fix 3a (Android)**: `BenefitZoneScreen.kt`에 `LaunchedEffect(state.errorMessage) { state.errorMessage?.let { Toast... } }` 추가 (rewardEvents Toast 옆에 병렬 배치).
+- **Fix 3b (iOS)**: `collectAttendance` 콜백 안에 `if let err = s.errorMessage { self.toast = err }` 추가 (`AttendanceUiState.errorMessage: String?` 확인 — `AttendanceStore.kt` L25).
+- **Fix 4**: `RewardsScreen.kt` package 선언 아래 `// DEPRECATED: BenefitZoneScreen 으로 대체됨...` 마커 주석 추가.
+- **Fix 5a (Android)**: **건너뜀** — `app/build.gradle.kts`에 `isCoreLibraryDesugaringEnabled`/`coreLibraryDesugaring` 설정이 없고, 코드베이스 전체에 `java.time` 사용 사례 없음(`grep -rn "java.time" app/src/main/java` 무결과). `minSdk = 24`(API 26 미만)에서 desugaring 없이 `java.time.YearMonth`를 쓰면 런타임 크래시(`NoClassDefFoundError`/`MethodNotFoundException`) 위험 — 빌드는 통과해도 실기기에서 깨질 수 있어 변경하지 않음. `daysInMonth = 31` 하드코딩 그대로 유지.
+- **Fix 5b (iOS)**: `AttendanceWidgetView`에 `daysInMonth(_ month:)` 헬퍼(Calendar 기반, year=2026 고정, 범위 밖이면 31 fallback) 추가, `ForEach(1...31, ...)` → `ForEach(1...daysInMonth(vm.month), ...)`로 교체.
+
+### 검증
+- `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"` (java_home -v 21 이 머신에서 실패, 기존 메모대로) 후:
+  - `./gradlew :app:assembleDebug -q --no-daemon` → BUILD SUCCESSFUL (APK 생성, `app/build/outputs/apk/debug/app-debug.apk`, ~32MB)
+  - `./gradlew :shared:compileKotlinIosSimulatorArm64 -q --no-daemon` → BUILD SUCCESSFUL (회귀 없음)
+- iOS Swift(Fix 1,2,3b,5b): Xcode 빌드 불가 환경 → 문법 검토만 수행 (타입 변환 `.int64Value`, `didLoad` 가드 흐름, `daysInMonth` Calendar 옵셔널 체이닝/중괄호 균형 확인). 빌드는 사용자 검증 필요.
+
+### 인계 메모
+- #5·#6(포인트 스토어 분리/CoroutineScope 무자격 바인딩)는 미수정 TODO.
+- iOS 빌드는 사용자가 Xcode에서 직접 검증 필요 (이번 수정 포함 신규 Swift 변경분).

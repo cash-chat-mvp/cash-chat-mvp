@@ -14,9 +14,13 @@ final class AttendanceViewModel: ObservableObject {
     private let store = KoinHelper().attendanceStore()
     private let points = KoinHelper().pointsRepository()
     private let collector = FlowCollector()
+    private var didLoad = false
 
     func load() {
         store.loadMonthly(year: nil, month: nil)
+
+        guard !didLoad else { return }
+        didLoad = true
 
         collector.collectAttendance(store: store) { [weak self] s in
             Task { @MainActor in
@@ -25,6 +29,9 @@ final class AttendanceViewModel: ObservableObject {
                 self.month = Int(s.month)
                 self.todayChecked = s.todayChecked
                 self.nextRewardCoin = s.nextReward?.coin ?? 0
+                if let err = s.errorMessage {
+                    self.toast = err
+                }
             }
         }
 
@@ -38,7 +45,7 @@ final class AttendanceViewModel: ObservableObject {
         collector.collectBalance(repo: points) { [weak self] value in
             Task { @MainActor in
                 guard let self else { return }
-                self.balance = value
+                self.balance = value.int64Value
             }
         }
     }
@@ -57,13 +64,20 @@ struct AttendanceWidgetView: View {
         vm.checkedDays.max().map { vm.todayChecked ? $0 : $0 + 1 } ?? 1
     }
 
+    private func daysInMonth(_ month: Int) -> Int {
+        var comp = DateComponents(); comp.year = 2026; comp.month = month
+        guard month >= 1, month <= 12, let date = Calendar.current.date(from: comp),
+              let range = Calendar.current.range(of: .day, in: .month, for: date) else { return 31 }
+        return range.count
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("\(vm.month)월 출석체크")
                 .font(.system(size: 18, weight: .black))
 
             LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(1...31, id: \.self) { day in
+                ForEach(1...daysInMonth(vm.month), id: \.self) { day in
                     dayCell(for: day)
                 }
             }
