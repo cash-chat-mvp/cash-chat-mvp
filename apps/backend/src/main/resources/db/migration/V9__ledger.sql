@@ -1,4 +1,4 @@
--- V8: 통합 회계(ledger) 도메인 — 수익 분배 감사 원장
+-- V9: 통합 회계(ledger) 도메인 — 수익 분배 감사 원장
 
 CREATE TABLE ledger_entry (
     id                  BIGINT       NOT NULL AUTO_INCREMENT,

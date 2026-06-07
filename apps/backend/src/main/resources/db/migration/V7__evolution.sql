@@ -1,4 +1,4 @@
--- V6: 진화(evolution) 도메인 — 유저 레벨 상태 + 진화 시도 원장 (Phase 1 가설값)
+-- V7: 진화(evolution) 도메인 — 유저 레벨 상태 + 진화 시도 원장 (Phase 1 가설값)
 
 CREATE TABLE user_evolution (
     id         BIGINT       NOT NULL AUTO_INCREMENT,

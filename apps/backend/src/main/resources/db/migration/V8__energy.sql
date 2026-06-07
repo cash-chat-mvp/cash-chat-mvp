@@ -1,4 +1,4 @@
--- V7: 밥(energy) 도메인 — 유저별 채팅 연료 지갑
+-- V8: 밥(energy) 도메인 — 유저별 채팅 연료 지갑
 
 CREATE TABLE user_energy (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
