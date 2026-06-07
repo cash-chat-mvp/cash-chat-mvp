@@ -44,6 +44,7 @@ final class AppState: ObservableObject {
     private let apiService = AuthApiService(baseUrl: AppConfig.apiBaseUrl)
     // deviceToken은 민감 정보가 아닌 기기 식별자이므로 UserDefaults 사용
     private let defaults = UserDefaults.standard
+    private let appleSignInCoordinator = AppleSignInCoordinator()
 
     private enum Keys {
         static let accessToken = "access_token"
@@ -80,9 +81,43 @@ final class AppState: ObservableObject {
         isLoading = false
     }
 
-    // Apple 로그인 — API 준비 전까지 placeholder
-    func loginWithApple() {
-        errorMessage = "Apple 로그인은 준비 중입니다."
+    // Apple 로그인 — 네이티브 ASAuthorization + BE /callback/apple 연동
+    func loginWithApple() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let credential = try await appleSignInCoordinator.signIn()
+            let deviceToken = getOrCreateDeviceToken()
+            let response = try await apiService.loginWithApple(
+                authorizationCode: credential.authorizationCode,
+                identityToken: credential.identityToken,
+                fullName: credential.fullName,
+                deviceToken: deviceToken
+            )
+            persistSession(response)
+        } catch AppleSignInError.canceled {
+            // 사용자 취소 — 토스트 없이 무시
+        } catch AppleSignInError.alreadyInProgress {
+            // 이미 진행 중인 요청 — 무시 (중복 탭)
+        } catch {
+            // 근본 원인 진단용 로그 (Xcode 콘솔). Kotlin suspend 예외는 @Throws로 전파됨.
+            #if DEBUG
+            print("❌ Apple 로그인 실패: \(error)")
+            #endif
+            errorMessage = "Apple 로그인에 실패했습니다. 다시 시도해주세요."
+        }
+    }
+
+    // Member 로그인 응답의 토큰을 Keychain에 저장하고 인증 상태로 전환. (Google/Apple 공통)
+    private func persistSession(_ response: AuthResponse) {
+        KeychainHelper.set(response.accessToken, forKey: Keys.accessToken)
+        KeychainHelper.set(response.role, forKey: Keys.role)
+        if let refreshToken = response.refreshToken {
+            KeychainHelper.set(refreshToken, forKey: Keys.refreshToken)
+        }
+        isAuthenticated = true
     }
 
     // TODO: Apple 로그인 API 완성 시 이 메서드 및 관련 버튼 제거
@@ -109,12 +144,7 @@ final class AppState: ObservableObject {
 
             let deviceToken = getOrCreateDeviceToken()
             let response = try await apiService.loginWithGoogle(serverAuthCode: serverAuthCode, deviceToken: deviceToken)
-            KeychainHelper.set(response.accessToken, forKey: Keys.accessToken)
-            KeychainHelper.set(response.role, forKey: Keys.role)
-            if let refreshToken = response.refreshToken {
-                KeychainHelper.set(refreshToken, forKey: Keys.refreshToken)
-            }
-            isAuthenticated = true
+            persistSession(response)
         } catch {
             errorMessage = "Google 로그인에 실패했습니다. 다시 시도해주세요."
         }
@@ -230,9 +260,9 @@ struct OnboardingView: View {
 
                 // 버튼 영역
                 VStack(spacing: 12) {
-                    // Apple 로그인 (UI만 — 서버 API 준비 후 연동 예정)
+                    // Apple 로그인 (네이티브 ASAuthorization 연동)
                     Button {
-                        appState.loginWithApple()
+                        Task { await appState.loginWithApple() }
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "apple.logo")
