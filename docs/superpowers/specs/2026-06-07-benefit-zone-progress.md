@@ -79,3 +79,18 @@
   - `apps/frontend/shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/points/PointsRepository.kt` (신규)
 - 검증: `./gradlew :shared:compileKotlinMetadata -q` → 성공 (출력 없음, 에러 없음)
 - 인계 메모: GET /api/points/me BE 준비 시 RemotePointsRepository로 교체
+
+## Task 9-10: AttendanceStore (TDD)
+- 상태: ✅
+- 변경 파일:
+  - `apps/frontend/shared/src/commonTest/kotlin/com/nomadclub/cashchat/shared/attendance/AttendanceStoreTest.kt` (신규, Task 9)
+  - `apps/frontend/shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/attendance/AttendanceStore.kt` (신규, Task 10)
+- 검증:
+  - RED: `./gradlew :shared:testDebugUnitTest --tests "*AttendanceStoreTest*"` → 컴파일 실패 (`Unresolved reference 'AttendanceStore'` 등) — 예상대로 실패 확인
+  - GREEN: 동일 명령 재실행 → BUILD SUCCESSFUL, 테스트 결과 XML `tests="2" failures="0" errors="0"` (loadMonthly/checkIn 둘 다 PASS)
+  - 전체: `./gradlew :shared:cleanTestDebugUnitTest :shared:testDebugUnitTest` → BUILD SUCCESSFUL, 3개 테스트 클래스(AttendanceApiServiceTest, AttendanceStoreTest, AuthenticatedApiClientTest) 총 6개 테스트 전부 PASS, failures=0 errors=0
+- 인계 메모:
+  - **runTest hang 이슈 발견 및 해결**: `loadMonthly`/`checkIn` 최초 구현에서 `_state.update { it.copy(isLoading = true, ...) }`를 `scope.launch` 블록 *내부* 맨 앞에 두었더니, `state.first { !it.isLoading }`가 (StateFlow 초기값이 이미 `isLoading=false`이므로) launch된 코루틴이 실행되기 전에 즉시 매칭되어 `loadMonthly` 결과 반영 전 상태를 반환 → 1번째 테스트는 `expected:[1,2] but was:[]`로 즉시 실패, 2번째 테스트는 `checkIn()`이 (이전 `loadMonthly`의 `todayChecked` 갱신을 못 보고) 거듭 호출되며 `UncompletedCoroutinesError`(1분 타임아웃)로 행(hang) 발생.
+  - **해결**: `isLoading = true` / `isCheckingIn = true` 설정을 `scope.launch {}` 호출 *직전*, 즉 동기 컨텍스트에서 수행하도록 변경(네트워크 호출과 결과 반영만 launch 내부에 유지). 이렇게 하면 `loadMonthly()`/`checkIn()` 호출 시점에 StateFlow가 즉시 로딩 상태로 전이되어 `first { !it.isLoading }`/순차 호출이 올바른 순서로 동기화됨. 테스트 단언/시그니처는 변경하지 않음.
+  - `checkIn`은 `todayChecked || isCheckingIn` 가드로 중복 출석 방지.
+  - 시그니처 `AttendanceStore(service, pointsRepository, scope)`, 노출 `state: StateFlow<AttendanceUiState>`, `rewardEvents: SharedFlow<CheckInRewardEvent>`, `loadMonthly(year?, month?)`, `checkIn()` — 후속 Koin(`AttendanceStore(get(), get(), get())`)/UI(`store.state`, `store.rewardEvents`, `store.loadMonthly()`, `store::checkIn`) 패턴과 일치.
