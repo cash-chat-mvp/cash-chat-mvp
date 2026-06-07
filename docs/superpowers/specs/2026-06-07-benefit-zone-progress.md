@@ -72,3 +72,10 @@
   - 시그니처 `AttendanceApiService(config: ApiConfig, httpClient: HttpClient)`로 스펙과 일치 — 후속 Koin 모듈에서 `AttendanceApiService(get(), get<AuthenticatedApiClient>().httpClient)` 형태로 바로 사용 가능.
   - `getMonthly`/`checkIn` 모두 `@Throws(CancellationException::class, Exception::class)` 적용 (iOS 크래시 방지).
   - `getMonthly(year, month)`는 둘 다 nullable이며 null이면 쿼리 파라미터를 생략 — MockEngine 테스트에서는 항상 값이 전달되므로 경로(`/api/attendance/me`)만 검증.
+
+## Task 8: PointsRepository 격리
+- 상태: ✅
+- 변경 파일:
+  - `apps/frontend/shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/points/PointsRepository.kt` (신규)
+- 검증: `./gradlew :shared:compileKotlinMetadata -q` → 성공 (출력 없음, 에러 없음)
+- 인계 메모: GET /api/points/me BE 준비 시 RemotePointsRepository로 교체
