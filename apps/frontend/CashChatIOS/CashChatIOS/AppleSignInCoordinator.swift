@@ -23,6 +23,9 @@ enum AppleSignInError: Error {
 @MainActor
 final class AppleSignInCoordinator: NSObject {
     private var continuation: CheckedContinuation<AppleCredential, Error>?
+    /// ASAuthorizationController는 시스템이 strong reference로 잡아주지 않으므로,
+    /// 인증 흐름이 끝날 때까지(resume 호출 시점) 직접 보유해야 콜백이 정상 호출된다.
+    private var currentController: ASAuthorizationController?
 
     func signIn() async throws -> AppleCredential {
         let request = ASAuthorizationAppleIDProvider().createRequest()
@@ -38,6 +41,7 @@ final class AppleSignInCoordinator: NSObject {
             let controller = ASAuthorizationController(authorizationRequests: [request])
             controller.delegate = self
             controller.presentationContextProvider = self
+            self.currentController = controller
             controller.performRequests()
         }
     }
@@ -45,11 +49,13 @@ final class AppleSignInCoordinator: NSObject {
     private func resume(returning credential: AppleCredential) {
         continuation?.resume(returning: credential)
         continuation = nil
+        currentController = nil
     }
 
     private func resume(throwing error: Error) {
         continuation?.resume(throwing: error)
         continuation = nil
+        currentController = nil
     }
 }
 
