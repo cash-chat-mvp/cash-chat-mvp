@@ -41,3 +41,21 @@
   - BenefitInfoCardView 시그니처(icon:title:badge:description:dimmed:) 및 Badge.next/.soon 일치 확인 (AttendanceViewModel.swift:151~181)
   - 중괄호/들여쓰기 육안 검토 — 정상 (struct 닫힘 1089줄, 다음 ShopCategory enum과 경계 정상)
 - 인계 메모: 사용자가 Xcode에서 빌드 후 (1) 헤더 코인 칩이 attendanceVM.balance를 정상 표시하는지, (2) AttendanceWidgetView/BenefitInfoCardView 3장이 정상 렌더링되는지, (3) 탭 전환 애니메이션(animateIn) 동작 확인 필요.
+
+---
+
+## ✅ UI 개편 완료 요약 (Task 6)
+
+### 완료
+- Android: 주간 7칸 계산 순수함수(TDD) + 출석 주간 히어로 위젯 + 소개 카드(BenefitInfoCard) + 화면 재구성(코인 칩 헤더, PhasePlaceholder 제거). — ✅ 빌드+테스트
+- iOS: AttendanceWidgetView 주간 히어로 개편 + BenefitInfoCardView + vm.streak + RewardsView 기존 목업(MissionItem/커피교환/미션 ForEach) 전면 제거. — ⚠️ Swift 작성 완료, 빌드 미검증
+
+### 최종 검증 (컨트롤러 직접)
+- `./gradlew :app:testDebugUnitTest --tests "*WeeklyAttendanceTest*"` → PASS (2)
+- `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL (APK)
+- `./gradlew :shared:testDebugUnitTest` → PASS (6/6, 무변경 회귀 확인)
+
+### 미결 / 인계 (PENDING)
+1. **iOS Xcode 검증 (사용자)**: 기존 2파일 수정만(신규 파일 없음 → pbxproj 멤버십 변경 불필요). `embedAndSignAppleFrameworkForXcode`(JAVA_HOME=Android Studio JBR) 후 Xcode 빌드 → 런타임: 리워드 탭에서 (1) 주간 히어로(일~토, 오늘 강조, 출석 도장→완료), (2) 코인 칩, (3) 소개 카드 3장(배지/흐림), (4) 기존 목업 사라짐 확인.
+2. **Android 런타임 (사용자)**: 출석 주간 뷰 + 소개 카드 탭 "곧 만나요" 토스트.
+3. 월 경계 주간뷰: 다른 달 칸 중립 표시(단순화 유지).
