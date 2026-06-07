@@ -135,3 +135,11 @@
 - 변경 파일: apps/frontend/app/src/main/java/com/nomadclub/cashchat/feature/main/MainScreen.kt (import RewardsScreen → BenefitZoneScreen 교체, REWARDS 탭 composable 블록을 `BenefitZoneScreen()` 무인자 호출로 교체)
 - 검증: `./gradlew :app:compileDebugKotlin -q` → BUILD SUCCESSFUL(출력 없음). `./gradlew :app:assembleDebug -q` → BUILD SUCCESSFUL (app-debug.apk 생성 확인, app/build/outputs/apk/debug/app-debug.apk)
 - 인계 메모: 수동 런타임 검증 PENDING(기기 필요) — 로그인→혜택존 탭→출석 도장→토스트/코인/버튼 비활성 확인 필요. RewardsScreen.kt 파일은 보존됨(grep 결과 MainScreen.kt 외 다른 곳에서 사용되지 않아 import만 교체, 파일 삭제 안 함).
+
+## Task 17/18 (iOS Kotlin 브리지): KoinIos.kt + IosBridges.kt
+- 상태: ✅
+- 변경 파일:
+  - `apps/frontend/shared/src/iosMain/kotlin/com/nomadclub/cashchat/shared/di/KoinIos.kt`
+  - `apps/frontend/shared/src/iosMain/kotlin/com/nomadclub/cashchat/shared/di/IosBridges.kt`
+- 검증: `JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ./gradlew :shared:compileKotlinIosSimulatorArm64 -q` → BUILD SUCCESSFUL (출력 없음, 에러 없음)
+- 인계 메모: Swift에서 `KoinIosKt.doInitKoin(baseUrl:tokenProvider:)`, `KoinHelper().attendanceStore()/pointsRepository()`, `FlowCollector().collectAttendance/collectRewards/collectBalance`로 사용 가능. `Dispatchers.Main`은 iOS 네이티브 타깃에서 컴파일/링크 문제 없이 그대로 사용됨(별도 대응 불필요).
