@@ -48,3 +48,14 @@
   - `getOrCreateDeviceTokenBlocking()`이 실제로 존재함 (스펙 그대로 사용).
   - `androidx.datastore.preferences.core.edit`는 이미 import 되어 있어 추가 import 불필요. `runBlocking`도 기존 import 재사용.
   - `updateTokensBlocking`은 기존 `*Blocking` 함수들 바로 아래(파일 끝)에 추가함.
+
+## Task 5: 출석 DTO 모델
+- 상태: ✅
+- 변경 파일:
+  - `apps/frontend/shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/attendance/model/AttendanceModels.kt` (신규)
+- 검증:
+  - `./gradlew :shared:compileKotlinMetadata -q` → 성공 (출력 없음, 에러 없음)
+- 인계 메모:
+  - `BonusItem`, `RewardPreview`, `MonthlyAttendance`, `CheckInResult` 4개 데이터 클래스 모두 `@Serializable` 적용, 필드명/타입 스펙과 정확히 일치(coin/awardedCoin: Long, dayCount/year/month/currentStreak/streakDayCount/quantity: Int, todayChecked: Boolean).
+  - 기존 빈 디렉터리 `attendance/`가 이미 존재했으나 그 하위 `model/` 패키지 및 파일은 신규 생성.
+  - 후속 Task(AttendanceApiService, AttendanceStore)는 이 패키지(`com.nomadclub.cashchat.shared.attendance.model`)에서 바로 import 가능.
