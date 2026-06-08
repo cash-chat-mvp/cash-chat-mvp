@@ -23,7 +23,7 @@ assert_eq "$(rpd_get "$F" GUDALS model1)" "2" "다른 키·모델 분리 카운�
 assert_eq "$(rpd_get "$F" shared model0)" "4" "다른 키 증가가 기존 값 보존"
 
 # KST 날짜 형식 (YYYY-MM-DD)
-echo "$(rpd_kst_date)" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; assert_rc $? 0 "KST 날짜 형식"
+rpd_kst_date | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; assert_rc $? 0 "KST 날짜 형식"
 
 # 렌더: 한도(20/500)와 공통키/내키 사용량 표 (표시명은 모델명, 카운트는 티어 기준)
 OUT="$(RPD_MODEL0_LIMIT=20 RPD_MODEL1_LIMIT=500 rpd_render "$F" "gemini-3.5-flash" "gemini-3.1-flash-lite" GUDALS)"
