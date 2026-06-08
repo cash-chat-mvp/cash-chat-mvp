@@ -6,6 +6,7 @@
 #   GEMINI_KEY, GEMINI_MODEL(=model1), JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN
 
 . "$(dirname "${BASH_SOURCE[0]}")/lib_cards.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/lib_gh.sh"
 
 parse_resolve_reason() {
   local r
@@ -105,8 +106,11 @@ run_resolve_command() {
     "https://api.github.com/graphql" \
     -d "$(jq -n --arg id "$ROOT_NODE_ID" '{query:"query($id:ID!){node(id:$id){... on PullRequestReviewComment{pullRequestReviewThread{id}}}}",variables:{id:$id}}')" \
     | jq -r '.data.node.pullRequestReviewThread.id // empty')
-  [ -n "$THREAD_ID" ] && curl -s --max-time 10 -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
-    "https://api.github.com/graphql" \
-    -d "$(jq -n --arg id "$THREAD_ID" '{query:"mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}",variables:{id:$id}}')" >/dev/null || true
-  echo "::notice::resolve 완료"
+  # 응답을 검증해 실제 resolve 여부 확인 — 실패 시 거짓 성공 대신 수동 안내.
+  if gh_resolve_thread "$THREAD_ID"; then
+    echo "::notice::resolve 완료"
+  else
+    gh_reply "$ROOT_ID" "🤖 판단은 승인했지만 스레드 자동 리졸브에 실패했어요(권한/일시 오류). 수동으로 Resolve conversation 을 눌러 주세요. 자세한 원인은 워크플로 로그를 확인하세요."
+    echo "::warning::resolve 실패(수동 필요)"
+  fi
 }

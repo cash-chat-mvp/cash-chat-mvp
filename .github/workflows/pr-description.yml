@@ -4,6 +4,12 @@ on:
   pull_request_target:
     types: [opened]
 
+# 안정성(#3.3): pr-review.yml 과 동일 group 으로 직렬화 — PR open 시 리뷰와 요약이
+# 공통 Gemini 키를 동시에 호출하지 않도록 보장(느리지만 RPM/RPD 초과 방지).
+concurrency:
+  group: gemini-shared-api
+  cancel-in-progress: false
+
 jobs:
   update-description:
     runs-on: ubuntu-latest
@@ -35,6 +41,32 @@ jobs:
           echo "commits<<$EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
           echo "$EOF" >> $GITHUB_OUTPUT
+
+      # ── 일반 PR: AI 요약 품질용 변경 요약(diffstat) + 본문 diff(용량 제한) ──
+      - name: Get Diff (general PR)
+        id: diff
+        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          RANGE="origin/${BASE_REF}...pr-${PR_NUMBER}-head"
+          # 노이즈(잠금파일·생성물·바이너리) 제외 — 의미 있는 소스 변경에 집중
+          EXCLUDES=(':(exclude)**/*.lock' ':(exclude)**/*.lockb' ':(exclude)**/package-lock.json'
+                    ':(exclude)**/*.png' ':(exclude)**/*.jpg' ':(exclude)**/*.jpeg' ':(exclude)**/*.webp'
+                    ':(exclude)**/*.pdf' ':(exclude)**/*.svg' ':(exclude)**/build/**' ':(exclude)**/dist/**'
+                    ':(exclude)**/*.xcworkspacedata' ':(exclude)**/*.pbxproj')
+          DIFFSTAT=$(git diff --stat "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | tail -60 || true)
+          [ -z "$DIFFSTAT" ] && DIFFSTAT="(변경 통계 없음)"
+          # 본문 diff 는 12KB로 절단(토큰·비용 제한). 함수 컨텍스트 포함.
+          DIFF=$(git diff --no-color -U2 "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | head -c 12000 || true)
+          [ -z "$DIFF" ] && DIFF="(diff 없음)"
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          {
+            echo "diffstat<<$EOF"; echo "$DIFFSTAT"; echo "$EOF"
+            echo "diff<<$EOF"; echo "$DIFF"; echo "$EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # ── dev → release/android or release/ios 배포 PR 전용 처리 ──────────
       - name: Compute version & AI release notes (release PR only)
@@ -240,17 +272,23 @@ jobs:
           GEMINI_MODELS:         ${{ vars.GEMINI_MODELS }}
           GEMINI_API_VERSION:    ${{ vars.GEMINI_API_VERSION }}
           COMMITS:               ${{ steps.commits.outputs.commits }}
+          DIFFSTAT:              ${{ steps.diff.outputs.diffstat }}
+          DIFF:                  ${{ steps.diff.outputs.diff }}
+          PR_TITLE:              ${{ github.event.pull_request.title }}
           # describe는 약한 모델(model1) 우선: 2번째 모델부터 시도하도록 재정렬
           GEMINI_MODELS_DESC: ${{ vars.GEMINI_MODELS }}
         run: |
           set -euo pipefail
           SUMMARY=""
           if [ -n "${GOOGLE_GEMINI_API_KEY:-}" ] && [ -n "${COMMITS:-}" ]; then
-            PROMPT=$(jq -rn --arg c "$COMMITS" '"다음 커밋 목록을 바탕으로 이 PR이 무엇을, 왜 바꾸는지 한국어로 2~3문장 요약하세요. 리뷰어가 맥락을 빠르게 잡도록 핵심만 평문으로 쓰고, 커밋 메시지 나열·파일명·장황한 일반론은 피하세요.\n\n커밋:\n\($c)"')
+            # 실제 diff 까지 근거로 제공해 더 구체적이고 유의미한 요약을 생성한다.
+            PROMPT=$(jq -rn \
+              --arg t "${PR_TITLE:-}" --arg c "$COMMITS" --arg s "${DIFFSTAT:-}" --arg d "${DIFF:-}" \
+              '"당신은 시니어 리뷰어입니다. 아래 PR 제목·커밋·변경통계·실제 diff를 근거로, 리뷰어가 30초 만에 맥락을 잡도록 한국어 마크다운 요약을 작성하세요.\n\n반드시 아래 형식을 그대로 따르세요(불릿은 각 1~3개, 근거 없는 추측·일반론·파일명 나열 금지):\n\n**한 줄 요약**: (이 PR이 무엇을 하는지 한 문장)\n\n**주요 변경**\n- (핵심 동작/구조 변경을 결과 중심으로)\n\n**왜**\n- (이 변경이 필요한 이유/배경)\n\n**리뷰 포커스**\n- (리뷰어가 특히 확인해야 할 위험·엣지케이스·호환성)\n\n제목: \($t)\n\n커밋:\n\($c)\n\n변경통계:\n\($s)\n\nDiff(일부 절단됨):\n\($d)"')
             GEMINI_API_VERSION="${GEMINI_API_VERSION:-v1beta}"
             IFS=',' read -ra _M <<< "${GEMINI_MODELS_DESC:-gemini-2.5-flash}"
             if [ "${#_M[@]}" -ge 2 ]; then MODELS=("${_M[1]}" "${_M[0]}" "${_M[@]:2}"); else MODELS=("${_M[@]}"); fi
-            REQUEST_BODY=$(jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}],generationConfig:{temperature:0.3}}')
+            REQUEST_BODY=$(jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}],generationConfig:{temperature:0.3,maxOutputTokens:1024}}')
             HTTP_RESPONSE=$(mktemp); HTTP_CODE="000"
             for model in "${MODELS[@]}"; do
               model="${model// /}"; [ -z "$model" ] && continue
@@ -271,11 +309,17 @@ jobs:
             done
           fi
           [ -z "$SUMMARY" ] && SUMMARY="_(AI 요약을 생성하지 못했어요 — 아래 커밋 내역을 참고해주세요)_"
-          SUMMARY="${SUMMARY:0:800}"
+          SUMMARY="${SUMMARY:0:1800}"
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
           echo "summary<<$EOF" >> "$GITHUB_OUTPUT"
           echo "$SUMMARY" >> "$GITHUB_OUTPUT"
           echo "$EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Track RPD (요약=공통 키 · model1)
+        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
+        uses: ./.github/actions/rpd
+        with:
+          increments: "shared:model1:1"
 
       - name: Extract Jira Issue Key
         if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
