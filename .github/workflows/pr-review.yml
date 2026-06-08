@@ -11,11 +11,11 @@ on:
   pull_request_review_comment:
     types: [created]
 
-# 안정성(#3.3): 리뷰/요약 워크플로 전체를 단일 그룹으로 직렬화한다.
-# 서로 다른 PR·이벤트라도 공통 Gemini 키를 동시에 호출하지 않도록 보장(느리지만 RPM/RPD 초과 방지).
-# pr-description.yml 도 동일 group 을 사용해 PR open 시 리뷰+요약 동시 호출을 막는다.
+# 안정성(#3.3): 기본은 "작성자 개인키"를 쓰고 공용키는 429 폴백 전용이므로, 서로 다른 PR은
+# 개인키로 병렬 실행해도 공용키 경합이 없다 → PR별로만 직렬화(동일 PR의 리뷰·요약·명령은
+# 같은 개인키를 동시 호출하지 않도록 한 줄로 처리). pr-description.yml 도 같은 PR별 group 을 공유.
 concurrency:
-  group: gemini-shared-api
+  group: gemini-pr-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: false
 
 permissions:
@@ -147,12 +147,21 @@ jobs:
         with:
           app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
           private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
-      - name: AI Review (Gemini, 공통 키, 라인별)
+      - name: Resolve author key
+        id: whichkey
+        env:
+          LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_keys.sh
+          echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
+      - name: AI Review (Gemini, 작성자 키 우선·공용키 폴백, 라인별)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL0: ${{ needs.resolve-gemini-model.outputs.model0 }}
           MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
-          GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}   # #1 공통 키
+          MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}   # 공용 키(폴백)
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RETRY_CMD: "/gemini-review"
         run: |
@@ -160,14 +169,16 @@ jobs:
           . .github/scripts/review/lib_ai.sh
           . .github/scripts/review/lib_comments.sh
           . .github/scripts/review/run_pr_agent.sh
+          # 작성자 개인키 우선, 없으면 공용키. 폴백키는 항상 공용키.
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
           cleanup_notices
           PROGRESS_ID=""; trap clear_progress EXIT; post_progress
           LOG=$(mktemp)
-          # 라인별 리뷰 복원: AUTO_REVIEW + AUTO_IMPROVE 동시 활성화
-          if run_pr_agent "${{ github.event_name }}" "$GITHUB_EVENT_PATH" "$LOG" -- \
+          # 라인별 리뷰 복원: AUTO_REVIEW + AUTO_IMPROVE 동시 활성화 (키 env는 wrapper가 주입)
+          if run_pr_agent_fallback "${{ github.event_name }}" "$GITHUB_EVENT_PATH" "$LOG" \
+              "$PRIMARY_KEY" "$DEFAULT_KEY" -- \
               -e "CONFIG.AI_PROVIDER=google_ai_studio" \
               -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" \
-              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" -e "GEMINI_API_KEY=$GEMINI_KEY" \
               -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
               -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
               -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=true"; then
@@ -175,16 +186,15 @@ jobs:
           else
             notify_failure "$LOG" "$RETRY_CMD"; echo "::error::Gemini 자동 리뷰 실패"; exit 1
           fi
-      - name: Track RPD (공통 키 · review=model0 + improve=model1)
+      - name: Track RPD (작성자 키 · review=model0 + improve=model1)
         uses: ./.github/actions/rpd
         with:
-          increments: "shared:model0:1,shared:model1:1"
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model0:1,${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1"
 
   # ====================================================
   # push(synchronize) 시: ① 스레드 판단·리졸브  ② 라인별 코드 제안(/improve)
-  #   - resolve: model1 + 작성자 키
-  #   - improve: model1 + 공통 키 (라인별 코드 제안만, 전체 리뷰는 open 때만)
-  #   두 단계는 동일 Job 내에서 "순차" 실행 → 공통 키 동시 호출 방지(#3.3)
+  #   - resolve/improve 모두 model1 + 작성자 개인키(없으면 공용키), 429 시 공용키 폴백
+  #   두 단계는 동일 Job 내에서 "순차" 실행 → 같은 키 동시 호출 방지
   # ====================================================
   review-on-push:
     name: Review On Push (resolve + improve)
@@ -210,7 +220,7 @@ jobs:
           set -euo pipefail
           . .github/scripts/review/lib_keys.sh
           echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
-      - name: Judge & resolve threads (model1, 작성자 키)
+      - name: Judge & resolve threads (model1, 작성자 키 우선·공용키 폴백)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
@@ -221,13 +231,15 @@ jobs:
           set -euo pipefail
           . .github/scripts/review/lib_ai.sh
           . .github/scripts/review/resolve_threads.sh
-          export GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          export GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 개인키 우선
+          export GEMINI_FALLBACK_KEY="$DEFAULT_KEY"          # 429 시 공용키 폴백
           resolve_threads
-      - name: AI Improve (Gemini, 공통 키, model1, push 라인별 제안)
+      - name: AI Improve (Gemini, 작성자 키 우선·공용키 폴백, model1, push 라인별 제안)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
-          GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}   # 공통 키
+          MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RETRY_CMD: "/gemini-review"
         run: |
@@ -235,14 +247,15 @@ jobs:
           . .github/scripts/review/lib_ai.sh
           . .github/scripts/review/lib_comments.sh
           . .github/scripts/review/run_pr_agent.sh
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
           cleanup_notices
           PROGRESS_ID=""; trap clear_progress EXIT; post_progress
           LOG=$(mktemp)
           # 전체 리뷰(AUTO_REVIEW)는 끄고 라인별 코드 제안(AUTO_IMPROVE)만 — model1 고정.
-          if run_pr_agent "${{ github.event_name }}" "$GITHUB_EVENT_PATH" "$LOG" -- \
+          if run_pr_agent_fallback "${{ github.event_name }}" "$GITHUB_EVENT_PATH" "$LOG" \
+              "$PRIMARY_KEY" "$DEFAULT_KEY" -- \
               -e "CONFIG.AI_PROVIDER=google_ai_studio" \
               -e "CONFIG.MODEL=$MODEL1" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" \
-              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" -e "GEMINI_API_KEY=$GEMINI_KEY" \
               -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=false" \
               -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
               -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=true"; then
@@ -250,10 +263,10 @@ jobs:
           else
             notify_failure "$LOG" "$RETRY_CMD"; echo "::error::push improve 실패"; exit 1
           fi
-      - name: Track RPD (resolve=작성자 키 · improve=공통 키, 둘 다 model1)
+      - name: Track RPD (작성자 키 · resolve + improve, 둘 다 model1)
         uses: ./.github/actions/rpd
         with:
-          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1,shared:model1:1"
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:2"
 
   # ====================================================
   # Gemini 수동 리뷰 (/gemini-review 코멘트)
@@ -282,7 +295,7 @@ jobs:
           set -euo pipefail
           . .github/scripts/review/lib_keys.sh
           echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
-      - name: AI Review (Gemini, 작성자 키, 라인별)
+      - name: AI Review (Gemini, 요청자 키 우선·공용키 폴백, 라인별)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL0: ${{ needs.resolve-gemini-model.outputs.model0 }}
@@ -296,22 +309,22 @@ jobs:
           . .github/scripts/review/lib_ai.sh
           . .github/scripts/review/lib_comments.sh
           . .github/scripts/review/run_pr_agent.sh
-          GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 요청자 개인키 우선
           # 코멘트 본문을 /review 로 바꿔 합성(이미지가 issue_comment 경로로 파싱)
           EVT=$(mktemp); jq '.comment.body = "/review"' "$GITHUB_EVENT_PATH" > "$EVT"
           cleanup_notices; PROGRESS_ID=""; trap clear_progress EXIT; post_progress
           LOG=$(mktemp)
-          if run_pr_agent "${{ github.event_name }}" "$EVT" "$LOG" -- \
+          if run_pr_agent_fallback "${{ github.event_name }}" "$EVT" "$LOG" \
+              "$PRIMARY_KEY" "$DEFAULT_KEY" -- \
               -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-              -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" \
-              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" -e "GEMINI_API_KEY=$GEMINI_KEY"; then
+              -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]"; then
             # /improve 도 이어서 실행(라인별 커밋 제안)
             EVT2=$(mktemp); jq '.comment.body = "/improve"' "$GITHUB_EVENT_PATH" > "$EVT2"
             LOG2=$(mktemp)
-            run_pr_agent "${{ github.event_name }}" "$EVT2" "$LOG2" -- \
+            run_pr_agent_fallback "${{ github.event_name }}" "$EVT2" "$LOG2" \
+              "$PRIMARY_KEY" "$DEFAULT_KEY" -- \
               -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-              -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" \
-              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" -e "GEMINI_API_KEY=$GEMINI_KEY" || true
+              -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" || true
             localize_comments
           else
             notify_failure "$LOG" "$RETRY_CMD"; echo "::error::Gemini 수동 리뷰 실패"; exit 1
@@ -468,30 +481,43 @@ jobs:
           DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
         run: |
           set -euo pipefail
-          # 명령(/ask) 작성자의 키 사용, 미매핑 시 공용 키로 폴백
-          GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          # 작성자 개인키 우선, 미매핑 시 공용 키. 폴백키는 항상 공용 키.
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
           # /ask 는 ModelType.WEAK → CONFIG.MODEL_WEAK(=model1) 사용.
           # 코멘트 본문은 rewrite 하지 않고 그대로 pr-agent 러너가 파싱한다.
           LOG=$(mktemp)
-          set +e
-          docker run --rm \
-            -e GITHUB_TOKEN \
-            -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
-            -e GITHUB_REPOSITORY="${{ github.repository }}" \
-            -e GITHUB_API_URL="${{ github.api_url }}" \
-            -e GITHUB_SERVER_URL="${{ github.server_url }}" \
-            -e GITHUB_EVENT_PATH=/github/workflow/event.json \
-            -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-            -e "CONFIG.MODEL=$MODEL0" \
-            -e "CONFIG.MODEL_WEAK=$MODEL1" \
-            -e "CONFIG.FALLBACK_MODELS=[]" \
-            -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
-            -e "GEMINI_API_KEY=$GEMINI_KEY" \
-            -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
-            "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
-          docker_status=${PIPESTATUS[0]}
-          set -e
-          if [ "$docker_status" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG" || grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429" "$LOG"; then
+          _ask_run() {   # $1=key → docker 실행, 결과를 LOG에 기록, docker exit status 반환
+            local k="$1" st
+            set +e
+            docker run --rm \
+              -e GITHUB_TOKEN \
+              -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+              -e GITHUB_REPOSITORY="${{ github.repository }}" \
+              -e GITHUB_API_URL="${{ github.api_url }}" \
+              -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+              -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+              -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+              -e "CONFIG.MODEL=$MODEL0" \
+              -e "CONFIG.MODEL_WEAK=$MODEL1" \
+              -e "CONFIG.FALLBACK_MODELS=[]" \
+              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$k" \
+              -e "GEMINI_API_KEY=$k" \
+              -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
+              "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
+            st=${PIPESTATUS[0]}
+            set -e
+            return "$st"
+          }
+          _ask_failed() { [ "$1" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG" || grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429" "$LOG"; }
+          # set -e 하에서 비0 반환에 죽지 않도록 AND-OR로 status 캡처
+          _ask_run "$PRIMARY_KEY" && ask_status=0 || ask_status=$?
+          # 개인키 quota/rate-limit이면 공용키로 1회 재시도
+          if _ask_failed "$ask_status" && [ -n "$DEFAULT_KEY" ] && [ "$DEFAULT_KEY" != "$PRIMARY_KEY" ] \
+             && grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429" "$LOG"; then
+            echo "::notice::/ask 개인키 quota → 공용키 재시도"
+            _ask_run "$DEFAULT_KEY" && ask_status=0 || ask_status=$?
+          fi
+          if _ask_failed "$ask_status"; then
             . .github/scripts/review/lib_ai.sh
             . .github/scripts/review/lib_cards.sh
             PR_NUM="${{ github.event.issue.number || github.event.pull_request.number }}"
@@ -565,7 +591,8 @@ jobs:
           set -euo pipefail
           . .github/scripts/review/lib_ai.sh
           . .github/scripts/review/resolve_command.sh
-          export GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          export GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 개인키 우선
+          export GEMINI_FALLBACK_KEY="$DEFAULT_KEY"          # 429 시 공용키 폴백
           run_resolve_command
       - name: Track RPD (요청자 키 · resolve 판단=model1)
         uses: ./.github/actions/rpd

@@ -42,7 +42,7 @@ resolve_threads() {
     prompt=$(printf '코드 리뷰 코멘트가 아래 diff로 해결되었나요?\n첫 줄에 "yes" 또는 "no"만 쓰고, 둘째 줄에 한국어 한 문장으로 근거(yes면 해결 이유, no면 남은 이슈/파생 우려)를 쓰세요.\n\n파일: %s\n코멘트: %s\n\nDiff:\n%s' "$fpath" "$body" "$fdiff")
     payload=$(mktemp); out=$(mktemp)
     jq -n --arg p "$prompt" '{contents:[{role:"user",parts:[{text:$p}]}],generationConfig:{maxOutputTokens:256,temperature:0}}' > "$payload"
-    if ! ai_retry gemini_generate "$GEMINI_KEY" "$model" "$payload" "$out"; then
+    if ! ai_generate "$GEMINI_KEY" "${GEMINI_FALLBACK_KEY:-}" "$model" "$payload" "$out"; then
       echo "::warning::스레드 판단 실패(쿼터/오류) — 건너뜀: $fpath"; rm -f "$payload" "$out"; sleep 3; continue
     fi
     raw=$(jq -r '.candidates[0].content.parts[0].text // "no"' "$out" 2>/dev/null || echo "no")

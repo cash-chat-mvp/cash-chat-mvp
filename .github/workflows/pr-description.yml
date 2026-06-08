@@ -4,10 +4,10 @@ on:
   pull_request_target:
     types: [opened]
 
-# 안정성(#3.3): pr-review.yml 과 동일 group 으로 직렬화 — PR open 시 리뷰와 요약이
-# 공통 Gemini 키를 동시에 호출하지 않도록 보장(느리지만 RPM/RPD 초과 방지).
+# 안정성: pr-review.yml 과 동일한 PR별 group 을 공유 → 같은 PR의 자동리뷰와 요약이
+# 같은 작성자 개인키를 동시에 호출하지 않도록 직렬화(다른 PR은 병렬 실행).
 concurrency:
-  group: gemini-shared-api
+  group: gemini-pr-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
@@ -264,11 +264,21 @@ jobs:
             console.log(`✅ ${platformLabel} 릴리즈 PR 설정 완료 — "${newTitle}"`);
 
       # ── 일반 PR 처리 ────────────────────────────────────────────────────
+      - name: Resolve author key
+        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
+        id: whichkey
+        env:
+          LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_keys.sh
+          echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
       - name: AI Summary (general PR)
         if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
         id: ai
         env:
-          GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          MAPPED_KEY:            ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY:           ${{ secrets.GOOGLE_GEMINI_API_KEY }}
           GEMINI_MODELS:         ${{ vars.GEMINI_MODELS }}
           GEMINI_API_VERSION:    ${{ vars.GEMINI_API_VERSION }}
           COMMITS:               ${{ steps.commits.outputs.commits }}
@@ -280,7 +290,8 @@ jobs:
         run: |
           set -euo pipefail
           SUMMARY=""
-          if [ -n "${GOOGLE_GEMINI_API_KEY:-}" ] && [ -n "${COMMITS:-}" ]; then
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 작성자 개인키 우선, 없으면 공용키
+          if [ -n "$PRIMARY_KEY" ] && [ -n "${COMMITS:-}" ]; then
             # 실제 diff 까지 근거로 제공해 더 구체적이고 유의미한 요약을 생성한다.
             PROMPT=$(jq -rn \
               --arg t "${PR_TITLE:-}" --arg c "$COMMITS" --arg s "${DIFFSTAT:-}" --arg d "${DIFF:-}" \
@@ -289,24 +300,30 @@ jobs:
             IFS=',' read -ra _M <<< "${GEMINI_MODELS_DESC:-gemini-2.5-flash}"
             if [ "${#_M[@]}" -ge 2 ]; then MODELS=("${_M[1]}" "${_M[0]}" "${_M[@]:2}"); else MODELS=("${_M[@]}"); fi
             REQUEST_BODY=$(jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}],generationConfig:{temperature:0.3,maxOutputTokens:1024}}')
-            HTTP_RESPONSE=$(mktemp); HTTP_CODE="000"
-            for model in "${MODELS[@]}"; do
-              model="${model// /}"; [ -z "$model" ] && continue
-              HTTP_CODE=$(curl -s -o "$HTTP_RESPONSE" -w "%{http_code}" \
-                "https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}/models/${model}:generateContent?key=${GOOGLE_GEMINI_API_KEY}" \
-                -H "content-type: application/json" --data "$REQUEST_BODY") || HTTP_CODE="000"
-              echo "::notice::AI 요약 모델 $model → HTTP $HTTP_CODE"
-              if [ "$HTTP_CODE" = "200" ]; then
-                SUMMARY=$(jq -r '.candidates[0].content.parts[0].text // empty' "$HTTP_RESPONSE" 2>/dev/null || echo "")
-                [ -n "$SUMMARY" ] && break
-              elif [ "$HTTP_CODE" = "429" ]; then
-                echo "::warning::Gemini 429 ($model) — 60초 후 다음 모델로 전환"; sleep 60
-              elif [ "$HTTP_CODE" = "404" ]; then
-                echo "::warning::Gemini 404 ($model) — 다음 모델로 전환"
-              else
-                echo "::warning::Gemini $HTTP_CODE ($model) — 재시도 불가, 중단"; break
-              fi
-            done
+            HTTP_RESPONSE=$(mktemp)
+            # 주어진 키로 모델들을 순회하며 요약 시도. 200+본문이면 SUMMARY 설정 후 rc0.
+            gen_summary() {
+              local key="$1" label="$2" model code
+              for model in "${MODELS[@]}"; do
+                model="${model// /}"; [ -z "$model" ] && continue
+                code=$(curl -s -o "$HTTP_RESPONSE" -w "%{http_code}" \
+                  "https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}/models/${model}:generateContent?key=${key}" \
+                  -H "content-type: application/json" --data "$REQUEST_BODY") || code="000"
+                echo "::notice::AI 요약 [$label] 모델 $model → HTTP $code"
+                if [ "$code" = "200" ]; then
+                  SUMMARY=$(jq -r '.candidates[0].content.parts[0].text // empty' "$HTTP_RESPONSE" 2>/dev/null || echo "")
+                  [ -n "$SUMMARY" ] && return 0
+                fi
+                # 429/404 → 다음 모델, 그 외 → 다음 모델(키 폴백은 바깥에서)
+              done
+              return 1
+            }
+            # 1) 작성자 개인키, 2) 실패 시 공용키 폴백
+            gen_summary "$PRIMARY_KEY" "개인키" || true
+            if [ -z "$SUMMARY" ] && [ -n "$DEFAULT_KEY" ] && [ "$DEFAULT_KEY" != "$PRIMARY_KEY" ]; then
+              echo "::notice::요약 개인키 실패/quota → 공용키 폴백"
+              gen_summary "$DEFAULT_KEY" "공용키" || true
+            fi
           fi
           [ -z "$SUMMARY" ] && SUMMARY="_(AI 요약을 생성하지 못했어요 — 아래 커밋 내역을 참고해주세요)_"
           SUMMARY="${SUMMARY:0:1800}"
@@ -315,11 +332,11 @@ jobs:
           echo "$SUMMARY" >> "$GITHUB_OUTPUT"
           echo "$EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Track RPD (요약=공통 키 · model1)
+      - name: Track RPD (요약=작성자 키 · model1)
         if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
         uses: ./.github/actions/rpd
         with:
-          increments: "shared:model1:1"
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1"
 
       - name: Extract Jira Issue Key
         if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
