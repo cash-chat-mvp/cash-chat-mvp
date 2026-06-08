@@ -4,6 +4,7 @@
 # 필요 env: GITHUB_TOKEN, GITHUB_API_URL, GITHUB_REPOSITORY, PR_NUMBER, GEMINI_KEY, GEMINI_MODEL(=model1)
 
 . "$(dirname "${BASH_SOURCE[0]}")/lib_cards.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/lib_gh.sh"
 
 parse_verdict() { printf '%s' "${1:-}" | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ' *`' ; }
 parse_reason()  { printf '%s' "${1:-}" | sed -n '2p' | sed 's/^[[:space:]]*//' ; }
@@ -41,7 +42,7 @@ resolve_threads() {
     prompt=$(printf '코드 리뷰 코멘트가 아래 diff로 해결되었나요?\n첫 줄에 "yes" 또는 "no"만 쓰고, 둘째 줄에 한국어 한 문장으로 근거(yes면 해결 이유, no면 남은 이슈/파생 우려)를 쓰세요.\n\n파일: %s\n코멘트: %s\n\nDiff:\n%s' "$fpath" "$body" "$fdiff")
     payload=$(mktemp); out=$(mktemp)
     jq -n --arg p "$prompt" '{contents:[{role:"user",parts:[{text:$p}]}],generationConfig:{maxOutputTokens:256,temperature:0}}' > "$payload"
-    if ! ai_retry gemini_generate "$GEMINI_KEY" "$model" "$payload" "$out"; then
+    if ! ai_generate "$GEMINI_KEY" "${GEMINI_FALLBACK_KEY:-}" "$model" "$payload" "$out"; then
       echo "::warning::스레드 판단 실패(쿼터/오류) — 건너뜀: $fpath"; rm -f "$payload" "$out"; sleep 3; continue
     fi
     raw=$(jq -r '.candidates[0].content.parts[0].text // "no"' "$out" 2>/dev/null || echo "no")
@@ -49,14 +50,21 @@ resolve_threads() {
     verdict=$(parse_verdict "$raw"); reason=$(parse_reason "$raw")
 
     if [[ "$verdict" == yes* ]]; then
-      [ -n "$cdb" ] && [ "$cdb" != "null" ] && curl -s --max-time 10 -X POST \
-        -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
-        "$api/pulls/${PR_NUMBER}/comments/${cdb}/replies" \
-        -d "$(jq -n --arg b "$(render_card approve '자동 리졸브 판단' "$(printf '%s\n최신 변경에서 해결된 것으로 판단되어 자동 리졸브합니다. (%s)' "${reason:-최신 변경에서 해결된 것으로 판단됩니다.}" "$model")" '')" '{body:$b}')" >/dev/null 2>&1 || true
-      curl -s --max-time 10 -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
-        "https://api.github.com/graphql" \
-        -d "$(jq -n --arg id "$tid" '{query:"mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}",variables:{id:$id}}')" >/dev/null 2>&1 || true
-      resolved=$((resolved+1)); echo "::notice::✅ 리졸브: $fpath"
+      # 먼저 실제 resolve 를 시도·검증하고, 성공한 경우에만 "리졸브됨" 카드/카운트.
+      if gh_resolve_thread "$tid"; then
+        [ -n "$cdb" ] && [ "$cdb" != "null" ] && curl -s --max-time 10 -X POST \
+          -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+          "$api/pulls/${PR_NUMBER}/comments/${cdb}/replies" \
+          -d "$(jq -n --arg b "$(render_card approve '자동 리졸브 판단' "$(printf '%s\n최신 변경에서 해결된 것으로 판단되어 자동 리졸브했습니다. (%s)' "${reason:-최신 변경에서 해결된 것으로 판단됩니다.}" "$model")" '')" '{body:$b}')" >/dev/null 2>&1 || true
+        resolved=$((resolved+1)); echo "::notice::✅ 리졸브: $fpath"
+      else
+        # 판단은 yes지만 resolve API가 실패 → 거짓 성공 대신 수동 안내(원인은 워크플로 로그 참고).
+        [ -n "$cdb" ] && [ "$cdb" != "null" ] && curl -s --max-time 10 -X POST \
+          -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+          "$api/pulls/${PR_NUMBER}/comments/${cdb}/replies" \
+          -d "$(jq -n --arg b "$(render_card hold '자동 리졸브 실패' "$(printf '%s\n해결된 것으로 판단했지만 자동 리졸브에 실패했어요. 수동으로 Resolve conversation 을 눌러 주세요. 🙏' "${reason:-최신 변경에서 해결된 것으로 판단됩니다.}")" '')" '{body:$b}')" >/dev/null 2>&1 || true
+        echo "::warning::⚠️ 자동 리졸브 실패(수동 필요): $fpath"
+      fi
     else
       # 미해결: 파생이슈/남은 우려를 답글로만 남기고 resolve하지 않음
       [ -n "$cdb" ] && [ "$cdb" != "null" ] && curl -s --max-time 10 -X POST \

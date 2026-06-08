@@ -33,3 +33,23 @@ run_pr_agent() {
   done
   return 1
 }
+
+# run_pr_agent_fallback EVENT EVENT_FILE OUT_LOG PRIMARY_KEY FALLBACK_KEY -- COMMON_ENV_ARGS...
+# 개인키(PRIMARY)로 pr-agent 실행, quota/rate-limit으로 실패하면 공용키(FALLBACK)로 전체 1회 재실행.
+# 키 env(GEMINI_API_KEY 등)는 이 함수가 주입하므로 COMMON_ENV_ARGS에는 넣지 말 것.
+# (도커 내부 호출은 중간에 키 교체가 불가 → 폴백은 전체 재실행) rc0 성공 / rc1 최종 실패.
+run_pr_agent_fallback() {
+  local event="$1" evt="$2" log="$3" kp="$4" kf="$5"; shift 5
+  [ "$1" = "--" ] && shift
+  if run_pr_agent "$event" "$evt" "$log" -- "$@" \
+      -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$kp" -e "GEMINI_API_KEY=$kp"; then
+    return 0
+  fi
+  # 실패가 quota/rate-limit일 때만 공용키로 폴백(다른 하드 실패는 재실행 무의미).
+  if [ -n "$kf" ] && [ "$kf" != "$kp" ] && grep -qiE 'RESOURCE_EXHAUSTED|rate.?limit|429|quota' "$log"; then
+    echo "::notice::pr-agent 개인키 quota → 공용키로 전체 재실행"
+    run_pr_agent "$event" "$evt" "$log" -- "$@" \
+      -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$kf" -e "GEMINI_API_KEY=$kf" && return 0
+  fi
+  return 1
+}
