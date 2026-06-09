@@ -158,10 +158,10 @@ jobs:
         run: |
           git fetch --no-tags origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}-head"
 
+          # PR 범위만 조회. 실패 시 무관한 base 브랜치 커밋을 노출하지 않도록 빈 값으로 둔다.
           COMMITS=$(git log "origin/${BASE_REF}..pr-${PR_NUMBER}-head" \
             --no-merges \
-            --pretty=format:"- %s (%h)" 2>/dev/null || \
-            git log --no-merges --pretty=format:"- %s (%h)" -20)
+            --pretty=format:"- %s (%h)" 2>/dev/null || true)
 
           if [ -z "$COMMITS" ]; then
             COMMITS="- 커밋 내역 없음"
@@ -260,7 +260,9 @@ jobs:
             const issueKey = ${{ toJSON(steps.extract.outputs.issue_key) }};
             const currentTitle = context.payload.pull_request.title;
 
-            if (/^\[CC-\d+\]\s+\S.*/.test(currentTitle)) {
+            // 이미 [CC-123] 으로 시작하면(공백 유무 무관) 손대지 않는다 —
+            // 공백 없는 경우까지 replace 로직을 타면 제목이 깨지므로 접두사만 본다.
+            if (/^\[CC-\d+\]/.test(currentTitle)) {
               console.log('✅ 제목 이미 올바른 형식:', currentTitle);
               return;
             }

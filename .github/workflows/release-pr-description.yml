@@ -90,10 +90,12 @@ jobs:
           IFS='.' read -r MAJOR MINOR PATCH <<< "$LAST_VER"
           echo "ℹ️ [${PLATFORM}] 기준 버전: ${LAST_TAG}"
 
+          # 이전 태그가 없으면 전체 히스토리 대신 base 브랜치와의 차이만 본다
+          # (전체 과거 커밋이 feat/fix 카운트에 섞여 버전이 과도하게 펌핑되는 것 방지).
           if [ "$HAS_PREV_TAG" = "true" ]; then
             COMMITS_RAW=$(git log "${LAST_TAG}..pr-${PR_NUMBER}-head" --pretty=format:"%B" --no-merges 2>/dev/null || echo "")
           else
-            COMMITS_RAW=$(git log "pr-${PR_NUMBER}-head" --pretty=format:"%B" --no-merges 2>/dev/null | head -100 || echo "")
+            COMMITS_RAW=$(git log "origin/${BASE_REF}..pr-${PR_NUMBER}-head" --pretty=format:"%B" --no-merges 2>/dev/null || echo "")
           fi
 
           # PR 라벨에서 major 제어 확인
@@ -121,7 +123,7 @@ jobs:
             COMMIT_LIST=$(git log "${LAST_TAG}..pr-${PR_NUMBER}-head" \
               --pretty=format:"- %s" --no-merges 2>/dev/null | head -50 || echo "")
           else
-            COMMIT_LIST=$(git log "pr-${PR_NUMBER}-head" \
+            COMMIT_LIST=$(git log "origin/${BASE_REF}..pr-${PR_NUMBER}-head" \
               --pretty=format:"- %s" --no-merges 2>/dev/null | head -50 || echo "")
           fi
 
