@@ -1,6 +1,6 @@
 # AI 코드 리뷰 사용 가이드
 
-<!-- 동기화 유지: 명령어 표는 .github/PULL_REQUEST_TEMPLATE.md / pr-description.yml / lib_help.sh 와 동일 -->
+<!-- 동기화 유지: 명령어 표는 .github/PULL_REQUEST_TEMPLATE.md / pr-review.yml(describe job) / lib_help.sh 와 동일 -->
 
 이 저장소는 pr-agent(Qodo) 기반 AI 코드 리뷰를 GitHub Actions 로 제공합니다. 리뷰는
 Gemini(자동·무료 등급)와 OpenAI(수동·유료), 그리고 CodeRabbit 을 사용할 수 있습니다.
@@ -135,7 +135,7 @@ CodeRabbit 앱으로 리뷰를 요청합니다. (수동 · 비용 발생)
 
 ## 10. 참고 (구현 파일)
 
-- 워크플로: `.github/workflows/pr-review.yml`, `.github/workflows/pr-description.yml`
+- 워크플로: `.github/workflows/pr-review.yml`(일반 PR 자동리뷰 + describe job: 제목/본문), `.github/workflows/release-pr-description.yml`(릴리즈 PR 전용 제목/본문)
 - 스크립트 테스트 CI: `.github/workflows/review-scripts-test.yml`
 - 공유 스크립트: `.github/scripts/review/` — `lib_cards.sh`, `lib_cmd.sh`, `lib_help.sh`,
   `lib_comments.sh`, `lib_ai.sh`(`ai_generate`), `lib_keys.sh`, `lib_gh.sh`(`gh_resolve_thread`),

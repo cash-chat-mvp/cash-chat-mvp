@@ -13,7 +13,8 @@ on:
 
 # 안정성(#3.3): 기본은 "작성자 개인키"를 쓰고 공용키는 429 폴백 전용이므로, 서로 다른 PR은
 # 개인키로 병렬 실행해도 공용키 경합이 없다 → PR별로만 직렬화(동일 PR의 리뷰·요약·명령은
-# 같은 개인키를 동시 호출하지 않도록 한 줄로 처리). pr-description.yml 도 같은 PR별 group 을 공유.
+# 같은 개인키를 동시 호출하지 않도록 한 줄로 처리). 일반 PR 의 제목/본문(describe job)도
+# 이 워크플로 안에서 같은 group 으로 직렬화되어, opened 시 describe→auto-review 순으로 실행된다.
 concurrency:
   group: gemini-pr-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: false

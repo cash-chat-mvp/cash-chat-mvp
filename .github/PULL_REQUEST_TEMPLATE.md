@@ -8,7 +8,7 @@
 ---
 
 > AI 코드 리뷰 명령어 · 자세한 사용법: [docs/review/ai-code-review.md](../docs/review/ai-code-review.md)
-<!-- 동기화 유지: 같은 표가 .github/workflows/pr-description.yml, .github/scripts/review/lib_help.sh, docs/review/ai-code-review.md 에도 있음 -->
+<!-- 동기화 유지: 같은 표가 .github/workflows/pr-review.yml(describe job), .github/scripts/review/lib_help.sh, docs/review/ai-code-review.md 에도 있음 -->
 
 | 명령어 | 설명 | 사용 위치 |
 |---|---|---|
