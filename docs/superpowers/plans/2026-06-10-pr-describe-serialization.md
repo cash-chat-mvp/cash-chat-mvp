@@ -1,11 +1,56 @@
-name: PR Description Auto Fill
+# PR 제목/디스크립션 직렬화 통합 Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 일반 PR(base `dev`)의 제목/디스크립션 자동화를 `pr-review.yml` 안의 첫 job 으로 통합해, `opened` 시 `describe → auto-review` 가 같은 run(=같은 동시성 그룹)에서 순차 실행되도록 만들어 디스크립션 run 취소 버그를 없앤다.
+
+**Architecture:** `pr-review.yml` 에 `describe` job 을 추가하고 `resolve-gemini-model` 의 `model1` + 공용 `ai_generate` 를 재사용한다. `review-gemini-auto` 는 `needs: [resolve-gemini-model, describe]` 로 describe 이후 실행된다(실패해도 `always()` 로 진행). 기존 `pr-description.yml` 은 `release-pr-description.yml` 로 이름을 바꾸고 릴리즈 PR 전용으로 축소한다.
+
+**Tech Stack:** GitHub Actions YAML, bash, `actions/github-script@v7`, Google Gemini generateContent, 로컬 액션 `./.github/actions/rpd`, 공유 셸 라이브러리(`.github/scripts/review/lib_ai.sh`, `lib_keys.sh`).
+
+---
+
+## File Structure
+
+- **Modify → Rename:** `.github/workflows/pr-description.yml` → `.github/workflows/release-pr-description.yml`
+  - 릴리즈 PR(`dev → release/android|ios`) 전용. 일반 PR 단계 전부 제거.
+- **Modify:** `.github/workflows/pr-review.yml`
+  - 새 `describe` job 추가(일반 PR 제목/본문). `review-gemini-auto` 가 `describe` 에 의존.
+- **변경 없음:** `extract-issue-from-pr.yaml`, `pr-rule-check.yml`(제목을 읽기만 함), 공유 셸 스크립트(`ai_generate` 그대로 재사용).
+
+> 참고: 이 변경은 워크플로 배선(YAML)이 핵심이라 셸 단위 테스트로 직접 커버되지 않는다. 검증은 (1) YAML 파싱/`actionlint`, (2) 기존 셸 테스트 무회귀, (3) 실제 PR 한 건으로 통합 확인으로 한다.
+
+---
+
+## Task 1: `pr-description.yml` 을 릴리즈 전용으로 축소 + 파일명 변경
+
+**Files:**
+- Rename: `.github/workflows/pr-description.yml` → `.github/workflows/release-pr-description.yml`
+
+- [ ] **Step 1: git mv 로 파일명 변경**
+
+Run:
+```bash
+cd /Users/gudals-mac/Documents/nomade/cash-chat-mvp
+git mv .github/workflows/pr-description.yml .github/workflows/release-pr-description.yml
+```
+
+- [ ] **Step 2: 릴리즈 전용 내용으로 전체 교체**
+
+`.github/workflows/release-pr-description.yml` 의 **전체 내용**을 아래로 교체한다(일반 PR 단계 삭제, 트리거를 release 브랜치로 한정):
+
+```yaml
+name: Release PR Description Auto Fill
 
 on:
   pull_request_target:
     types: [opened]
+    # 릴리즈 PR(dev → release/*) 전용. 일반 PR 의 제목/본문은 pr-review.yml 의
+    # describe job 이 처리한다(리뷰와 같은 run 으로 직렬화).
+    branches: [release/android, release/ios]
 
-# 안정성: pr-review.yml 과 동일한 PR별 group 을 공유 → 같은 PR의 자동리뷰와 요약이
-# 같은 작성자 개인키를 동시에 호출하지 않도록 직렬화(다른 PR은 병렬 실행).
+# 릴리즈 PR 은 pr-review 자동리뷰(branches:[dev])와 경합하지 않지만, 동일 PR 의
+# 중복 실행 방지를 위해 PR별 group 을 유지한다.
 concurrency:
   group: gemini-pr-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: false
@@ -41,32 +86,6 @@ jobs:
           echo "commits<<$EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
           echo "$EOF" >> $GITHUB_OUTPUT
-
-      # ── 일반 PR: AI 요약 품질용 변경 요약(diffstat) + 본문 diff(용량 제한) ──
-      - name: Get Diff (general PR)
-        id: diff
-        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          RANGE="origin/${BASE_REF}...pr-${PR_NUMBER}-head"
-          # 노이즈(잠금파일·생성물·바이너리) 제외 — 의미 있는 소스 변경에 집중
-          EXCLUDES=(':(exclude)**/*.lock' ':(exclude)**/*.lockb' ':(exclude)**/package-lock.json'
-                    ':(exclude)**/*.png' ':(exclude)**/*.jpg' ':(exclude)**/*.jpeg' ':(exclude)**/*.webp'
-                    ':(exclude)**/*.pdf' ':(exclude)**/*.svg' ':(exclude)**/build/**' ':(exclude)**/dist/**'
-                    ':(exclude)**/*.xcworkspacedata' ':(exclude)**/*.pbxproj')
-          DIFFSTAT=$(git diff --stat "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | tail -60 || true)
-          [ -z "$DIFFSTAT" ] && DIFFSTAT="(변경 통계 없음)"
-          # 본문 diff 는 12KB로 절단(토큰·비용 제한). 함수 컨텍스트 포함.
-          DIFF=$(git diff --no-color -U2 "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | head -c 12000 || true)
-          [ -z "$DIFF" ] && DIFF="(diff 없음)"
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          {
-            echo "diffstat<<$EOF"; echo "$DIFFSTAT"; echo "$EOF"
-            echo "diff<<$EOF"; echo "$DIFF"; echo "$EOF"
-          } >> "$GITHUB_OUTPUT"
 
       # ── dev → release/android or release/ios 배포 PR 전용 처리 ──────────
       - name: Compute version & AI release notes (release PR only)
@@ -262,10 +281,115 @@ jobs:
               body: body.trim()
             });
             console.log(`✅ ${platformLabel} 릴리즈 PR 설정 완료 — "${newTitle}"`);
+```
 
-      # ── 일반 PR 처리 ────────────────────────────────────────────────────
+- [ ] **Step 3: YAML 파싱 검증**
+
+Run:
+```bash
+cd /Users/gudals-mac/Documents/nomade/cash-chat-mvp
+python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/release-pr-description.yml')); print('OK')"
+```
+Expected: `OK`
+
+- [ ] **Step 4: 일반 PR 단계가 모두 제거됐는지 확인**
+
+Run:
+```bash
+grep -nE 'Update PR Title|Update PR Description|AI Summary \(general PR|Resolve author key|Extract Jira Issue Key' .github/workflows/release-pr-description.yml || echo "GENERAL STEPS REMOVED"
+```
+Expected: `GENERAL STEPS REMOVED`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .github/workflows/release-pr-description.yml
+git commit -m "refactor(review): pr-description를 릴리즈 PR 전용으로 축소·이름 변경
+
+일반 PR 제목/본문 단계 제거, 트리거를 release/* base로 한정.
+일반 PR 처리는 pr-review.yml describe job으로 이관 예정.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 2: `pr-review.yml` 에 `describe` job 추가
+
+**Files:**
+- Modify: `.github/workflows/pr-review.yml` (`resolve-gemini-model` job 정의 끝과 `review-gemini-auto` job 사이에 새 job 삽입)
+
+- [ ] **Step 1: `describe` job 블록 삽입**
+
+`.github/workflows/pr-review.yml` 에서 `review-gemini-auto:` job 정의 **바로 위**(즉 `# Gemini 자동 리뷰 ...` 주석 블록 앞)에 아래 job 을 추가한다:
+
+```yaml
+  # ====================================================
+  # 일반 PR 제목/디스크립션 자동화 (opened 전용, 직렬화의 첫 단계)
+  #   같은 run 안에서 describe → auto-review 순으로 실행되어 동시성 그룹을
+  #   통째로 점유 → 이후 push/comment run 이 describe 를 취소하지 못한다.
+  #   릴리즈 PR(base release/*)은 이 워크플로 자체가 트리거되지 않음(branches:[dev]).
+  # ====================================================
+  describe:
+    name: PR Describe (title + body)
+    needs: resolve-gemini-model
+    if: github.event_name == 'pull_request_target' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout (scripts)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Get Commit List
+        id: commits
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch --no-tags origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}-head"
+
+          COMMITS=$(git log "origin/${BASE_REF}..pr-${PR_NUMBER}-head" \
+            --no-merges \
+            --pretty=format:"- %s (%h)" 2>/dev/null || \
+            git log --no-merges --pretty=format:"- %s (%h)" -20)
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- 커밋 내역 없음"
+          fi
+
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "commits<<$EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+
+      - name: Get Diff
+        id: diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          RANGE="origin/${BASE_REF}...pr-${PR_NUMBER}-head"
+          EXCLUDES=(':(exclude)**/*.lock' ':(exclude)**/*.lockb' ':(exclude)**/package-lock.json'
+                    ':(exclude)**/*.png' ':(exclude)**/*.jpg' ':(exclude)**/*.jpeg' ':(exclude)**/*.webp'
+                    ':(exclude)**/*.pdf' ':(exclude)**/*.svg' ':(exclude)**/build/**' ':(exclude)**/dist/**'
+                    ':(exclude)**/*.xcworkspacedata' ':(exclude)**/*.pbxproj')
+          DIFFSTAT=$(git diff --stat "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | tail -60 || true)
+          [ -z "$DIFFSTAT" ] && DIFFSTAT="(변경 통계 없음)"
+          DIFF=$(git diff --no-color -U2 "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | head -c 12000 || true)
+          [ -z "$DIFF" ] && DIFF="(diff 없음)"
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          {
+            echo "diffstat<<$EOF"; echo "$DIFFSTAT"; echo "$EOF"
+            echo "diff<<$EOF"; echo "$DIFF"; echo "$EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Resolve author key
-        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
         id: whichkey
         env:
           LOGIN: ${{ github.event.pull_request.user.login }}
@@ -273,56 +397,32 @@ jobs:
           set -euo pipefail
           . .github/scripts/review/lib_keys.sh
           echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
-      - name: AI Summary (general PR)
-        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
+
+      - name: AI Summary
         id: ai
         env:
-          MAPPED_KEY:            ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
-          DEFAULT_KEY:           ${{ secrets.GOOGLE_GEMINI_API_KEY }}
-          GEMINI_MODELS:         ${{ vars.GEMINI_MODELS }}
-          GEMINI_API_VERSION:    ${{ vars.GEMINI_API_VERSION }}
-          COMMITS:               ${{ steps.commits.outputs.commits }}
-          DIFFSTAT:              ${{ steps.diff.outputs.diffstat }}
-          DIFF:                  ${{ steps.diff.outputs.diff }}
-          PR_TITLE:              ${{ github.event.pull_request.title }}
-          # describe는 약한 모델(model1) 우선: 2번째 모델부터 시도하도록 재정렬
-          GEMINI_MODELS_DESC: ${{ vars.GEMINI_MODELS }}
+          MAPPED_KEY:  ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          MODEL1:      ${{ needs.resolve-gemini-model.outputs.model1 }}
+          COMMITS:     ${{ steps.commits.outputs.commits }}
+          DIFFSTAT:    ${{ steps.diff.outputs.diffstat }}
+          DIFF:        ${{ steps.diff.outputs.diff }}
+          PR_TITLE:    ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
-          SUMMARY=""
+          . .github/scripts/review/lib_ai.sh
           PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 작성자 개인키 우선, 없으면 공용키
+          MODEL="${MODEL1#gemini/}"                   # resolve 출력의 gemini/ prefix 제거
+          SUMMARY=""
           if [ -n "$PRIMARY_KEY" ] && [ -n "${COMMITS:-}" ]; then
-            # 실제 diff 까지 근거로 제공해 더 구체적이고 유의미한 요약을 생성한다.
             PROMPT=$(jq -rn \
               --arg t "${PR_TITLE:-}" --arg c "$COMMITS" --arg s "${DIFFSTAT:-}" --arg d "${DIFF:-}" \
               '"당신은 시니어 리뷰어입니다. 아래 PR 제목·커밋·변경통계·실제 diff를 근거로, 리뷰어가 30초 만에 맥락을 잡도록 한국어 마크다운 요약을 작성하세요.\n\n반드시 아래 형식을 그대로 따르세요(불릿은 각 1~3개, 근거 없는 추측·일반론·파일명 나열 금지):\n\n**한 줄 요약**: (이 PR이 무엇을 하는지 한 문장)\n\n**주요 변경**\n- (핵심 동작/구조 변경을 결과 중심으로)\n\n**왜**\n- (이 변경이 필요한 이유/배경)\n\n**리뷰 포커스**\n- (리뷰어가 특히 확인해야 할 위험·엣지케이스·호환성)\n\n제목: \($t)\n\n커밋:\n\($c)\n\n변경통계:\n\($s)\n\nDiff(일부 절단됨):\n\($d)"')
-            GEMINI_API_VERSION="${GEMINI_API_VERSION:-v1beta}"
-            IFS=',' read -ra _M <<< "${GEMINI_MODELS_DESC:-gemini-2.5-flash}"
-            if [ "${#_M[@]}" -ge 2 ]; then MODELS=("${_M[1]}" "${_M[0]}" "${_M[@]:2}"); else MODELS=("${_M[@]}"); fi
-            REQUEST_BODY=$(jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}],generationConfig:{temperature:0.3,maxOutputTokens:1024}}')
-            HTTP_RESPONSE=$(mktemp)
-            # 주어진 키로 모델들을 순회하며 요약 시도. 200+본문이면 SUMMARY 설정 후 rc0.
-            gen_summary() {
-              local key="$1" label="$2" model code
-              for model in "${MODELS[@]}"; do
-                model="${model// /}"; [ -z "$model" ] && continue
-                code=$(curl -s -o "$HTTP_RESPONSE" -w "%{http_code}" \
-                  "https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}/models/${model}:generateContent?key=${key}" \
-                  -H "content-type: application/json" --data "$REQUEST_BODY") || code="000"
-                echo "::notice::AI 요약 [$label] 모델 $model → HTTP $code"
-                if [ "$code" = "200" ]; then
-                  SUMMARY=$(jq -r '.candidates[0].content.parts[0].text // empty' "$HTTP_RESPONSE" 2>/dev/null || echo "")
-                  [ -n "$SUMMARY" ] && return 0
-                fi
-                # 429/404 → 다음 모델, 그 외 → 다음 모델(키 폴백은 바깥에서)
-              done
-              return 1
-            }
-            # 1) 작성자 개인키, 2) 실패 시 공용키 폴백
-            gen_summary "$PRIMARY_KEY" "개인키" || true
-            if [ -z "$SUMMARY" ] && [ -n "$DEFAULT_KEY" ] && [ "$DEFAULT_KEY" != "$PRIMARY_KEY" ]; then
-              echo "::notice::요약 개인키 실패/quota → 공용키 폴백"
-              gen_summary "$DEFAULT_KEY" "공용키" || true
+            PAYLOAD=$(mktemp); OUT=$(mktemp)
+            jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}],generationConfig:{temperature:0.3,maxOutputTokens:1024}}' > "$PAYLOAD"
+            # 공용 ai_generate: 개인키 우선, rate-limit/실패 시 공용키 폴백(백오프 포함)
+            if ai_generate "$PRIMARY_KEY" "$DEFAULT_KEY" "$MODEL" "$PAYLOAD" "$OUT"; then
+              SUMMARY=$(jq -r '.candidates[0].content.parts[0].text // empty' "$OUT" 2>/dev/null || echo "")
             fi
           fi
           [ -z "$SUMMARY" ] && SUMMARY="_(AI 요약을 생성하지 못했어요 — 아래 커밋 내역을 참고해주세요)_"
@@ -333,13 +433,11 @@ jobs:
           echo "$EOF" >> "$GITHUB_OUTPUT"
 
       - name: Track RPD (요약=작성자 키 · model1)
-        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
         uses: ./.github/actions/rpd
         with:
           increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1"
 
       - name: Extract Jira Issue Key
-        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
         id: extract
         env:
           HEAD_REF: ${{ github.head_ref }}
@@ -350,7 +448,6 @@ jobs:
           echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
 
       - name: Update PR Title
-        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -380,7 +477,6 @@ jobs:
             console.log(`✅ 제목 변경: "${currentTitle}" → "${newTitle}"`);
 
       - name: Update PR Description
-        if: "!(github.head_ref == 'dev' && (github.base_ref == 'release/android' || github.base_ref == 'release/ios'))"
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -436,3 +532,157 @@ jobs:
               pull_number: context.issue.number,
               body: body.trim()
             });
+```
+
+- [ ] **Step 2: YAML 파싱 검증**
+
+Run:
+```bash
+cd /Users/gudals-mac/Documents/nomade/cash-chat-mvp
+python3 -c "import yaml; d=yaml.safe_load(open('.github/workflows/pr-review.yml')); assert 'describe' in d['jobs'], 'describe job 없음'; print('OK describe job 존재')"
+```
+Expected: `OK describe job 존재`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add .github/workflows/pr-review.yml
+git commit -m "feat(review): 일반 PR describe job을 리뷰 워크플로에 추가
+
+opened 시 제목/본문 자동화를 ai_generate + resolve된 model1로 수행.
+직렬화의 첫 단계로 실행되도록 별도 job 구성.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 3: `review-gemini-auto` 가 `describe` 이후 실행되도록 배선
+
+**Files:**
+- Modify: `.github/workflows/pr-review.yml` (`review-gemini-auto` job 의 `needs` 와 `if`)
+
+- [ ] **Step 1: `needs` 와 `if` 수정**
+
+`review-gemini-auto:` job 에서 아래 두 줄을 찾아:
+```yaml
+    needs: resolve-gemini-model
+    if: github.event_name == 'pull_request_target' && github.event.action == 'opened'
+```
+다음으로 교체한다:
+```yaml
+    needs: [resolve-gemini-model, describe]
+    if: |
+      always() &&
+      needs.resolve-gemini-model.result == 'success' &&
+      github.event_name == 'pull_request_target' && github.event.action == 'opened'
+```
+
+> `always()` 로 describe 가 실패/취소돼도 리뷰는 진행하되, `needs` 때문에 항상 describe 완료 이후 실행된다(같은 run 직렬화). `review-on-push`, 댓글 명령 job 들은 describe 와 무관하므로 변경하지 않는다.
+
+- [ ] **Step 2: 배선 검증 (needs 에 describe 포함 확인)**
+
+Run:
+```bash
+cd /Users/gudals-mac/Documents/nomade/cash-chat-mvp
+python3 -c "
+import yaml
+d = yaml.safe_load(open('.github/workflows/pr-review.yml'))
+needs = d['jobs']['review-gemini-auto']['needs']
+assert 'describe' in needs and 'resolve-gemini-model' in needs, needs
+assert 'always()' in d['jobs']['review-gemini-auto']['if']
+print('OK review-gemini-auto needs:', needs)
+"
+```
+Expected: `OK review-gemini-auto needs: ['resolve-gemini-model', 'describe']`
+
+- [ ] **Step 3: review-on-push 는 변경되지 않았는지 확인**
+
+Run:
+```bash
+python3 -c "
+import yaml
+d = yaml.safe_load(open('.github/workflows/pr-review.yml'))
+assert d['jobs']['review-on-push']['needs'] == 'resolve-gemini-model', d['jobs']['review-on-push']['needs']
+print('OK review-on-push 변경 없음')
+"
+```
+Expected: `OK review-on-push 변경 없음`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .github/workflows/pr-review.yml
+git commit -m "feat(review): auto-review가 describe 이후 실행되도록 직렬화
+
+needs에 describe 추가 + always()로 describe 실패해도 리뷰 진행.
+opened 시 describe→auto-review를 같은 run에서 순차 실행.
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 4: 전체 검증 (lint + 무회귀 + 일관성)
+
+**Files:** 없음 (검증 전용)
+
+- [ ] **Step 1: 두 워크플로 YAML 파싱**
+
+Run:
+```bash
+cd /Users/gudals-mac/Documents/nomade/cash-chat-mvp
+for f in .github/workflows/pr-review.yml .github/workflows/release-pr-description.yml; do
+  python3 -c "import yaml; yaml.safe_load(open('$f')); print('OK $f')"
+done
+```
+Expected: 두 줄 모두 `OK ...`
+
+- [ ] **Step 2: actionlint (있으면) 실행**
+
+Run:
+```bash
+command -v actionlint >/dev/null && actionlint .github/workflows/pr-review.yml .github/workflows/release-pr-description.yml || echo "actionlint 미설치 — YAML 파싱으로 갈음"
+```
+Expected: actionlint 출력 없음(통과) 또는 `actionlint 미설치 — ...`
+
+- [ ] **Step 3: 기존 셸 테스트 무회귀 확인**
+
+Run:
+```bash
+cd /Users/gudals-mac/Documents/nomade/cash-chat-mvp/.github/scripts/review
+for t in tests/test_ai.sh tests/test_keys.sh; do echo "== $t =="; bash "$t"; done
+```
+Expected: 각 테스트 통과(0 종료). `ai_generate`/`key_suffix_for` 회귀 없음.
+
+- [ ] **Step 4: 잔여 일반 PR 처리 중복 없음 확인**
+
+Run:
+```bash
+cd /Users/gudals-mac/Documents/nomade/cash-chat-mvp
+echo "release 파일에 일반 단계 잔존?:"; grep -nE 'Update PR Title|AI Summary$|Resolve author key' .github/workflows/release-pr-description.yml || echo "  없음(정상)"
+echo "review 파일 describe job?:"; grep -nE 'name: PR Describe' .github/workflows/pr-review.yml
+```
+Expected: release 파일 `없음(정상)`, review 파일에 `name: PR Describe (title + body)` 매칭.
+
+- [ ] **Step 5: 통합 검증 메모 (실제 PR 필요)**
+
+이 변경은 GitHub Actions 런타임에서만 끝단 검증이 가능하다. 머지 후 첫 일반 PR `opened` 에서 다음을 확인한다:
+1. 제목이 `[CC-xxx] ...` 로 자동 prefix.
+2. 본문에 Jira/AI요약/커밋/체크리스트/명령어 섹션이 채워짐.
+3. `describe` job 이 `auto-review` 보다 먼저 완료(같은 run 내 순차).
+4. 같은 PR 에 push/comment 발생 시 런 목록에 `cancelled` 상태의 describe run 이 없음.
+
+검증 명령:
+```bash
+gh run list --repo cash-chat-mvp/cash-chat-mvp --workflow=pr-review.yml -L 5
+```
+Expected: `opened` run 이 `success`, describe 관련 `cancelled` 없음.
+
+---
+
+## Self-Review 결과
+
+- **Spec coverage:** 3.1(describe job)=Task 2, 3.2(needs/always)=Task 3, 3.3(release 축소·rename)=Task 1, §6 검증=Task 4. 모든 spec 절이 task 에 매핑됨.
+- **Placeholder scan:** 프롬프트·스크립트·github-script 전체를 실제 내용으로 포함. TBD/TODO 없음.
+- **Type consistency:** `ai_generate PRIMARY FALLBACK MODEL PAYLOAD(파일) OUT(파일)` 시그니처(lib_ai.sh)와 호출 일치. `model1` 의 `gemini/` prefix 제거(`${MODEL1#gemini/}`) 반영. step output 이름(`commits`,`diff`,`summary`,`issue_key`) 일관.

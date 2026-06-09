@@ -13,7 +13,8 @@ on:
 
 # 안정성(#3.3): 기본은 "작성자 개인키"를 쓰고 공용키는 429 폴백 전용이므로, 서로 다른 PR은
 # 개인키로 병렬 실행해도 공용키 경합이 없다 → PR별로만 직렬화(동일 PR의 리뷰·요약·명령은
-# 같은 개인키를 동시 호출하지 않도록 한 줄로 처리). pr-description.yml 도 같은 PR별 group 을 공유.
+# 같은 개인키를 동시 호출하지 않도록 한 줄로 처리). 일반 PR 의 제목/본문(describe job)도
+# 이 워크플로 안에서 같은 group 으로 직렬화되어, opened 시 describe→auto-review 순으로 실행된다.
 concurrency:
   group: gemini-pr-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: false
@@ -129,12 +130,226 @@ jobs:
           echo "::notice::Gemini 모델 — 리뷰: $MODEL0 / 대화: $MODEL1"
 
   # ====================================================
+  # 일반 PR 제목/디스크립션 자동화 (opened 전용, 직렬화의 첫 단계)
+  #   같은 run 안에서 describe → auto-review 순으로 실행되어 동시성 그룹을
+  #   통째로 점유 → 이후 push/comment run 이 describe 를 취소하지 못한다.
+  #   릴리즈 PR(base release/*)은 이 워크플로 자체가 트리거되지 않음(branches:[dev]).
+  # ====================================================
+  describe:
+    name: PR Describe (title + body)
+    needs: resolve-gemini-model
+    if: github.event_name == 'pull_request_target' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout (scripts)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Get Commit List
+        id: commits
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch --no-tags origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}-head"
+
+          # PR 범위만 조회. 실패 시 무관한 base 브랜치 커밋을 노출하지 않도록 빈 값으로 둔다.
+          COMMITS=$(git log "origin/${BASE_REF}..pr-${PR_NUMBER}-head" \
+            --no-merges \
+            --pretty=format:"- %s (%h)" 2>/dev/null || true)
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- 커밋 내역 없음"
+          fi
+
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "commits<<$EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+
+      - name: Get Diff
+        id: diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          RANGE="origin/${BASE_REF}...pr-${PR_NUMBER}-head"
+          EXCLUDES=(':(exclude)**/*.lock' ':(exclude)**/*.lockb' ':(exclude)**/package-lock.json'
+                    ':(exclude)**/*.png' ':(exclude)**/*.jpg' ':(exclude)**/*.jpeg' ':(exclude)**/*.webp'
+                    ':(exclude)**/*.pdf' ':(exclude)**/*.svg' ':(exclude)**/build/**' ':(exclude)**/dist/**'
+                    ':(exclude)**/*.xcworkspacedata' ':(exclude)**/*.pbxproj')
+          DIFFSTAT=$(git diff --stat "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | tail -60 || true)
+          [ -z "$DIFFSTAT" ] && DIFFSTAT="(변경 통계 없음)"
+          DIFF=$(git diff --no-color -U2 "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | head -c 12000 || true)
+          [ -z "$DIFF" ] && DIFF="(diff 없음)"
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          {
+            echo "diffstat<<$EOF"; echo "$DIFFSTAT"; echo "$EOF"
+            echo "diff<<$EOF"; echo "$DIFF"; echo "$EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve author key
+        id: whichkey
+        env:
+          LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_keys.sh
+          echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
+
+      - name: AI Summary
+        id: ai
+        env:
+          MAPPED_KEY:  ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          MODEL1:      ${{ needs.resolve-gemini-model.outputs.model1 }}
+          COMMITS:     ${{ steps.commits.outputs.commits }}
+          DIFFSTAT:    ${{ steps.diff.outputs.diffstat }}
+          DIFF:        ${{ steps.diff.outputs.diff }}
+          PR_TITLE:    ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_ai.sh
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 작성자 개인키 우선, 없으면 공용키
+          MODEL="${MODEL1#gemini/}"                   # resolve 출력의 gemini/ prefix 제거
+          SUMMARY=""
+          if [ -n "$PRIMARY_KEY" ] && [ -n "${COMMITS:-}" ]; then
+            PROMPT=$(jq -rn \
+              --arg t "${PR_TITLE:-}" --arg c "$COMMITS" --arg s "${DIFFSTAT:-}" --arg d "${DIFF:-}" \
+              '"당신은 시니어 리뷰어입니다. 아래 PR 제목·커밋·변경통계·실제 diff를 근거로, 리뷰어가 30초 만에 맥락을 잡도록 한국어 마크다운 요약을 작성하세요.\n\n반드시 아래 형식을 그대로 따르세요(불릿은 각 1~3개, 근거 없는 추측·일반론·파일명 나열 금지):\n\n**한 줄 요약**: (이 PR이 무엇을 하는지 한 문장)\n\n**주요 변경**\n- (핵심 동작/구조 변경을 결과 중심으로)\n\n**왜**\n- (이 변경이 필요한 이유/배경)\n\n**리뷰 포커스**\n- (리뷰어가 특히 확인해야 할 위험·엣지케이스·호환성)\n\n제목: \($t)\n\n커밋:\n\($c)\n\n변경통계:\n\($s)\n\nDiff(일부 절단됨):\n\($d)"')
+            PAYLOAD=$(mktemp); OUT=$(mktemp)
+            jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}],generationConfig:{temperature:0.3,maxOutputTokens:1024}}' > "$PAYLOAD"
+            # 공용 ai_generate: 개인키 우선, rate-limit/실패 시 공용키 폴백(백오프 포함)
+            if ai_generate "$PRIMARY_KEY" "$DEFAULT_KEY" "$MODEL" "$PAYLOAD" "$OUT"; then
+              SUMMARY=$(jq -r '.candidates[0].content.parts[0].text // empty' "$OUT" 2>/dev/null || echo "")
+            fi
+          fi
+          [ -z "$SUMMARY" ] && SUMMARY="_(AI 요약을 생성하지 못했어요 — 아래 커밋 내역을 참고해주세요)_"
+          SUMMARY="${SUMMARY:0:1800}"
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "summary<<$EOF" >> "$GITHUB_OUTPUT"
+          echo "$SUMMARY" >> "$GITHUB_OUTPUT"
+          echo "$EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Track RPD (요약=작성자 키 · model1)
+        uses: ./.github/actions/rpd
+        with:
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1"
+
+      - name: Extract Jira Issue Key
+        id: extract
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          ISSUE_KEY=$(echo "${HEAD_REF} ${PR_TITLE}" \
+            | grep -oE 'CC-[0-9]+' | head -1)
+          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+
+      - name: Update PR Title
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueKey = ${{ toJSON(steps.extract.outputs.issue_key) }};
+            const currentTitle = context.payload.pull_request.title;
+
+            // 이미 [CC-123] 으로 시작하면(공백 유무 무관) 손대지 않는다 —
+            // 공백 없는 경우까지 replace 로직을 타면 제목이 깨지므로 접두사만 본다.
+            if (/^\[CC-\d+\]/.test(currentTitle)) {
+              console.log('✅ 제목 이미 올바른 형식:', currentTitle);
+              return;
+            }
+
+            if (!issueKey) {
+              console.log('⚠️ Jira 티켓 번호를 찾을 수 없어 제목을 수정하지 않습니다.');
+              return;
+            }
+
+            const cleanTitle = currentTitle.replace(/CC-\d+\s*/g, '').trim();
+            const newTitle = `[${issueKey}] ${cleanTitle}`;
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              title: newTitle
+            });
+            console.log(`✅ 제목 변경: "${currentTitle}" → "${newTitle}"`);
+
+      - name: Update PR Description
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueKey = ${{ toJSON(steps.extract.outputs.issue_key) }};
+            const commits = ${{ toJSON(steps.commits.outputs.commits) }};
+            const summary = ${{ toJSON(steps.ai.outputs.summary) }};
+
+            const jiraUrl = issueKey
+              ? `https://moneyfactoryslave.atlassian.net/browse/${issueKey}`
+              : '없음';
+
+            const checklist = [
+              '- [ ] 코드 리뷰 요청 전 셀프 리뷰 완료',
+              '- [ ] 테스트 확인',
+              '- [ ] 불필요한 코드/주석 제거',
+            ].join('\n');
+
+            // 동기화 유지: PULL_REQUEST_TEMPLATE.md / lib_help.sh / docs/review/ai-code-review.md 와 동일하게
+            const aiReviewCommands = [
+              '| 명령어 | 설명 | 사용 위치 |',
+              '|---|---|---|',
+              '| `/gemini-review` | Gemini 코드 리뷰 (PR을 열면 자동 1회 실행, 재요청 시 입력) | PR 코멘트 |',
+              '| `/openai-review` | OpenAI 심층 리뷰 (수동 · 비용 발생) | PR 코멘트 |',
+              '| `/ask 질문내용` | AI 답변/코드에 후속 질문 (저비용 모델) | PR · 라인 코멘트 |',
+              '| `/resolve` | AI가 반영 여부 판단 → Jira 서브태스크 생성 + 스레드 해결 | 라인 코멘트 답글 |',
+              '| `/help` | 명령어 도움말 표시 | PR 코멘트 |',
+              '| `@coderabbitai review` | CodeRabbit 리뷰 (수동 · 비용 발생) | PR 코멘트 |',
+              '',
+              'ℹ️ 자동 리뷰는 PR을 열 때 공통 키로 1회만 실행돼요. 이후 푸시에는 자동 재리뷰가 없으니(해결된 코멘트만 자동 정리), 다시 받으려면 위 명령어로 요청하세요. 명령어 리뷰는 요청자 개인 키(미등록 시 공통 키)로 동작해 공통 일일 한도를 아낍니다.',
+            ].join('\n');
+
+            const body = [
+              '## 📋 연관 Jira 티켓',
+              issueKey ? `[${issueKey}](${jiraUrl})` : '없음',
+              '',
+              '## 🤖 AI 요약',
+              summary,
+              '',
+              '## 📝 커밋 내역',
+              commits,
+              '',
+              '## ✅ 체크리스트',
+              checklist,
+              '',
+              '## 🤖 AI 코드 리뷰 명령어',
+              aiReviewCommands,
+            ].join('\n');
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: body.trim()
+            });
+
+  # ====================================================
   # Gemini 자동 리뷰 (PR 최초 open 전용 + /improve 활성화)
   # ====================================================
   review-gemini-auto:
     name: Gemini Auto Review
-    needs: resolve-gemini-model
-    if: github.event_name == 'pull_request_target' && github.event.action == 'opened'
+    needs: [resolve-gemini-model, describe]
+    if: |
+      always() &&
+      needs.resolve-gemini-model.result == 'success' &&
+      github.event_name == 'pull_request_target' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     permissions:
       contents: read
