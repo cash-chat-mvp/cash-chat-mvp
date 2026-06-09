@@ -342,8 +342,11 @@ jobs:
   # ====================================================
   review-gemini-auto:
     name: Gemini Auto Review
-    needs: resolve-gemini-model
-    if: github.event_name == 'pull_request_target' && github.event.action == 'opened'
+    needs: [resolve-gemini-model, describe]
+    if: |
+      always() &&
+      needs.resolve-gemini-model.result == 'success' &&
+      github.event_name == 'pull_request_target' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     permissions:
       contents: read
