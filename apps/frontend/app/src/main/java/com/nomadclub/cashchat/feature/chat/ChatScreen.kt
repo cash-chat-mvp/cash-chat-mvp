@@ -21,6 +21,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
@@ -118,6 +121,27 @@ fun ChatScreen(
             if (attendance != null) {
                 IconButton(onClick = { showAttendance = true }) {
                     Icon(Icons.Filled.CalendarMonth, contentDescription = "출석 캘린더")
+                }
+            }
+            Box {
+                var showMenu by remember { mutableStateOf(false) }
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "더보기")
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("대화 내보내기") },
+                        enabled = items.isNotEmpty(),
+                        onClick = {
+                            showMenu = false
+                            shareConversation(context, items, characterName)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("공유 링크 만들기 (준비 중)") },
+                        enabled = FeatureFlags.SHARE_LINK,
+                        onClick = { showMenu = false },
+                    )
                 }
             }
             // 포인트 잔액 API 부재(BE 의존성) — points가 null이면 칩 숨김
@@ -241,6 +265,22 @@ fun ChatScreen(
             }
         }
     }
+}
+
+/** 대화 전체를 텍스트로 OS 공유 시트에 전달 (FE 단독). */
+private fun shareConversation(context: android.content.Context, items: List<ChatItem>, characterName: String) {
+    val text = items.joinToString("\n") { item ->
+        when (item) {
+            is ChatItem.UserMessage -> "나: ${item.text}"
+            is ChatItem.AssistantMessage -> "$characterName: ${item.text}"
+            else -> ""
+        }
+    }
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(android.content.Intent.createChooser(intent, "대화 공유"))
 }
 
 /** 다음 밥 회복까지 카운트다운 (P1-3). 0 도달 시 [onFinished]로 에너지 재조회. */
