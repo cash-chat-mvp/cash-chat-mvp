@@ -5,8 +5,10 @@ import com.nomadclub.cashchat.core.data.ThemePreferenceStore
 import com.nomadclub.cashchat.core.data.TokenDataStore
 import com.nomadclub.cashchat.core.network.ApiService
 import com.nomadclub.cashchat.core.network.AuthInterceptor
+import com.nomadclub.cashchat.core.network.DataStoreTokenProvider
 import com.nomadclub.cashchat.core.network.TokenAuthenticator
 import com.nomadclub.cashchat.data.repository.AuthRepository
+import com.nomadclub.cashchat.shared.core.network.TokenProvider
 import com.nomadclub.cashchat.feature.auth.AuthViewModel
 import com.nomadclub.cashchat.feature.settings.SettingsViewModel
 import okhttp3.OkHttpClient
@@ -54,4 +56,7 @@ val appModule = module {
     viewModel { AuthViewModel(get()) }
 
     viewModel { SettingsViewModel(get()) }
+
+    // shared 데이터 레이어 (CC-348)
+    single<TokenProvider> { DataStoreTokenProvider(get(), get()) }
 }
