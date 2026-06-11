@@ -90,6 +90,11 @@ class ChatViewModel(
 
     fun dismissCheckIn() { _checkInResult.value = null }
 
+    /** 회복 카운트다운 종료 등 — 에너지만 재조회 */
+    fun refreshEnergy() {
+        viewModelScope.launch { runCatching { hudStore.refreshEnergyOnly() } }
+    }
+
     /** Ad Gate 해제 (P2-3): nonce 발급 → 광고 표시 → 성공 시 해당 메시지 blur 해제 */
     fun startGateUnlock(messageId: String, showAd: suspend (nonce: String) -> Boolean) {
         viewModelScope.launch {

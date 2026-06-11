@@ -23,6 +23,8 @@ data class HudState(
     val energy: Int = 0,
     val maxEnergy: Int = 0,
     val points: Long? = null,
+    /** P1-3 — ISO-8601 원본. 파싱은 플랫폼단(java.time 등)에서. */
+    val nextRecoverAt: String? = null,
     val isLoaded: Boolean = false,
 )
 
@@ -53,6 +55,7 @@ class HudStore(
             energy = energy.energy,
             maxEnergy = energy.maxEnergy,
             points = pointsDeferred?.await(),
+            nextRecoverAt = energy.nextRecoverAt,
             isLoaded = true,
         )
     }
@@ -60,6 +63,11 @@ class HudStore(
     @Throws(Exception::class)
     suspend fun refreshEnergyOnly() {
         val energy = energyApi.getMyEnergy()
-        _state.value = _state.value.copy(energy = energy.energy, maxEnergy = energy.maxEnergy, isLoaded = true)
+        _state.value = _state.value.copy(
+            energy = energy.energy,
+            maxEnergy = energy.maxEnergy,
+            nextRecoverAt = energy.nextRecoverAt,
+            isLoaded = true,
+        )
     }
 }

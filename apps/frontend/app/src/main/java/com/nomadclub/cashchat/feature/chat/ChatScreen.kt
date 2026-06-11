@@ -52,7 +52,9 @@ import com.nomadclub.cashchat.feature.chat.components.MessageBubble
 import com.nomadclub.cashchat.feature.chat.components.StatChip
 import com.nomadclub.cashchat.feature.chat.components.TypingIndicator
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
+import com.nomadclub.cashchat.shared.core.config.FeatureFlags
 import kotlin.coroutines.resume
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -121,6 +123,14 @@ fun ChatScreen(
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     StatChip("⚡", "${hud.energy}/${hud.maxEnergy}", warning = hud.energy == 0)
                     EnergyGauge(hud.energy, hud.maxEnergy, Modifier.width(56.dp))
+                    if (FeatureFlags.ENERGY_RECOVERY) {
+                        hud.nextRecoverAt?.let { iso ->
+                            RecoveryCountdown(
+                                nextRecoverAtIso = iso,
+                                onFinished = { viewModel.refreshEnergy() },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -228,4 +238,24 @@ fun ChatScreen(
             }
         }
     }
+}
+
+/** 다음 밥 회복까지 카운트다운 (P1-3). 0 도달 시 [onFinished]로 에너지 재조회. */
+@Composable
+private fun RecoveryCountdown(nextRecoverAtIso: String, onFinished: () -> Unit) {
+    var remainText by remember { mutableStateOf("") }
+    LaunchedEffect(nextRecoverAtIso) {
+        val target = java.time.Instant.parse(nextRecoverAtIso).toEpochMilli()
+        while (true) {
+            val remainSec = ((target - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
+            remainText = "%d:%02d 후 ⚡회복".format(remainSec / 60, remainSec % 60)
+            if (remainSec == 0L) break
+            delay(1000)
+        }
+        onFinished()
+    }
+    Text(
+        remainText, style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
