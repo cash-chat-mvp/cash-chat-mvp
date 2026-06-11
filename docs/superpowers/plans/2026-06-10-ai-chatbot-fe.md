@@ -433,6 +433,7 @@ fun createCashChatHttpClient(
         tokenProvider.accessToken()?.let { request.bearerAuth(it) }
         var call = execute(request)
         if (call.response.status == HttpStatusCode.Unauthorized && tokenProvider.refresh()) {
+            request.headers.remove(io.ktor.http.HttpHeaders.Authorization)
             tokenProvider.accessToken()?.let { request.bearerAuth(it) }
             call = execute(request)
         }
@@ -446,7 +447,7 @@ fun createCashChatHttpClient(
 }
 ```
 
-> `bearerAuth`는 기존 Authorization 헤더를 덮어쓰지 않으므로, 재시도 전 `request.headers.remove(HttpHeaders.Authorization)` 후 다시 붙인다. 위 intercept 블록에서 두 번째 `bearerAuth` 호출 직전에 `request.headers.remove(io.ktor.http.HttpHeaders.Authorization)`을 추가할 것. (테스트가 검증한다.)
+> `bearerAuth`는 기존 Authorization 헤더를 덮어쓰지 않고 추가하므로, 재시도 전 반드시 `headers.remove(HttpHeaders.Authorization)` 후 새 토큰을 붙인다 — 위 스니펫에 반영되어 있다. (테스트가 검증한다.)
 
 - [ ] **Step 4: 테스트 통과 확인**
 
@@ -1056,10 +1057,11 @@ class ChatStore(
 
     private suspend fun stream(messageId: String, text: String) {
         _isStreaming.value = true
+        // catch 블록에서 기존 스트리밍 메시지를 마감할 수 있도록 try 밖에 선언
+        val assistantId = "a${currentTimeMillis()}"
+        var assistantAdded = false
         try {
             val convId = conversationId ?: gateway.createConversation(text.take(20)).conversationId.also { conversationId = it }
-            val assistantId = "a${currentTimeMillis()}"
-            var assistantAdded = false
             var errored = false
             gateway.streamMessage(convId, text).collect { event ->
                 when (event) {
@@ -1101,8 +1103,12 @@ class ChatStore(
                 updateUser(messageId) { it.copy(status = ChatItem.SendStatus.BLOCKED) }
             }
         } catch (e: Exception) {
-            // 네트워크 단절 등 — 부분 응답 유지 + 에러 표시
-            _items.update { it + ChatItem.AssistantMessage("e${currentTimeMillis()}", "", isStreaming = false, isError = true) }
+            // 네트워크 단절 등 — 부분 응답 유지 + 기존 메시지를 에러 상태로 마감 (중복 추가 금지)
+            if (assistantAdded) {
+                updateAssistant(assistantId) { it.copy(isStreaming = false, isError = true) }
+            } else {
+                _items.update { it + ChatItem.AssistantMessage(assistantId, "", isStreaming = false, isError = true) }
+            }
         } finally {
             _isStreaming.value = false
         }
@@ -1165,7 +1171,7 @@ class AdRewardStoreTest {
                 if (calls >= 2) EnergyDto(10, 50) else EnergyDto(0, 50)
             },
             scope = this,
-            pollDelayMillis = 0,
+            pollDelaysMillis = List(5) { 0L },
         )
         val rewarded = store.awaitRewardApplied(baselineEnergy = 0)
         assertEquals(true, rewarded)
@@ -1173,18 +1179,18 @@ class AdRewardStoreTest {
     }
 
     @Test
-    fun `폴링 - 5회 모두 변동 없으면 false를 반환한다`() = runTest {
+    fun `폴링 - 백오프 전 횟수(6회) 모두 변동 없으면 false를 반환한다`() = runTest {
         var calls = 0
         val store = AdRewardStore(
             fetchQuota = { AdRewardQuotaDto(3, 10, 7, "2026-06-11T00:00:00+09:00") },
             issueNonce = { IssueNonceDto("n", "x") },
             fetchEnergy = { calls++; EnergyDto(0, 50) },
             scope = this,
-            pollDelayMillis = 0,
+            pollDelaysMillis = List(5) { 0L },
         )
         val rewarded = store.awaitRewardApplied(baselineEnergy = 0)
         assertEquals(false, rewarded)
-        assertEquals(5, calls)
+        assertEquals(6, calls)
     }
 }
 ```
@@ -1208,7 +1214,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * 광고 보상 플로우 (스펙 §3.2):
- * quota 확인 → nonce 발급 → (UI가 AdMob 표시) → 적립 폴링(2초×5회).
+ * quota 확인 → nonce 발급 → (UI가 AdMob 표시) → 적립 폴링.
+ * AdMob SSV 콜백은 10초 이상 지연이 흔하므로 지수 백오프(2·3·5·8·12초, 총 30초)로 폴링한다.
  * 적립은 서버 재조회 결과로만 반영한다 — 로컬 가산 금지.
  */
 class AdRewardStore(
@@ -1216,7 +1223,7 @@ class AdRewardStore(
     private val issueNonce: suspend () -> IssueNonceDto,
     private val fetchEnergy: suspend () -> EnergyDto,
     private val scope: CoroutineScope,
-    private val pollDelayMillis: Long = 2_000,
+    private val pollDelaysMillis: List<Long> = listOf(2_000, 3_000, 5_000, 8_000, 12_000),
 ) {
     private val _quota = MutableStateFlow<AdRewardQuotaDto?>(null)
     val quota: StateFlow<AdRewardQuotaDto?> = _quota.asStateFlow()
@@ -1229,22 +1236,21 @@ class AdRewardStore(
 
     /**
      * 광고 닫힌 뒤 호출. baseline 대비 에너지 증가가 관측되면 true.
-     * 5회 폴링에도 변동 없으면 false → UI는 "보상 확인 중" 안내.
+     * 즉시 1회 + 백오프 간격마다 1회(총 6회) 조회, 끝까지 변동 없으면 false → UI는 "보상 확인 중" + 수동 새로고침 안내.
      */
     @Throws(Exception::class)
     suspend fun awaitRewardApplied(baselineEnergy: Int): Boolean {
-        repeat(5) { attempt ->
-            if (attempt > 0) delay(pollDelayMillis)
+        repeat(pollDelaysMillis.size + 1) { attempt ->
+            if (attempt > 0) delay(pollDelaysMillis[attempt - 1])
             val energy = fetchEnergy()
             if (energy.energy > baselineEnergy) return true
-            if (attempt == 0 && pollDelayMillis > 0) delay(pollDelayMillis)
         }
         return false
     }
 }
 ```
 
-> 테스트 기준은 "호출 횟수": 첫 시도 포함 최대 5회 `fetchEnergy`. 위 구현에서 delay 위치를 단순화해도 되지만 호출 횟수 5회는 유지할 것.
+> 테스트 기준은 "호출 횟수": 즉시 1회 + 백오프 횟수만큼 `fetchEnergy` 호출(기본 6회). 지연은 루프 시작 시점에만 1회 적용 — 이중 delay 금지.
 
 - [ ] **Step 4: HudStore 구현** (단순 조합 — 테스트는 통합에서)
 

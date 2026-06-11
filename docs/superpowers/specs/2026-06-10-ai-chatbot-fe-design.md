@@ -122,7 +122,7 @@ app(Android)/.../feature/chat/
 - **ChatStore**: 메시지 상태머신 — `Sending(pending)` → `Confirmed` / `Blocked(에너지 부족)`, assistant 누적, 재전송 큐. 기존 mock 전면 교체(Android `ChatViewModel`의 mock 로직 제거 포함).
 - **HudStore**: 톱바 상태 통합. `refresh()` 한 번으로 3개 API 병렬 재조회.
 - **EvolutionStore**: 상태 조회 + 시도(idempotencyKey 관리).
-- **AdRewardStore**: 쿼터 + nonce 발급 + 적립 폴링(2초 간격 최대 5회 재조회, 미변동 시 "보상 확인 중").
+- **AdRewardStore**: 쿼터 + nonce 발급 + 적립 폴링. SSV 콜백은 서버 간 전달에서 10초 이상 지연이 흔하므로 지수 백오프(2·3·5·8·12초 간격, 즉시 1회 포함 총 6회·약 30초) 적용, 끝까지 미변동 시 "보상 확인 중" + 수동 새로고침.
 
 ## 3. 핵심 플로우
 
@@ -133,16 +133,17 @@ app(Android)/.../feature/chat/
 3. SSE 시작 → pending 확정, 토큰 누적 → `Done` 후 `energy/me` 재조회
 4. `409 INSUFFICIENT_ENERGY` → pending 유지 + 게이트 시트 → 충전 후 `energy ≥ 1` 확인 → 같은 `conversationId`로 자동 재전송
 5. 스트리밍 중 단절 → 부분 텍스트 유지 + "응답이 끊겼어요" 재시도 버튼
+   - 주의: 재시도는 새 `POST /stream` 요청이라 에너지가 추가 차감될 수 있다. 현재 BE 요청 바디(`conversationId`, `message`)에 멱등 키가 없어 FE 단독으로는 방지 불가 — TODO(BE): `idempotencyKey`(또는 클라이언트 메시지 ID) 지원 추가 시 재시도에 같은 키를 실어 중복 차감 방지. 그전까지 재시도는 자동 실행 없이 명시적 버튼 탭으로만 수행한다.
 
 ### 3.2 광고 보상
 
 ```
 quota 확인 → issue-nonce → AdMob 리워드 표시(SSV customData = nonce)
-→ 광고 닫힘 → energy/me·users/me·quota 폴링(2초×5회) → 게이지 갱신
+→ 광고 닫힘 → energy/me·users/me·quota 폴링(지수 백오프 2·3·5·8·12초, 총 6회·약 30초) → 게이지 갱신
 ```
 
 - 적립은 서버 재조회 결과로만 반영(로컬 가산 금지). SSV 콜백은 서버 간 통신으로 클라이언트는 관여하지 않음.
-- 5회 폴링 후 미변동 → "보상 확인 중" + 수동 새로고침.
+- 백오프 폴링(약 30초) 후 미변동 → "보상 확인 중" + 수동 새로고침.
 - 광고 로드 실패/중도 이탈 → 토스트 + 쿼터 재조회.
 - 기존 `RewardedAdManager` 재사용, `setServerSideVerificationOptions(customData = nonce)` 추가.
 
