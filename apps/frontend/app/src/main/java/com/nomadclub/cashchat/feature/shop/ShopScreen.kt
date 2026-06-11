@@ -1,11 +1,6 @@
 package com.nomadclub.cashchat.feature.shop
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.scaleIn
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,271 +8,153 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Coffee
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Fastfood
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ShoppingBag
-import androidx.compose.material.icons.filled.Store
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import com.nomadclub.cashchat.shared.core.network.ApiException
+import com.nomadclub.cashchat.shared.shop.InventoryDto
+import com.nomadclub.cashchat.shared.shop.ShopApi
+import com.nomadclub.cashchat.shared.shop.ShopCatalogDto
+import java.util.UUID
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
-private data class ShopItem(
-    val id: String,
-    val name: String,
-    val brand: String,
-    val points: Int,
-    val emoji: String,
-    val category: Category
+/** BE ShopItemCategory와 1:1 (phase1은 ENHANCE만 활성) */
+private val categories = listOf(
+    "ENHANCE" to "강화",
+    "COSMETIC" to "꾸미기",
+    "VOUCHER" to "상품권",
 )
 
-private enum class Category(val label: String, val icon: ImageVector) {
-    ALL("전체", Icons.Default.ShoppingBag),
-    CAFE("카페", Icons.Default.Coffee),
-    CVS("편의점", Icons.Default.Store),
-    FOOD("외식", Icons.Default.CardGiftcard),
-    VOUCHER("상품권", Icons.Default.CreditCard)
-}
+private val itemEmojis = mapOf(
+    "ENHANCE" to "🧿",
+    "COSMETIC" to "🎀",
+    "VOUCHER" to "🎁",
+)
 
 @Composable
 fun ShopScreen(
-    points: Int,
-    spendPoints: (Int) -> Boolean
+    shopApi: ShopApi = koinInject(),
 ) {
-    val items = remember {
-        listOf(
-            ShopItem("1", "아메리카노 Tall", "스타벅스", 4500, "☕", Category.CAFE),
-            ShopItem("2", "카페라떼 Grande", "스타벅스", 5500, "☕", Category.CAFE),
-            ShopItem("3", "1+1 교환권", "CU", 3000, "🏪", Category.CVS),
-            ShopItem("4", "해피콘 3,000원권", "배스킨라빈스", 3000, "🍦", Category.CAFE),
-            ShopItem("5", "치킨 할인권 5,000원", "BBQ", 5000, "🍗", Category.FOOD),
-            ShopItem("6", "문화상품권 5,000원", "문화상품권", 5000, "🎁", Category.VOUCHER)
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    var selectedCategory by remember { mutableStateOf("ENHANCE") }
+    var catalog by remember { mutableStateOf<ShopCatalogDto?>(null) }
+    var inventory by remember { mutableStateOf<InventoryDto?>(null) }
+    var loadFailed by remember { mutableStateOf(false) }
+    var purchaseTarget by remember { mutableStateOf<ShopCatalogDto.Item?>(null) }
+    var purchasing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(selectedCategory) {
+        loadFailed = false
+        catalog = null
+        runCatching { shopApi.getItems(selectedCategory) }
+            .onSuccess { catalog = it }
+            .onFailure { loadFailed = true }
+        runCatching { shopApi.getInventory() }.onSuccess { inventory = it }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        Text(
+            "포인트 상점",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.ExtraBold,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
         )
-    }
 
-    var selectedCategory by remember { mutableStateOf(Category.ALL) }
-    var searchQuery by remember { mutableStateOf("") }
-    var showPurchaseDialog by remember { mutableStateOf(false) }
-    var showNotEnoughDialog by remember { mutableStateOf(false) }
-    var selectedItem by remember { mutableStateOf<ShopItem?>(null) }
-    var visible by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        visible = true
-    }
-
-    val filteredItems = items.filter {
-        (selectedCategory == Category.ALL || it.category == selectedCategory) &&
-        (searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true) || it.brand.contains(searchQuery, ignoreCase = true))
-    }
-
-    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        // Header
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 1.dp
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            items(categories, key = { it.first }) { (code, label) ->
+                val selected = code == selectedCategory
+                Surface(
+                    modifier = Modifier.clickable { selectedCategory = code },
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(99.dp),
                 ) {
                     Text(
-                        "포인트 상점",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        label,
+                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
-                    Surface(
-                        color = Color(0xFF5C6BFA),
-                        shape = RoundedCornerShape(99.dp)
-                    ) {
-                        Text(
-                            text = "🪙 ${String.format("%,d", points)} P",
-                            color = Color.White,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 14.sp,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    }
                 }
-                Spacer(modifier = Modifier.height(20.dp))
-                
-                // Search Bar
-                TextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    placeholder = { Text("상품을 검색하세요", color = Color(0xFF94A3B8), fontSize = 14.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF94A3B8)) },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = TextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                    ),
-                    singleLine = true
-                )
             }
         }
 
-        // Categories
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 0.dp
-        ) {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // 보유 아이템 요약
+        inventory?.takeIf { it.items.isNotEmpty() }?.let { inv ->
+            Text(
+                "보유: " + inv.items.joinToString { "${it.itemCode} ×${it.qty}" },
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+        }
+
+        when {
+            loadFailed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("상점을 불러오지 못했어요")
+            }
+            catalog == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            !catalog!!.phase1Active -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("🔒 준비 중인 카테고리예요")
+            }
+            catalog!!.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("판매 중인 아이템이 없어요")
+            }
+            else -> LazyColumn(
+                contentPadding = PaddingValues(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(Category.values(), key = { it.name }) { category ->
-                    val selected = category == selectedCategory
-                    Surface(
-                        modifier = Modifier.clickable { selectedCategory = category },
-                        color = if (selected) Color(0xFF5C6BFA) else MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(99.dp)
-                    ) {
+                items(catalog!!.items.sortedBy { it.displayOrder }, key = { it.itemCode }) { item ->
+                    Card(shape = RoundedCornerShape(16.dp)) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            Modifier.fillMaxWidth().padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
                         ) {
-                            Icon(
-                                category.icon,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                category.label,
-                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Products Grid
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            gridItems(filteredItems, key = { it.id }) { item ->
-                AnimatedVisibility(
-                    visible = visible,
-                    enter = fadeIn(tween(600)) + scaleIn(initialScale = 0.9f)
-                ) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                    ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(1.2f)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(item.emoji, fontSize = 48.sp)
+                            Text(itemEmojis[selectedCategory] ?: "🎁", style = MaterialTheme.typography.headlineMedium)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(item.name, style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    item.effectSummary,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(item.brand, style = MaterialTheme.typography.labelSmall, color = Color(0xFF94A3B8), fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    item.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.height(40.dp)
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    "🪙 ${String.format("%,d", item.points)} P", 
-                                    color = Color(0xFFFF6B00), 
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 15.sp
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Button(
-                                    onClick = {
-                                        selectedItem = item
-                                        if (points >= item.points) {
-                                            showPurchaseDialog = true
-                                        } else {
-                                            showNotEnoughDialog = true
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth().height(40.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5C6BFA)),
-                                    shape = RoundedCornerShape(12.dp),
-                                    contentPadding = PaddingValues(0.dp)
-                                ) {
-                                    Text("구매하기", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
+                            Button(onClick = { purchaseTarget = item }, enabled = !purchasing) {
+                                Text("🪙 %,d".format(item.priceCoin))
                             }
                         }
                     }
@@ -286,139 +163,37 @@ fun ShopScreen(
         }
     }
 
-    // Purchase Dialog
-    if (showPurchaseDialog && selectedItem != null) {
-        val item = selectedItem!!
-        Dialog(
-            onDismissRequest = { showPurchaseDialog = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable { showPurchaseDialog = false },
-                contentAlignment = Alignment.Center
-            ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .clickable(enabled = false) {},
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(24.dp)) {
-                        Text("구매 확인", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "${item.brand} ${item.name}을(를) 구매하시겠습니까?",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("현재 포인트", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                                    Text("${String.format("%,d", points)} P", fontWeight = FontWeight.Bold)
-                                }
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("사용 포인트", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
-                                    Text("-${String.format("%,d", item.points)} P", fontWeight = FontWeight.Bold, color = Color(0xFFFF6B00))
-                                }
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFFE2E8F0))
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("남은 포인트", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                    Text("${String.format("%,d", points - item.points)} P", fontWeight = FontWeight.Black, color = Color(0xFF5C6BFA))
-                                }
+    purchaseTarget?.let { item ->
+        AlertDialog(
+            onDismissRequest = { if (!purchasing) purchaseTarget = null },
+            title = { Text("구매 확인") },
+            text = { Text("${item.name}을(를) 🪙%,d에 구매할까요?".format(item.priceCoin)) },
+            confirmButton = {
+                TextButton(
+                    enabled = !purchasing,
+                    onClick = {
+                        purchasing = true
+                        scope.launch {
+                            try {
+                                val result = shopApi.purchase(item.itemCode, 1, UUID.randomUUID().toString())
+                                inventory = InventoryDto(result.inventory.map { InventoryDto.Item(it.itemCode, it.qty) })
+                                Toast.makeText(context, "구매 완료 · 잔액 🪙%,d".format(result.coinBalance), Toast.LENGTH_SHORT).show()
+                            } catch (e: ApiException) {
+                                val message = if (e.code == "INSUFFICIENT_COIN") "코인이 부족해요" else e.message
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "구매에 실패했어요", Toast.LENGTH_SHORT).show()
+                            } finally {
+                                purchasing = false
+                                purchaseTarget = null
                             }
                         }
-                        
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(
-                                onClick = { showPurchaseDialog = false },
-                                modifier = Modifier.weight(1f).height(52.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-                                shape = RoundedCornerShape(16.dp)
-                            ) { Text("취소", fontWeight = FontWeight.Bold) }
-                            Button(
-                                onClick = {
-                                    if (spendPoints(item.points)) {
-                                        showPurchaseDialog = false
-                                        selectedItem = null
-                                    } else {
-                                        showPurchaseDialog = false
-                                        showNotEnoughDialog = true
-                                    }
-                                },
-                                modifier = Modifier.weight(1f).height(52.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5C6BFA)),
-                                shape = RoundedCornerShape(16.dp)
-                            ) { Text("구매하기", fontWeight = FontWeight.Bold) }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Not Enough Points Dialog
-    if (showNotEnoughDialog) {
-        Dialog(
-            onDismissRequest = { showNotEnoughDialog = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable { showNotEnoughDialog = false },
-                contentAlignment = Alignment.Center
-            ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .clickable(enabled = false) {},
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("😢", fontSize = 64.sp)
-                        Spacer(modifier = Modifier.height(20.dp))
-                        Text("포인트가 부족해요!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "10초 광고를 보고 포인트를 더 모으시겠어요?",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(32.dp))
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(
-                                onClick = { showNotEnoughDialog = false },
-                                modifier = Modifier.weight(1f).height(52.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
-                                shape = RoundedCornerShape(16.dp)
-                            ) { Text("닫기", fontWeight = FontWeight.Bold) }
-                            Button(
-                                onClick = { showNotEnoughDialog = false },
-                                modifier = Modifier.weight(1f).height(52.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6B00)),
-                                shape = RoundedCornerShape(16.dp)
-                            ) { Text("광고 보기", fontWeight = FontWeight.Bold) }
-                        }
-                    }
-                }
-            }
-        }
+                    },
+                ) { Text("구매") }
+            },
+            dismissButton = {
+                TextButton(enabled = !purchasing, onClick = { purchaseTarget = null }) { Text("취소") }
+            },
+        )
     }
 }

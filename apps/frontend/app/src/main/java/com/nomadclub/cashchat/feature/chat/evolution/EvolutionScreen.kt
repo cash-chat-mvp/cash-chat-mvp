@@ -38,7 +38,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,10 +52,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import com.nomadclub.cashchat.shared.shop.InventoryDto
+import com.nomadclub.cashchat.shared.shop.ShopApi
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 private val levelEmojis = mapOf(1 to "🥚", 2 to "🐣", 3 to "🐤", 4 to "🦅", 5 to "🐲")
 private val levelNames = mapOf(1 to "알", 2 to "부화", 3 to "유년", 4 to "성장", 5 to "궁극")
@@ -62,7 +67,12 @@ private val levelNames = mapOf(1 to "알", 2 to "부화", 3 to "유년", 4 to "�
 fun EvolutionScreen(
     onClose: () -> Unit,
     viewModel: EvolutionViewModel = koinViewModel(),
+    shopApi: ShopApi = koinInject(),
 ) {
+    var inventory by remember { mutableStateOf<InventoryDto?>(null) }
+    LaunchedEffect(Unit) {
+        runCatching { shopApi.getInventory() }.onSuccess { inventory = it }
+    }
     val state by viewModel.evolutionStore.state.collectAsState()
     val phase by viewModel.phase.collectAsState()
     val result by viewModel.lastResult.collectAsState()
@@ -160,6 +170,24 @@ fun EvolutionScreen(
                     StatRow("다음 진화 비용", "🪙 %,d".format(evolution.nextAttemptCost ?: 0))
                     Spacer(Modifier.height(6.dp))
                     StatRow("성공 확률", "${((evolution.nextSuccessRate ?: 0.0) * 100).toInt()}%")
+                    // 보유 아이템 — 효과 적용 API는 BE 미구현이라 표시 전용
+                    inventory?.takeIf { it.items.isNotEmpty() }?.let { inv ->
+                        Spacer(Modifier.height(6.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            inv.items.take(3).forEach { item ->
+                                AssistChip(onClick = {}, label = { Text("🧿 ${item.itemCode} ×${item.qty}") })
+                            }
+                            Text(
+                                "적용 기능 준비 중",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(4.dp))
                     Text(
                         "성공하면 밥도 보너스 충전! ⚡",

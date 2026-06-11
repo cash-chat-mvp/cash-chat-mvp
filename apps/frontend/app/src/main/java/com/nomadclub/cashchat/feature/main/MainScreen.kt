@@ -109,7 +109,7 @@ fun MainScreen(
                 RewardsScreen(points = points, messageCount = messageCount, addPoints = addPoints)
             }
             composable(MainTab.SHOP.route) {
-                ShopScreen(points = points, spendPoints = spendPoints)
+                ShopScreen()
             }
             composable(MainTab.MY_PAGE.route) {
                 MyPageScreen(
