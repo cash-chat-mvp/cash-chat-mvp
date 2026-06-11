@@ -24,8 +24,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import com.nomadclub.cashchat.ads.RewardedAdManager
+import com.nomadclub.cashchat.shared.core.config.FeatureFlags
+import com.nomadclub.cashchat.shared.core.network.ApiException
+import com.nomadclub.cashchat.shared.energy.EnergyTopupApi
+import java.util.UUID
 import kotlin.coroutines.resume
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.koin.compose.koinInject
 
@@ -34,11 +46,14 @@ import org.koin.compose.koinInject
 fun EnergyGateBottomSheet(
     viewModel: ChatViewModel,
     adManager: RewardedAdManager = koinInject(),
+    topupApi: EnergyTopupApi = koinInject(),
 ) {
     val quota by viewModel.adRewardStore.quota.collectAsState()
     val phase by viewModel.rewardPhase.collectAsState()
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var showTopupConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { adManager.preload(context) }
 
@@ -99,11 +114,42 @@ fun EnergyGateBottomSheet(
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("▶  광고 보고 밥 채우기") }
 
-                    OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
-                        Text("🪙 포인트로 충전 (준비 중)")
-                    }
+                    OutlinedButton(
+                        onClick = { showTopupConfirm = true },
+                        enabled = FeatureFlags.POINT_TOPUP,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (FeatureFlags.POINT_TOPUP) "🪙 포인트로 충전" else "🪙 포인트로 충전 (준비 중)") }
                 }
             }
         }
+    }
+
+    if (showTopupConfirm) {
+        AlertDialog(
+            onDismissRequest = { showTopupConfirm = false },
+            title = { Text("포인트로 충전") },
+            text = { Text("포인트를 사용해 밥을 채울까요?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showTopupConfirm = false
+                    scope.launch {
+                        try {
+                            topupApi.topup(UUID.randomUUID().toString())
+                            // 광고 경로와 동일한 마무리: HUD 갱신 + 막힌 메시지 재전송
+                            runCatching { viewModel.hudStore.refreshEnergyOnly() }
+                            viewModel.chatStore.retryBlocked()
+                        } catch (e: ApiException) {
+                            val message = if (e.code == ApiException.INSUFFICIENT_POINTS) "포인트가 부족해요" else e.message
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "충전에 실패했어요", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }) { Text("충전") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTopupConfirm = false }) { Text("취소") }
+            },
+        )
     }
 }

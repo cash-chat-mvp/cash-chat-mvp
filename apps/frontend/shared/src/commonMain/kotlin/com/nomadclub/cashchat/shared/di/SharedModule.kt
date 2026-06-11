@@ -34,6 +34,7 @@ fun sharedDataModule(baseUrl: String) = module {
     single { PointsApi(get(), baseUrl) }
     single { AttendanceApi(get(), baseUrl) }
     single { com.nomadclub.cashchat.shared.shop.ShopApi(get(), baseUrl) }
+    single { com.nomadclub.cashchat.shared.energy.EnergyTopupApi(get(), baseUrl) }
 
     single<ChatGateway> { ApiChatGateway(get()) }
     single { ChatStore(get(), get()) }
