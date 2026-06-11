@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.nomadclub.cashchat.ads.RewardedAdManager
 import com.nomadclub.cashchat.core.data.CharacterPreferenceStore
 import com.nomadclub.cashchat.feature.chat.components.AdGateCard
+import com.nomadclub.cashchat.feature.chat.components.CharacterAvatar
 import com.nomadclub.cashchat.feature.chat.components.EnergyGauge
 import com.nomadclub.cashchat.feature.chat.components.MessageBubble
 import com.nomadclub.cashchat.feature.chat.components.StatChip
@@ -104,9 +105,15 @@ fun ChatScreen(
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.clickable(onClick = onOpenEvolution),
             ) {
-                Text("🐣", Modifier.padding(6.dp))
+                // 탭 시 통통 반응 후 진화 화면 이동 (스펙 §6.3)
+                CharacterAvatar(
+                    level = hud.level,
+                    energyRatio = if (hud.maxEnergy > 0) hud.energy.toFloat() / hud.maxEnergy else 1f,
+                    modifier = Modifier.padding(6.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    onTap = onOpenEvolution,
+                )
             }
             Column(Modifier.clickable(onClick = onOpenEvolution)) {
                 Text(characterName, style = MaterialTheme.typography.titleSmall)
@@ -171,7 +178,11 @@ fun ChatScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("🐣", style = MaterialTheme.typography.displayMedium)
+                    CharacterAvatar(
+                        level = hud.level,
+                        energyRatio = if (hud.maxEnergy > 0) hud.energy.toFloat() / hud.maxEnergy else 1f,
+                        style = MaterialTheme.typography.displayMedium,
+                    )
                     Spacer(Modifier.height(8.dp))
                     Text("안녕! 뭐든 물어봐요", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(16.dp))
