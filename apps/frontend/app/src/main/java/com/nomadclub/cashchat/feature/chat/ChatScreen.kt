@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -26,6 +27,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
@@ -61,7 +63,10 @@ fun ChatScreen(
     val isStreaming by viewModel.chatStore.isStreaming.collectAsState()
     val gateVisible by viewModel.chatStore.energyGateVisible.collectAsState()
     val hud by viewModel.hudStore.state.collectAsState()
+    val attendance by viewModel.attendance.collectAsState()
+    val checkInResult by viewModel.checkInResult.collectAsState()
     var input by remember { mutableStateOf("") }
+    var showAttendance by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     LaunchedEffect(items.size, (items.lastOrNull() as? ChatItem.AssistantMessage)?.text?.length) {
@@ -95,6 +100,11 @@ fun ChatScreen(
                 }
             }
             Spacer(Modifier.weight(1f))
+            if (attendance != null) {
+                IconButton(onClick = { showAttendance = true }) {
+                    Icon(Icons.Filled.CalendarMonth, contentDescription = "출석 캘린더")
+                }
+            }
             // 포인트 잔액 API 부재(BE 의존성) — points가 null이면 칩 숨김
             hud.points?.let { StatChip("🪙", "%,d".format(it)) }
             if (hud.isLoaded) {
@@ -173,5 +183,17 @@ fun ChatScreen(
 
     if (gateVisible) {
         EnergyGateBottomSheet(viewModel = viewModel)
+    }
+
+    checkInResult?.let { result ->
+        CheckInRewardDialog(result = result, onDismiss = { viewModel.dismissCheckIn() })
+    }
+
+    if (showAttendance) {
+        attendance?.let { monthly ->
+            ModalBottomSheet(onDismissRequest = { showAttendance = false }) {
+                AttendanceCalendar(monthly)
+            }
+        }
     }
 }

@@ -3,6 +3,9 @@ package com.nomadclub.cashchat.feature.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nomadclub.cashchat.shared.ads.AdRewardStore
+import com.nomadclub.cashchat.shared.attendance.AttendanceApi
+import com.nomadclub.cashchat.shared.attendance.CheckInDto
+import com.nomadclub.cashchat.shared.attendance.MonthlyAttendanceDto
 import com.nomadclub.cashchat.shared.chat.ChatStore
 import com.nomadclub.cashchat.shared.hud.HudStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +16,7 @@ class ChatViewModel(
     val chatStore: ChatStore,
     val hudStore: HudStore,
     val adRewardStore: AdRewardStore,
+    private val attendanceApi: AttendanceApi,
 ) : ViewModel() {
 
     /** 게이트 시트의 광고 보상 단계 표시용 */
@@ -21,8 +25,25 @@ class ChatViewModel(
     private val _rewardPhase = MutableStateFlow(RewardPhase.IDLE)
     val rewardPhase = _rewardPhase.asStateFlow()
 
+    private val _attendance = MutableStateFlow<MonthlyAttendanceDto?>(null)
+    val attendance = _attendance.asStateFlow()
+
+    private val _checkInResult = MutableStateFlow<CheckInDto?>(null)
+    val checkInResult = _checkInResult.asStateFlow()
+
     init {
         hudStore.refresh()
+        viewModelScope.launch {
+            // 채팅 진입 시 자동 출석 — 이미 출석한 날은 조용히 통과 (409 ALREADY_CHECKED_IN 포함)
+            runCatching {
+                val monthly = attendanceApi.getMonthly()
+                _attendance.value = monthly
+                if (!monthly.todayChecked) {
+                    _checkInResult.value = attendanceApi.checkIn()
+                    _attendance.value = attendanceApi.getMonthly()
+                }
+            }
+        }
         viewModelScope.launch {
             chatStore.streamCompletedCount.collect { if (it > 0) runCatching { hudStore.refreshEnergyOnly() } }
         }
@@ -66,4 +87,6 @@ class ChatViewModel(
         _rewardPhase.value = RewardPhase.IDLE
         chatStore.dismissEnergyGate()
     }
+
+    fun dismissCheckIn() { _checkInResult.value = null }
 }

@@ -2,6 +2,7 @@ package com.nomadclub.cashchat.shared.di
 
 import com.nomadclub.cashchat.shared.ads.AdRewardStore
 import com.nomadclub.cashchat.shared.ads.AdsApi
+import com.nomadclub.cashchat.shared.attendance.AttendanceApi
 import com.nomadclub.cashchat.shared.chat.ApiChatGateway
 import com.nomadclub.cashchat.shared.chat.ChatApi
 import com.nomadclub.cashchat.shared.chat.ChatGateway
@@ -31,6 +32,7 @@ fun sharedDataModule(baseUrl: String) = module {
     single { EvolutionApi(get(), baseUrl) }
     single { AdsApi(get(), baseUrl) }
     single { PointsApi(get(), baseUrl) }
+    single { AttendanceApi(get(), baseUrl) }
 
     single<ChatGateway> { ApiChatGateway(get()) }
     single { ChatStore(get(), get()) }
