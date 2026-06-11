@@ -167,10 +167,37 @@ quota 확인 → issue-nonce → AdMob 리워드 표시(SSV customData = nonce)
 - **shared (Ktor MockEngine)**: SSE 라인 파서(청크 분할·error 이벤트·중도 단절), ChatStore 상태머신(pending→확정/blocked→재전송), 에러 코드 매핑.
 - **Android**: 게이트 분기·진화 연출 상태를 ViewModel 레벨에서 테스트. 연출 자체는 수동 확인.
 
-## 6. 범위 외 (확장 포인트만 마련)
+## 6. 확장 기능 (2026-06-11 범위 추가)
 
-- 쿠팡 파트너스 상품 카드 (메시지 sealed 타입으로 수용 가능)
-- Progressive Ad Gate (응답 blur) — 백엔드 미구현
-- 포인트로 밥 충전 — BE 엔드포인트 예정, 게이트 시트에 비활성 버튼만
-- EXP·진화석·부적/보호권 아이템 — 현 백엔드 경제 모델에 없음
+방침: **미구현 BE 기능도 UI를 선구현**하고, 필요한 API는 요청 문서(`docs/planning/be-api-requests-cc348.md`)로 백엔드에 전달한다. BE 미구현 기능의 진입점은 `FeatureFlags`(shared 상수)로 막아두고, API가 생기면 플래그 활성 + 연결만 한다.
+
+### 6.1 그룹 A — BE 구현 완료, UI만 추가
+
+| 기능 | BE | UI |
+| --- | --- | --- |
+| 출석 체크 | `POST /api/attendance/check-in`, `GET /api/attendance/me` | 채팅 진입 시 미출석이면 출석 모달(보상 연출) + 월 캘린더 시트. streak·다음 보상 미리보기 표시 |
+| 상점·인벤토리 | `GET /api/shop/items?category=`, `POST /api/shop/purchase`(idempotencyKey UUID), `GET /api/inventory/me` | 기존 Shop 탭 mock을 실서버 연동으로 교체. 진화 화면에서 보조 아이템(부적·보호권) 노출은 BE 아이템 효과 적용 API 의존 → 표시만 |
+| 대화 내보내기 | (기존) `GET /api/v1/chat/history/{uuid}` — 본인만 접근 가능 | OS 공유 시트로 대화 텍스트 내보내기(FE 단독). 공개 공유 링크는 BE 요청(§6.2) |
+
+### 6.2 그룹 B — UI 선구현 + BE API 요청
+
+| 기능 | UI 선구현 | 요청 API (제안) |
+| --- | --- | --- |
+| 쿠팡 큐레이션 카드 | `ChatItem.ProductCard` 타입 + 카드 컴포저블(썸네일·가격·별점·CTA·파트너스 고지). Preview로 검증 | SSE `event: product` + JSON 페이로드 |
+| 포인트 잔액 | HUD 코인 칩(이미 `points: Long?` 구조) + 변동 카운트업 애니메이션 | `GET /api/points/me` |
+| 포인트로 밥 충전 | 게이트 시트 버튼 활성화 + 비용 확인 다이얼로그 | `POST /api/energy/topup` (idempotencyKey) |
+| 대화방 삭제·이름 변경 | 목록 long-press 메뉴(삭제 확인·이름 입력) + optimistic 처리 | `DELETE/PATCH /api/v1/chat/conversations/{id}` |
+| 에너지 자동회복 | 밥 칩 아래 "다음 회복 mm:ss" 카운트다운 | `GET /api/energy/me` 응답 확장(`nextRecoverAt`, `recoverAmount`) |
+| 진화 시도 기록 | 진화 화면 하단 "최근 시도" 타임라인(성공/실패·비용·시각) | `GET /api/evolution/attempts` (BE 원장 이미 존재) |
+| 캐릭터 이름 짓기 | 진화 화면에서 이름 편집 다이얼로그. 우선 로컬(DataStore) 저장 | `PATCH /api/users/me/character-name` (멀티디바이스 동기화용) |
+| Ad Gate(응답 블라인드) | `ChatItem.AdGate` 타입 + teaser/blur/CTA 컴포저블. Preview로 검증 | SSE `event: gate` 또는 메시지 메타 `adRequired` |
+| 공개 공유 링크 | 공유 버튼 → 링크 복사 UI | `POST /api/v1/chat/conversations/{id}/share` (공개 토큰) |
+
+### 6.3 그룹 C — FE 단독
+
+- **캐릭터 인터랙션**: 채팅 빈 화면·진화 화면의 아바타 탭 시 통통 튀는 spring 반응 + 햅틱. 에너지 비율별 표정 변화(배부름/보통/배고픔 — 이모지 단계).
+
+### 6.4 잔여 범위 외
+
+- EXP·진화석·부적/보호권의 "효과 적용" 로직 — BE 경제 모델 확장 필요
 - iOS UI (shared 레이어는 이번에 준비됨)
