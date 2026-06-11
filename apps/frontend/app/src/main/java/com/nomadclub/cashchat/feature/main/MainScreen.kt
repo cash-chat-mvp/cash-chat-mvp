@@ -18,6 +18,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nomadclub.cashchat.feature.chat.ChatScreen
 import com.nomadclub.cashchat.feature.chat.ChatViewModel
+import com.nomadclub.cashchat.feature.chat.ConversationListScreen
 import com.nomadclub.cashchat.feature.mypage.MyPageScreen
 import org.koin.androidx.compose.koinViewModel
 import com.nomadclub.cashchat.feature.rewards.RewardsScreen
@@ -87,7 +88,19 @@ fun MainScreen(
                     viewModel = chatViewModel,
                 )
             }
-            composable(ROUTE_CONVERSATIONS) { /* Task 9 */ }
+            composable(ROUTE_CONVERSATIONS) {
+                ConversationListScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenConversation = { id ->
+                        chatViewModel.openConversation(id)
+                        navController.popBackStack()
+                    },
+                    onNewConversation = {
+                        chatViewModel.chatStore.startNewConversation()
+                        navController.popBackStack()
+                    },
+                )
+            }
             composable(ROUTE_EVOLUTION) { /* Task 11 */ }
             composable(MainTab.REWARDS.route) {
                 RewardsScreen(points = points, messageCount = messageCount, addPoints = addPoints)
