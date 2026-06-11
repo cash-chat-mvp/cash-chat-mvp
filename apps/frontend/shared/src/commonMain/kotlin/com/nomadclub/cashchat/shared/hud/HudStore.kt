@@ -1,7 +1,9 @@
 package com.nomadclub.cashchat.shared.hud
 
+import com.nomadclub.cashchat.shared.core.config.FeatureFlags
 import com.nomadclub.cashchat.shared.energy.EnergyApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionApi
+import com.nomadclub.cashchat.shared.wallet.PointsApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -27,6 +29,7 @@ data class HudState(
 class HudStore(
     private val energyApi: EnergyApi,
     private val evolutionApi: EvolutionApi,
+    private val pointsApi: PointsApi,
     private val scope: CoroutineScope,
 ) {
     private val _state = MutableStateFlow(HudState())
@@ -40,6 +43,8 @@ class HudStore(
     suspend fun refreshNow() = coroutineScope {
         val energyDeferred = async { energyApi.getMyEnergy() }
         val evolutionDeferred = async { evolutionApi.getState() }
+        val pointsDeferred =
+            if (FeatureFlags.POINT_BALANCE) async { runCatching { pointsApi.getBalance().balance }.getOrNull() } else null
         val energy = energyDeferred.await()
         val evolution = evolutionDeferred.await()
         _state.value = HudState(
@@ -47,7 +52,7 @@ class HudStore(
             isMaxLevel = evolution.isMaxLevel,
             energy = energy.energy,
             maxEnergy = energy.maxEnergy,
-            points = null,
+            points = pointsDeferred?.await(),
             isLoaded = true,
         )
     }

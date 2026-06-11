@@ -12,6 +12,7 @@ import com.nomadclub.cashchat.shared.energy.EnergyApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudStore
+import com.nomadclub.cashchat.shared.wallet.PointsApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,10 +30,11 @@ fun sharedDataModule(baseUrl: String) = module {
     single { EnergyApi(get(), baseUrl) }
     single { EvolutionApi(get(), baseUrl) }
     single { AdsApi(get(), baseUrl) }
+    single { PointsApi(get(), baseUrl) }
 
     single<ChatGateway> { ApiChatGateway(get()) }
     single { ChatStore(get(), get()) }
-    single { HudStore(get(), get(), get()) }
+    single { HudStore(get(), get(), get(), get()) }
     single { EvolutionStore(get()) }
     single {
         val adsApi = get<AdsApi>()
