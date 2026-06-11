@@ -62,6 +62,12 @@ kotlin {
             // SQLDelight iOS Native 드라이버
             implementation(libs.sqldelight.native.driver)
         }
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.ktor.client.mock)
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }
 
