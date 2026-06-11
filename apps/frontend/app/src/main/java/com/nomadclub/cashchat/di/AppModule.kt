@@ -25,6 +25,8 @@ val appModule = module {
 
     single { ThemePreferenceStore(androidContext()) }
 
+    single { com.nomadclub.cashchat.core.data.CharacterPreferenceStore(androidContext()) }
+
     single { AuthInterceptor(get()) }
 
     single { TokenAuthenticator(get(), BuildConfig.BASE_URL) }

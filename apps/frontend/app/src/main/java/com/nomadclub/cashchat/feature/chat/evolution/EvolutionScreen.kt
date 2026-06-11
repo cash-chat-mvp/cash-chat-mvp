@@ -56,9 +56,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.rememberCoroutineScope
+import com.nomadclub.cashchat.core.data.CharacterPreferenceStore
 import com.nomadclub.cashchat.shared.core.config.FeatureFlags
 import com.nomadclub.cashchat.shared.shop.InventoryDto
 import com.nomadclub.cashchat.shared.shop.ShopApi
+import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
@@ -73,7 +77,12 @@ fun EvolutionScreen(
     onClose: () -> Unit,
     viewModel: EvolutionViewModel = koinViewModel(),
     shopApi: ShopApi = koinInject(),
+    characterStore: CharacterPreferenceStore = koinInject(),
 ) {
+    val characterName by characterStore.name.collectAsState(initial = "미래")
+    var showNameDialog by remember { mutableStateOf(false) }
+    var nameInput by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
     var inventory by remember { mutableStateOf<InventoryDto?>(null) }
     LaunchedEffect(Unit) {
         runCatching { shopApi.getInventory() }.onSuccess { inventory = it }
@@ -159,10 +168,20 @@ fun EvolutionScreen(
                         .graphicsLayer { translationX = shakeOffset.value },
                 )
                 Spacer(Modifier.height(12.dp))
-                Text(
-                    "미래 · Lv.$displayLevel ${levelNames[displayLevel] ?: ""}",
-                    style = MaterialTheme.typography.titleLarge,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "$characterName · Lv.$displayLevel ${levelNames[displayLevel] ?: ""}",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Text(
+                        " ✏️",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.clickable {
+                            nameInput = characterName
+                            showNameDialog = true
+                        },
+                    )
+                }
                 Spacer(Modifier.height(16.dp))
                 StepIndicator(current = displayLevel, total = 5)
             }
@@ -274,6 +293,29 @@ fun EvolutionScreen(
             title = { Text("진화 실패") },
             text = { Text(message) },
             confirmButton = { TextButton(onClick = { viewModel.clearError() }) { Text("확인") } },
+        )
+    }
+
+    if (showNameDialog) {
+        AlertDialog(
+            onDismissRequest = { showNameDialog = false },
+            title = { Text("이름 짓기") },
+            text = {
+                OutlinedTextField(
+                    value = nameInput,
+                    onValueChange = { if (it.length <= 10) nameInput = it },
+                    singleLine = true,
+                    label = { Text("1~10자") },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newName = nameInput
+                    showNameDialog = false
+                    scope.launch { characterStore.setName(newName) }
+                }) { Text("저장") }
+            },
+            dismissButton = { TextButton(onClick = { showNameDialog = false }) { Text("취소") } },
         )
     }
 }

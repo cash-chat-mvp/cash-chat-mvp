@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 import com.nomadclub.cashchat.ads.RewardedAdManager
+import com.nomadclub.cashchat.core.data.CharacterPreferenceStore
 import com.nomadclub.cashchat.feature.chat.components.AdGateCard
 import com.nomadclub.cashchat.feature.chat.components.EnergyGauge
 import com.nomadclub.cashchat.feature.chat.components.MessageBubble
@@ -68,8 +69,10 @@ fun ChatScreen(
     onOpenEvolution: () -> Unit,
     viewModel: ChatViewModel = koinViewModel(),
     adManager: RewardedAdManager = koinInject(),
+    characterStore: CharacterPreferenceStore = koinInject(),
 ) {
     val context = LocalContext.current
+    val characterName by characterStore.name.collectAsState(initial = "미래")
     val gateInfo by viewModel.chatStore.gateInfo.collectAsState()
     val items by viewModel.chatStore.items.collectAsState()
     val isStreaming by viewModel.chatStore.isStreaming.collectAsState()
@@ -103,7 +106,7 @@ fun ChatScreen(
                 Text("🐣", Modifier.padding(6.dp))
             }
             Column(Modifier.clickable(onClick = onOpenEvolution)) {
-                Text("미래", style = MaterialTheme.typography.titleSmall)
+                Text(characterName, style = MaterialTheme.typography.titleSmall)
                 if (hud.isLoaded) {
                     Text(
                         "Lv.${hud.level}", style = MaterialTheme.typography.labelSmall,
