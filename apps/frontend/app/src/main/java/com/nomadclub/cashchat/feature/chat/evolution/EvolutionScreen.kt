@@ -52,6 +52,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ListItem
+import com.nomadclub.cashchat.shared.core.config.FeatureFlags
 import com.nomadclub.cashchat.shared.shop.InventoryDto
 import com.nomadclub.cashchat.shared.shop.ShopApi
 import kotlin.math.cos
@@ -74,6 +79,7 @@ fun EvolutionScreen(
         runCatching { shopApi.getInventory() }.onSuccess { inventory = it }
     }
     val state by viewModel.evolutionStore.state.collectAsState()
+    val history by viewModel.evolutionStore.history.collectAsState()
     val phase by viewModel.phase.collectAsState()
     val result by viewModel.lastResult.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
@@ -202,6 +208,25 @@ fun EvolutionScreen(
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(16.dp),
                     ) { Text(if (phase == EvolutionViewModel.Phase.IDLE) "🎰 진화 시도하기" else "두근두근...") }
+
+                    // 시도 기록 타임라인 (P3-1) — 플래그 활성 시에만
+                    if (FeatureFlags.EVOLUTION_HISTORY && history.isNotEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        LazyColumn(Modifier.heightIn(max = 160.dp)) {
+                            items(history) { record ->
+                                ListItem(
+                                    leadingContent = { Text(if (record.success) "✅" else "💨") },
+                                    headlineContent = {
+                                        Text(
+                                            if (record.success) "Lv.${record.fromLevel}→${record.resultLevel} 성공!"
+                                            else "Lv.${record.fromLevel} 실패",
+                                        )
+                                    },
+                                    supportingContent = { Text("🪙${record.cost} · ${record.attemptedAt.take(10)}") },
+                                )
+                            }
+                        }
+                    }
                 }
             } ?: CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
         }

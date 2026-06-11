@@ -3,6 +3,7 @@ package com.nomadclub.cashchat.shared.evolution
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -26,6 +27,18 @@ data class EvolutionAttemptDto(
 )
 
 @Serializable
+data class EvolutionAttemptRecordDto(
+    val success: Boolean,
+    val fromLevel: Int,
+    val resultLevel: Int,
+    val cost: Long,
+    val attemptedAt: String,
+)
+
+@Serializable
+data class EvolutionAttemptsDto(val attempts: List<EvolutionAttemptRecordDto>)
+
+@Serializable
 private data class EvolutionAttemptRequest(val idempotencyKey: String)
 
 class EvolutionApi(private val client: HttpClient, private val baseUrl: String) {
@@ -39,4 +52,9 @@ class EvolutionApi(private val client: HttpClient, private val baseUrl: String) 
             contentType(ContentType.Application.Json)
             setBody(EvolutionAttemptRequest(idempotencyKey))
         }.body()
+
+    /** P3-1 — FeatureFlags.EVOLUTION_HISTORY 활성 전 호출 금지. */
+    @Throws(Exception::class)
+    suspend fun getAttempts(limit: Int = 20): EvolutionAttemptsDto =
+        client.get("$baseUrl/api/evolution/attempts") { parameter("limit", limit) }.body()
 }

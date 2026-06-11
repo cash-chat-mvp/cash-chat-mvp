@@ -14,8 +14,17 @@ class EvolutionStore(private val api: EvolutionApi) {
 
     private var currentAttemptKey: String? = null
 
+    private val _history = MutableStateFlow<List<EvolutionAttemptRecordDto>>(emptyList())
+    val history: StateFlow<List<EvolutionAttemptRecordDto>> = _history.asStateFlow()
+
     @Throws(Exception::class)
     suspend fun refresh(): EvolutionStateDto = api.getState().also { _state.value = it }
+
+    /** P3-1 — FeatureFlags.EVOLUTION_HISTORY 활성 시에만 호출. */
+    @Throws(Exception::class)
+    suspend fun refreshHistory() {
+        _history.value = api.getAttempts().attempts
+    }
 
     /** 새 시도 시작 — 새 idempotencyKey 발급 후 호출. */
     @Throws(Exception::class)

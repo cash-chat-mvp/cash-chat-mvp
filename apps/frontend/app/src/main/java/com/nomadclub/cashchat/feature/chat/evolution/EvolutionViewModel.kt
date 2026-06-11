@@ -2,6 +2,7 @@ package com.nomadclub.cashchat.feature.chat.evolution
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.nomadclub.cashchat.shared.core.config.FeatureFlags
 import com.nomadclub.cashchat.shared.core.network.ApiException
 import com.nomadclub.cashchat.shared.evolution.EvolutionAttemptDto
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
@@ -33,7 +34,12 @@ class EvolutionViewModel(
         private set
     private var skipRequested = false
 
-    init { viewModelScope.launch { runCatching { evolutionStore.refresh() } } }
+    init {
+        viewModelScope.launch {
+            runCatching { evolutionStore.refresh() }
+            if (FeatureFlags.EVOLUTION_HISTORY) runCatching { evolutionStore.refreshHistory() }
+        }
+    }
 
     fun requestSkip() { skipRequested = true }
 
