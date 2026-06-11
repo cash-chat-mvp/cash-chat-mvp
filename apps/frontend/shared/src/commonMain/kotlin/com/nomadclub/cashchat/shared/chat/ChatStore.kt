@@ -50,6 +50,12 @@ class ChatStore(
     private val _streamCompletedCount = MutableStateFlow(0)
     val streamCompletedCount: StateFlow<Int> = _streamCompletedCount.asStateFlow()
 
+    /** Ad Gate 정보 (P2-3). gate 이벤트 수신 시 채워지고, 해제 시 null. */
+    data class GateInfo(val teaserChars: Int, val rewardCoin: Int)
+
+    private val _gateInfo = MutableStateFlow<GateInfo?>(null)
+    val gateInfo: StateFlow<GateInfo?> = _gateInfo.asStateFlow()
+
     var conversationId: Long? = null
         private set
 
@@ -97,6 +103,12 @@ class ChatStore(
 
     fun dismissEnergyGate() { _energyGateVisible.value = false }
 
+    /** Ad Gate 해제 — 광고 시청 완료 후 호출 (P2-3). */
+    fun unlockGatedMessage(messageId: String) {
+        _gateInfo.value = null
+        updateAssistant(messageId) { it.copy(gated = false) }
+    }
+
     /** 스트림 단절 후 재시도 — 마지막 user 메시지를 재전송. */
     fun retryLastMessage() {
         val last = _items.value.filterIsInstance<ChatItem.UserMessage>().lastOrNull() ?: return
@@ -134,6 +146,13 @@ class ChatStore(
                         updateUser(messageId) { it.copy(status = ChatItem.SendStatus.CONFIRMED) }
                         if (assistantAdded) updateAssistant(assistantId) { it.copy(isStreaming = false) }
                         _streamCompletedCount.update { it + 1 }
+                    }
+                    is ChatStreamEvent.ProductCards -> {
+                        _items.update { it + ChatItem.ProductCards("p${currentTimeMillis()}", event.products) }
+                    }
+                    is ChatStreamEvent.Gate -> {
+                        _gateInfo.value = GateInfo(event.teaserChars, event.rewardCoin)
+                        if (assistantAdded) updateAssistant(assistantId) { it.copy(gated = true) }
                     }
                 }
             }

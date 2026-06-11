@@ -88,6 +88,7 @@ fun MessageBubble(item: ChatItem) {
                 )
             }
         }
+        is ChatItem.ProductCards -> ProductCardList(item)
         is ChatItem.AssistantMessage -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
             Surface(
                 shape = RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp),
