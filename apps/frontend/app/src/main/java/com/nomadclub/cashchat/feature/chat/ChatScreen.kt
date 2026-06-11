@@ -175,8 +175,3 @@ fun ChatScreen(
         EnergyGateBottomSheet(viewModel = viewModel)
     }
 }
-
-@Composable
-fun EnergyGateBottomSheet(viewModel: ChatViewModel) {
-    // Task 10에서 본 구현으로 교체
-}

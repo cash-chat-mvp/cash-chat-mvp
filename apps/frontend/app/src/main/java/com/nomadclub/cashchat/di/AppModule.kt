@@ -61,4 +61,7 @@ val appModule = module {
 
     // shared 데이터 레이어 (CC-348)
     single<TokenProvider> { DataStoreTokenProvider(get(), get()) }
+
+    single { com.nomadclub.cashchat.config.AppConfig.fromBuildConfig() }
+    single { com.nomadclub.cashchat.ads.RewardedAdManager(get()) }
 }
