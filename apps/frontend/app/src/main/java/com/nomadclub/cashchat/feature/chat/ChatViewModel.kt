@@ -89,4 +89,15 @@ class ChatViewModel(
     }
 
     fun dismissCheckIn() { _checkInResult.value = null }
+
+    /** Ad Gate 해제 (P2-3): nonce 발급 → 광고 표시 → 성공 시 해당 메시지 blur 해제 */
+    fun startGateUnlock(messageId: String, showAd: suspend (nonce: String) -> Boolean) {
+        viewModelScope.launch {
+            val watched = runCatching {
+                val nonce = adRewardStore.requestNonce()
+                showAd(nonce)
+            }.getOrDefault(false)
+            if (watched) chatStore.unlockGatedMessage(messageId)
+        }
+    }
 }

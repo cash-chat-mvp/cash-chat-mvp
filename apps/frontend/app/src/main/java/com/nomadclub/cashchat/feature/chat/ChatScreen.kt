@@ -43,12 +43,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import com.nomadclub.cashchat.ads.RewardedAdManager
+import com.nomadclub.cashchat.feature.chat.components.AdGateCard
 import com.nomadclub.cashchat.feature.chat.components.EnergyGauge
 import com.nomadclub.cashchat.feature.chat.components.MessageBubble
 import com.nomadclub.cashchat.feature.chat.components.StatChip
 import com.nomadclub.cashchat.feature.chat.components.TypingIndicator
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 private val suggestedQuestions = listOf("오늘 저녁 뭐 먹을까?", "가성비 이어폰 추천해줘", "영어 공부 팁 알려줘")
 
@@ -58,7 +65,10 @@ fun ChatScreen(
     onOpenConversations: () -> Unit,
     onOpenEvolution: () -> Unit,
     viewModel: ChatViewModel = koinViewModel(),
+    adManager: RewardedAdManager = koinInject(),
 ) {
+    val context = LocalContext.current
+    val gateInfo by viewModel.chatStore.gateInfo.collectAsState()
     val items by viewModel.chatStore.items.collectAsState()
     val isStreaming by viewModel.chatStore.isStreaming.collectAsState()
     val gateVisible by viewModel.chatStore.energyGateVisible.collectAsState()
@@ -144,7 +154,29 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(items, key = { it.id }) { item ->
-                        MessageBubble(item)
+                        if (item is ChatItem.AssistantMessage && item.gated && !item.isStreaming) {
+                            AdGateCard(
+                                fullText = item.text,
+                                teaserChars = gateInfo?.teaserChars ?: 80,
+                                rewardCoin = gateInfo?.rewardCoin ?: 30,
+                                onWatchAd = {
+                                    val activity = context as? Activity ?: return@AdGateCard
+                                    viewModel.startGateUnlock(item.id) { nonce ->
+                                        suspendCancellableCoroutine { continuation ->
+                                            adManager.show(
+                                                activity = activity,
+                                                nonce = nonce,
+                                                onRewarded = { },
+                                                onDismissed = { continuation.resume(true) },
+                                                onNotReady = { continuation.resume(false) },
+                                            )
+                                        }
+                                    }
+                                },
+                            )
+                        } else {
+                            MessageBubble(item)
+                        }
                         if (item is ChatItem.AssistantMessage && item.isError) {
                             TextButton(onClick = { viewModel.chatStore.retryLastMessage() }) {
                                 Text("다시 시도")
