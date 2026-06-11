@@ -19,6 +19,7 @@ import androidx.navigation.compose.rememberNavController
 import com.nomadclub.cashchat.feature.chat.ChatScreen
 import com.nomadclub.cashchat.feature.chat.ChatViewModel
 import com.nomadclub.cashchat.feature.chat.ConversationListScreen
+import com.nomadclub.cashchat.feature.chat.evolution.EvolutionScreen
 import com.nomadclub.cashchat.feature.mypage.MyPageScreen
 import org.koin.androidx.compose.koinViewModel
 import com.nomadclub.cashchat.feature.rewards.RewardsScreen
@@ -101,7 +102,9 @@ fun MainScreen(
                     },
                 )
             }
-            composable(ROUTE_EVOLUTION) { /* Task 11 */ }
+            composable(ROUTE_EVOLUTION) {
+                EvolutionScreen(onClose = { navController.popBackStack() })
+            }
             composable(MainTab.REWARDS.route) {
                 RewardsScreen(points = points, messageCount = messageCount, addPoints = addPoints)
             }
