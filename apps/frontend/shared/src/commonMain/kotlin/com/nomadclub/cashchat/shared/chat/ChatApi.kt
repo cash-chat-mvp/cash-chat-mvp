@@ -10,7 +10,9 @@ import com.nomadclub.cashchat.shared.core.network.SseParser
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.accept
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
@@ -62,6 +64,20 @@ class ChatApi(
     @Throws(Exception::class)
     suspend fun getMessages(conversationId: Long): List<ChatMessageDto> =
         client.get("$baseUrl/api/v1/chat/conversations/$conversationId/messages").body()
+
+    /** P2-1 — FeatureFlags.CONVERSATION_EDIT 활성 전 호출 금지. */
+    @Throws(Exception::class)
+    suspend fun deleteConversation(conversationId: Long) {
+        client.delete("$baseUrl/api/v1/chat/conversations/$conversationId")
+    }
+
+    /** P2-1 — FeatureFlags.CONVERSATION_EDIT 활성 전 호출 금지. */
+    @Throws(Exception::class)
+    suspend fun renameConversation(conversationId: Long, title: String): ConversationDto =
+        client.patch("$baseUrl/api/v1/chat/conversations/$conversationId") {
+            contentType(ContentType.Application.Json)
+            setBody(CreateConversationRequest(title))
+        }.body()
 
     /** SSE 스트림. message 토큰 → Token, error 이벤트 → StreamError, 정상 종료 → Done. */
     fun streamMessage(conversationId: Long, message: String): Flow<ChatStreamEvent> = flow {
