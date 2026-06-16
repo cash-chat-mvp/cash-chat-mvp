@@ -47,7 +47,9 @@ fun MainScreen(
     // CHAT 라우트와 대화 목록 라우트가 같은 인스턴스를 공유하도록 MainScreen 레벨에서 획득
     val chatViewModel: ChatViewModel = koinViewModel()
 
-    val fullScreenRoutes = setOf(MainTab.CHAT.route, ROUTE_SETTINGS, ROUTE_CONVERSATIONS, ROUTE_EVOLUTION)
+    // 채팅은 메인 탭이므로 하단 탭바를 노출해 리워드/상점/MY 접근을 유지한다.
+    // 설정·대화목록·진화 화면만 풀스크린(탭바 숨김)으로 처리한다.
+    val fullScreenRoutes = setOf(ROUTE_SETTINGS, ROUTE_CONVERSATIONS, ROUTE_EVOLUTION)
     val showBottomBar = currentDestination?.route !in fullScreenRoutes
 
     Scaffold(
