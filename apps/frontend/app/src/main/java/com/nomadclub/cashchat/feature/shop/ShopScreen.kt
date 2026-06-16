@@ -120,24 +120,28 @@ fun ShopScreen(
             )
         }
 
+        // 가변 상태(catalog)를 불변 지역값으로 캡처한다.
+        // LazyColumn items{} 빌더는 snapshot item provider로 지연 재평가되는데,
+        // 카테고리 전환 시 catalog가 null로 바뀌는 순간 catalog!! 가 NPE를 일으켰다.
+        val currentCatalog = catalog
         when {
             loadFailed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("상점을 불러오지 못했어요")
             }
-            catalog == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            currentCatalog == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-            !catalog!!.phase1Active -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            !currentCatalog.phase1Active -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("🔒 준비 중인 카테고리예요")
             }
-            catalog!!.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            currentCatalog.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("판매 중인 아이템이 없어요")
             }
             else -> LazyColumn(
                 contentPadding = PaddingValues(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(catalog!!.items.sortedBy { it.displayOrder }, key = { it.itemCode }) { item ->
+                items(currentCatalog.items.sortedBy { it.displayOrder }, key = { it.itemCode }) { item ->
                     Card(shape = RoundedCornerShape(16.dp)) {
                         Row(
                             Modifier.fillMaxWidth().padding(16.dp),
