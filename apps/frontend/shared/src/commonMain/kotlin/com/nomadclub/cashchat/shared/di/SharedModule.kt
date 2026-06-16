@@ -23,7 +23,11 @@ import org.koin.dsl.module
  * shared 데이터 레이어 Koin 모듈.
  * 사용처(Android/iOS)는 baseUrl과 TokenProvider 구현을 먼저 등록해야 한다.
  */
-fun sharedDataModule(baseUrl: String) = module {
+fun sharedDataModule(rawBaseUrl: String) = module {
+    // API 들이 "$baseUrl/api/..." 로 경로를 이어 붙이므로 끝의 '/'를 제거해
+    // "https://host//api/..." 같은 이중 슬래시(서버 401 유발)를 방지한다.
+    val baseUrl = rawBaseUrl.trimEnd('/')
+
     single { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
     single { createCashChatHttpClient(baseUrl, get<TokenProvider>()) }
 
