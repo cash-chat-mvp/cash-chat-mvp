@@ -29,7 +29,10 @@ val appModule = module {
 
     single { AuthInterceptor(get()) }
 
-    single { TokenAuthenticator(get(), BuildConfig.BASE_URL) }
+    // 토큰 refresh 전역 직렬화 락 (Retrofit ↔ Ktor 경로 공유)
+    single { com.nomadclub.cashchat.core.network.TokenRefreshGate() }
+
+    single { TokenAuthenticator(get(), BuildConfig.BASE_URL, get()) }
 
     single {
         val logging = HttpLoggingInterceptor().apply {
@@ -53,7 +56,7 @@ val appModule = module {
             .create(ApiService::class.java)
     }
 
-    single { AuthRepository(get(), get()) }
+    single { AuthRepository(get(), get(), get()) }
 
     viewModel { AuthViewModel(get()) }
 

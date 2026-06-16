@@ -2,16 +2,19 @@ package com.nomadclub.cashchat.data.repository
 
 import com.nomadclub.cashchat.core.data.TokenDataStore
 import com.nomadclub.cashchat.core.network.ApiService
+import com.nomadclub.cashchat.core.network.TokenRefreshGate
 import com.nomadclub.cashchat.shared.auth.model.AuthResponse
 import com.nomadclub.cashchat.shared.auth.model.GoogleOAuthCallbackRequest
 import com.nomadclub.cashchat.shared.auth.model.LogoutRequest
 import com.nomadclub.cashchat.shared.auth.model.TokenRefreshRequest
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.sync.withLock
 
 class AuthRepository(
     private val apiService: ApiService,
-    private val tokenDataStore: TokenDataStore
+    private val tokenDataStore: TokenDataStore,
+    private val refreshGate: TokenRefreshGate,
 ) {
     // TokenAuthenticator에서 RefreshToken도 만료된 경우 재로그인 필요를 알리는 이벤트
     private val _reAuthRequired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -37,17 +40,25 @@ class AuthRepository(
     }
 
     suspend fun refreshToken(): Result<AuthResponse> = runCatching {
-        val refreshToken = tokenDataStore.getRefreshTokenBlocking()
-            ?: error("Refresh Token 없음")
-        val response = apiService.refreshToken(TokenRefreshRequest(refreshToken))
-        if (!response.isSuccessful) {
-            tokenDataStore.clearTokens()
-            _reAuthRequired.tryEmit(Unit)
-            error("Refresh Token 만료 (${response.code()})")
+        // 공유 락으로 직렬화: TokenAuthenticator(okhttp)와 동시에 refresh 하지 않도록 보장.
+        // 락 안에서 refresh 토큰을 읽으므로, 다른 경로가 먼저 회전시켰다면 항상 최신 토큰을 사용한다.
+        refreshGate.mutex.withLock {
+            val refreshToken = tokenDataStore.getRefreshTokenBlocking()
+                ?: error("Refresh Token 없음")
+            val response = apiService.refreshToken(TokenRefreshRequest(refreshToken))
+            if (!response.isSuccessful) {
+                // 인증 만료(401/403)일 때만 세션을 비운다. 일시적 5xx/네트워크 오류로
+                // 멀쩡한 세션을 날려 재로그인을 강요하지 않도록 한다.
+                if (response.code() == 401 || response.code() == 403) {
+                    tokenDataStore.clearTokens()
+                    _reAuthRequired.tryEmit(Unit)
+                }
+                error("Refresh 실패 (${response.code()})")
+            }
+            val body = response.body() ?: error("빈 응답")
+            tokenDataStore.saveAuthResponse(body)
+            body
         }
-        val body = response.body() ?: error("빈 응답")
-        tokenDataStore.saveAuthResponse(body)
-        body
     }
 
     /**
