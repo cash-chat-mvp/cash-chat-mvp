@@ -33,4 +33,11 @@ class TnkMdChecksumVerifierTest : FunSpec({
         val forged = md5Hex("other-key" + "user-token" + "seq-1")
         verifier.isValid(params("seq-1", "user-token", forged)) shouldBe false
     }
+
+    test("blank appKey rejects everything (fail-closed)") {
+        val blankVerifier = TnkMdChecksumVerifier(TnkOfferwallProperties(appKey = ""))
+        // app_key 가 빈 값이면 공격자가 계산 가능한 해시여도 거절해야 한다.
+        val attackerHash = md5Hex("" + "user-token" + "seq-1")
+        blankVerifier.isValid(params("seq-1", "user-token", attackerHash)) shouldBe false
+    }
 })

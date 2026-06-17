@@ -14,6 +14,9 @@ class TnkMdChecksumVerifier(
     private val tnkOfferwallProperties: TnkOfferwallProperties,
 ) {
     fun isValid(params: TnkOfferwallCallbackParams): Boolean {
+        // app_key 가 비어 있으면 공격자도 동일한 해시를 계산할 수 있어 fail-open 이 된다.
+        // 시크릿 미설정 시에는 모든 콜백을 거절(fail-closed)한다.
+        if (tnkOfferwallProperties.appKey.isBlank()) return false
         val expected = md5Hex(tnkOfferwallProperties.appKey + params.mdUserNm + params.seqId)
         return expected.equals(params.mdChk, ignoreCase = true)
     }
