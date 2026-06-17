@@ -23,6 +23,7 @@ import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.LinkedMultiValueMap
@@ -51,7 +52,9 @@ class AuthService(
 ) {
 
     private val extractorMap = oAuthUserInfoExtractors.associateBy { it.providerType }
-    private val transactionTemplate = TransactionTemplate(transactionManager)
+    private val transactionTemplate = TransactionTemplate(transactionManager).apply {
+        propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+    }
 
     @Transactional
     fun loginAsGuest(deviceToken: String): AuthResponse {
@@ -133,10 +136,12 @@ class AuthService(
         providerType: AuthProviderType,
         deviceToken: String?
     ): AuthResponse =
-        transactionTemplate.execute {
-            val user = lookupOrRegisterUser(userInfo, providerType, deviceToken)
-            buildAuthResponse(user)
-        } ?: error("Failed to persist OAuth login")
+        checkNotNull(
+            transactionTemplate.execute {
+                val user = lookupOrRegisterUser(userInfo, providerType, deviceToken)
+                buildAuthResponse(user)
+            }
+        ) { "Failed to persist OAuth login: transaction returned null" }
 
     // -- Exchange Auth Code For Access Token
     // -- & Fetch User Info From Open Authentication Provider
