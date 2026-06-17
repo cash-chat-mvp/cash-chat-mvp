@@ -36,6 +36,12 @@ app:
       coin-amount: ${APP_ADS_REWARD_COIN_AMOUNT:40}
       daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}
       nonce-ttl: ${APP_ADS_REWARD_NONCE_TTL:10m}
+  offerwall:
+    tnk:
+      app-key: ${APP_OFFERWALL_TNK_APP_KEY:}
+      point-to-coin-ratio: ${APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO:1.0}
+      ack:
+        success-body: ${APP_OFFERWALL_TNK_ACK_SUCCESS_BODY:SUCCESS}
   energy:
     max-energy: 50
     signup-bonus: 50

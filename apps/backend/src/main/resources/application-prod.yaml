@@ -12,6 +12,9 @@ app:
   ads:
     google:
       rewarded-ad-unit-id: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID}
+  offerwall:
+    tnk:
+      app-key: ${APP_OFFERWALL_TNK_APP_KEY}
 
 # O-Auth: production client registered in Google Cloud Console
 oauth:
