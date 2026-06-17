@@ -194,15 +194,17 @@ sequenceDiagram
 | `point-to-coin-ratio` | `1.0` | `pay_pnt → 코인` 환산비 |
 | `ack.success-body` | `SUCCESS` | TNK 성공 ack 본문(상수 분리, 검증 후 조정) |
 
-## 검증 필요 항목 (TODO — TNK 확인 필요)
+## 검증 항목 (TNK Android SDK 가이드로 확인 완료)
 
-TNK SDK README(Android/iOS)에 미명시된 항목으로, TNK 콘솔 또는 담당자(platform@tnkfactory.com) 확인 후 확정한다.
+[tnk_sdk_rwd_br Android_Guide.md](https://github.com/tnkfactory/tnk_sdk_rwd_br)의 "자체 서버 포인트 관리" 콜백 규격으로 아래를 확인했다. **현재 구현이 모두 일치하여 코드 변경 불필요.**
 
-- [ ] 포스트백 HTTP 메서드(POST 가정) 및 파라미터 전달 방식(query vs body)
-- [ ] **(프로덕션 출시 블로커)** `md_chk` 정확한 산식 — 연결 순서·구분자·대소문자·인코딩 (현재 가정: `MD5(appKey + md_user_nm + seq_id)`, lowercase hex). **특히 `pay_pnt`(적립액)가 서명 페이로드에 포함되는지 반드시 확인** — 현재 가정 산식은 `pay_pnt`를 검증하지 않으므로, 유효한 `md_chk`를 만들 수 있는 주체가 `pay_pnt`를 임의 변조하면 그대로 적립된다. TNK 실제 산식에 `pay_pnt`가 포함되면 `TnkMdChecksumVerifier`를 출시 전 반드시 갱신.
-- [ ] TNK가 기대하는 정확한 성공/실패 ack 본문·HTTP 상태코드 (현재 가정: 200 + `SUCCESS`)
-- [ ] 취소/환수 콜백의 존재 여부 및 규격 (존재 시 D3 후속 자동화 범위에서 처리)
-- [ ] dev/prod 콜백 URL 등록 및 `app-key` 발급(TNK 콘솔)
+- [x] **포스트백 HTTP 메서드** — "호출방식: HTTP POST". 구현 일치(`@PostMapping` + `@RequestParam`, query/form 모두 바인딩).
+- [x] **`md_chk` 산식** — 원문 "`app_key + md_user_nm + seq_id`의 MD5 Hash", 예제 `DigestUtils.md5Hex(appKey + mdUserName + seqId)`. `TnkMdChecksumVerifier`의 `MD5(appKey + mdUserNm + seqId)` lowercase hex와 정확히 일치. **`pay_pnt`는 해시에 포함되지 않음(TNK 표준 설계)** — 따라서 적립액 무결성은 `app_key` 비밀성 + TNK S2S 채널에 의존한다(앱 결함 아님). app_key 노출 시 재발급 필요.
+- [x] **성공 응답** — "HTTP 리턴코드 200이면 정상 처리로 판단"(본문 형식 미지정). 구현은 `200 OK` 반환으로 충족(`SUCCESS` 본문은 무해한 부가값).
+- [x] **중복 처리** — "seq_id로 반드시 중복체크". `seq_id` UNIQUE + 멱등키 `tnk:offerwall:{seq_id}`로 충족.
+- [x] **취소/환수 콜백** — Android 가이드에 적립 콜백만 존재, 차감/취소 콜백 **언급 없음**. 따라서 "기록만"(D3) 범위로 충분.
+- [ ] **콜백 추가 파라미터** — TNK는 `app_id, pay_dt, app_nm, pay_amt, actn_id`도 전송. 현재는 무시(필요 4개만 사용). 감사 강화를 위해 `actn_id`(0 설치형/1 실행형/…)·`app_nm` 등을 ledger에 추가 기록하는 것은 후속 선택사항.
+- [ ] dev/prod 콜백 URL 등록 및 `app-key`(=TNK 콘솔 APP KEY) 시크릿 주입 — 콜백 URL: `https://cashchat.duckdns.org/api/offerwall/tnk/callback`, TNK 콘솔 `매체관리 > 기본설정 > 무료충전소 > 포인트 관리(자체서버에서 관리) > URL`에 등록.
 
 ## 범위 외 (Out Of Scope)
 
