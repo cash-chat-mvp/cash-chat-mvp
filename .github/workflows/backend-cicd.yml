@@ -104,6 +104,7 @@ jobs:
           APP_SWAGGER_ENABLED: ${{ secrets.APP_SWAGGER_ENABLED }}
           APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID }}
           APP_OFFERWALL_TNK_APP_KEY: ${{ secrets.APP_OFFERWALL_TNK_APP_KEY }}
+          APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO: ${{ secrets.APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO }}
           SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
           SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
           SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
@@ -179,6 +180,7 @@ jobs:
             write_env "APP_SWAGGER_ENABLED" "${SWAGGER_ENABLED}"
             write_env "APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID" "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID}"
             write_env "APP_OFFERWALL_TNK_APP_KEY" "${APP_OFFERWALL_TNK_APP_KEY}"
+            write_env "APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO" "${APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO}"
           } > infra/deploy/backend/.deploy.env
 
       - name: Upload compose files to server
