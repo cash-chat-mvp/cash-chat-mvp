@@ -9,7 +9,9 @@ data class SseEvent(val event: String, val data: String)
  */
 class SseParser {
     private var eventType: String? = null
-    private var data: String? = null
+    // SSE 표준: 한 이벤트에 data 라인이 여러 개면 \n으로 이어 붙인다. data에 줄바꿈이 든
+    // 경우(예: LLM 마크다운 응답) 여러 data 라인으로 인코딩되므로 덮어쓰지 않고 누적해야 한다.
+    private val dataLines = mutableListOf<String>()
 
     /** 라인 1개를 소비하고, 이벤트가 완성되면 반환(아니면 null). */
     fun feed(line: String): SseEvent? {
@@ -19,13 +21,14 @@ class SseParser {
                 null
             }
             line.startsWith("data:") -> {
-                data = line.removePrefix("data:").removePrefix(" ")
+                dataLines.add(line.removePrefix("data:").removePrefix(" "))
                 null
             }
             line.isBlank() -> {
-                val completed = data?.let { SseEvent(eventType ?: "message", it) }
+                val completed = if (dataLines.isEmpty()) null
+                else SseEvent(eventType ?: "message", dataLines.joinToString("\n"))
                 eventType = null
-                data = null
+                dataLines.clear()
                 completed
             }
             else -> null // comment 등 무시

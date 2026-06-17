@@ -39,4 +39,12 @@ class SseParserTest {
         val events = parseAll("event: message\ndata: \n\n")
         assertEquals(listOf(SseEvent("message", "")), events)
     }
+
+    @Test
+    fun `여러 data 라인은 줄바꿈으로 이어 붙인다`() {
+        // SSE 표준: data에 \n이 포함되면 여러 data 라인으로 인코딩되고, 수신 측은 \n으로 재결합한다.
+        // (예: LLM이 "추천해드릴게요.\n\n1. 비빔밥" 청크를 보내는 경우)
+        val events = parseAll("event: message\ndata: 추천해드릴게요.\ndata:\ndata: 1. 비빔밥\n\n")
+        assertEquals(listOf(SseEvent("message", "추천해드릴게요.\n\n1. 비빔밥")), events)
+    }
 }
