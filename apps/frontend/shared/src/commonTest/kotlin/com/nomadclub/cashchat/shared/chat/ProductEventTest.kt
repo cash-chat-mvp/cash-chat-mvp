@@ -28,8 +28,8 @@ private fun chatApiWithMockSse(sse: String): ChatApi {
 class ProductEventTest {
     @Test
     fun `product 이벤트를 ProductCards로 파싱한다`() = runTest {
-        val sse = "event: message\ndata: 추천드려요\n\n" +
-            "event: product\ndata: {\"products\":[{\"title\":\"버즈3\",\"price\":149000,\"rating\":4.7,\"reviewCount\":32000,\"imageUrl\":\"https://i\",\"trackingUrl\":\"https://t\"}]}\n\n"
+        val sse = "event:message\ndata:추천드려요\n\n" +
+            "event:product\ndata:{\"products\":[{\"title\":\"버즈3\",\"price\":149000,\"rating\":4.7,\"reviewCount\":32000,\"imageUrl\":\"https://i\",\"trackingUrl\":\"https://t\"}]}\n\n"
         val api = chatApiWithMockSse(sse)
         val events = api.streamMessage(7, "hi").toList()
         val productEvent = events.filterIsInstance<ChatStreamEvent.ProductCards>().single()

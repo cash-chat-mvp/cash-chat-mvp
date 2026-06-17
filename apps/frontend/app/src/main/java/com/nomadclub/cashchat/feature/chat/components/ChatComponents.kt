@@ -27,8 +27,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.m3.Markdown
+import com.mikepenz.markdown.m3.markdownColor
+import com.mikepenz.markdown.m3.markdownTypography
+import com.mikepenz.markdown.model.markdownPadding
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
 
 /** 코인/밥 공용 칩 */
@@ -99,9 +104,7 @@ fun MessageBubble(item: ChatItem) {
                     if (item.text.isNotEmpty()) {
                         // LLM 응답은 마크다운(굵게/목록/제목/코드 등)으로 오므로 렌더링해 보여준다.
                         // 스트리밍 커서 ▍는 마크다운 특수문자가 아니라 그대로 인라인 표시된다.
-                        Markdown(
-                            content = item.text + if (item.isStreaming) " ▍" else "",
-                        )
+                        AssistantMarkdown(item.text + if (item.isStreaming) " ▍" else "")
                     }
                     if (item.isError) {
                         Text(
@@ -114,6 +117,47 @@ fun MessageBubble(item: ChatItem) {
             }
         }
     }
+}
+
+/**
+ * 채팅 버블용 마크다운 렌더링.
+ * 기본 M3 마크다운은 h1=displaySmall(~36sp) 등 헤딩이 버블에 비해 지나치게 크고 블록 간격이 거의
+ * 없어 "글 덩어리"처럼 보인다. 헤딩을 title 계열로 축소하고, 본문/리스트를 bodyMedium 로 통일하며,
+ * 색은 surfaceVariant 버블에 맞는 onSurfaceVariant 로, 블록·리스트 간 간격을 줘서 구조가 보이게 한다.
+ */
+@Composable
+private fun AssistantMarkdown(content: String) {
+    val onColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val body = MaterialTheme.typography.bodyMedium
+    Markdown(
+        content = content,
+        colors = markdownColor(
+            text = onColor,
+            linkText = MaterialTheme.colorScheme.primary,
+            codeText = onColor,
+            inlineCodeText = onColor,
+            codeBackground = MaterialTheme.colorScheme.surface,
+            inlineCodeBackground = MaterialTheme.colorScheme.surface,
+            dividerColor = MaterialTheme.colorScheme.outlineVariant,
+        ),
+        typography = markdownTypography(
+            h1 = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            h2 = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            h3 = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            h4 = body.copy(fontWeight = FontWeight.Bold),
+            h5 = body.copy(fontWeight = FontWeight.Bold),
+            h6 = body.copy(fontWeight = FontWeight.Bold),
+            text = body,
+            paragraph = body,
+            ordered = body,
+            bullet = body,
+            list = body,
+            quote = body.copy(color = onColor.copy(alpha = 0.85f)),
+            code = body.copy(fontFamily = FontFamily.Monospace),
+            inlineCode = body.copy(fontFamily = FontFamily.Monospace),
+        ),
+        padding = markdownPadding(block = 8.dp, list = 4.dp, listItemBottom = 4.dp),
+    )
 }
 
 /** 타이핑 인디케이터 (점 3개) */

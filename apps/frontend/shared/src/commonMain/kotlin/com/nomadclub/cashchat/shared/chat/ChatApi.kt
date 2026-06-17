@@ -6,6 +6,7 @@ import com.nomadclub.cashchat.shared.chat.model.ConversationDto
 import com.nomadclub.cashchat.shared.chat.model.ConversationSummaryDto
 import com.nomadclub.cashchat.shared.chat.model.CreateConversationRequest
 import com.nomadclub.cashchat.shared.chat.model.ProductDto
+import com.nomadclub.cashchat.shared.core.network.SseEvent
 import com.nomadclub.cashchat.shared.core.network.SseParser
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -89,9 +90,7 @@ class ChatApi(
             val channel = response.bodyAsChannel()
             val parser = SseParser()
             var errored = false
-            while (!channel.isClosedForRead) {
-                val line = channel.readUTF8Line() ?: break
-                val event = parser.feed(line) ?: continue
+            suspend fun dispatch(event: SseEvent) {
                 when (event.event) {
                     "error" -> { errored = true; emit(ChatStreamEvent.StreamError(event.data)) }
                     "product" -> emit(ChatStreamEvent.ProductCards(sseJson.decodeFromString<ProductPayload>(event.data).products))
@@ -102,6 +101,12 @@ class ChatApi(
                     else -> emit(ChatStreamEvent.Token(event.data))
                 }
             }
+            while (!channel.isClosedForRead) {
+                val line = channel.readUTF8Line() ?: break
+                dispatch(parser.feed(line) ?: continue)
+            }
+            // 종결 빈 줄 없이 끊긴 마지막 이벤트(토큰/에러)를 유실하지 않도록 flush.
+            parser.flush()?.let { dispatch(it) }
             if (!errored) emit(ChatStreamEvent.Done)
         }
     }

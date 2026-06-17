@@ -40,7 +40,7 @@ class ChatApiTest {
 
     @Test
     fun `스트림은 message 토큰을 Flow로 흘린다`() = runTest {
-        val sse = "event: message\ndata: 안녕\n\nevent: message\ndata: 하세요\n\n"
+        val sse = "event:message\ndata:안녕\n\nevent:message\ndata:하세요\n\n"
         val engine = MockEngine {
             respond(sse, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/event-stream"))
         }
@@ -61,7 +61,7 @@ class ChatApiTest {
 
     @Test
     fun `error 이벤트는 StreamError로 매핑된다`() = runTest {
-        val sse = "event: message\ndata: 부분\n\nevent: error\ndata: stream failed\n\n"
+        val sse = "event:message\ndata:부분\n\nevent:error\ndata:stream failed\n\n"
         val engine = MockEngine {
             respond(sse, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/event-stream"))
         }

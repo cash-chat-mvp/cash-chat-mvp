@@ -21,17 +21,29 @@ class SseParser {
                 null
             }
             line.startsWith("data:") -> {
-                dataLines.add(line.removePrefix("data:").removePrefix(" "))
+                // "data:" 뒤 내용을 그대로 누적한다. 백엔드(Spring ServerSentEvent)는 `data:`에 SSE
+                // 표준의 선택적 framing 공백을 붙이지 않고 토큰을 그대로 내보내므로(예: `data: 좋은`의
+                // 공백은 단어 경계인 콘텐츠 공백), 여기서 선행 공백을 제거하면 단어 사이 띄어쓰기가 사라진다.
+                dataLines.add(line.removePrefix("data:"))
                 null
             }
-            line.isBlank() -> {
-                val completed = if (dataLines.isEmpty()) null
-                else SseEvent(eventType ?: "message", dataLines.joinToString("\n"))
-                eventType = null
-                dataLines.clear()
-                completed
-            }
+            line.isBlank() -> takeCompleted()
             else -> null // comment 등 무시
         }
+    }
+
+    /**
+     * 스트림 종료(EOF) 시 호출. 마지막 이벤트가 종결 빈 줄 없이 끊긴 경우, 누적된 data 라인을
+     * 마지막 이벤트로 반환한다. 없으면 null. 이걸 호출하지 않으면 종결 빈 줄이 도착하기 전에
+     * 연결이 끊긴 스트림의 마지막 토큰이 유실된다.
+     */
+    fun flush(): SseEvent? = takeCompleted()
+
+    private fun takeCompleted(): SseEvent? {
+        val completed = if (dataLines.isEmpty()) null
+        else SseEvent(eventType ?: "message", dataLines.joinToString("\n"))
+        eventType = null
+        dataLines.clear()
+        return completed
     }
 }
