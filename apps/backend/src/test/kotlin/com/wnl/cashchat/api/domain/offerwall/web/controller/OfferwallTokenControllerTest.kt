@@ -2,7 +2,9 @@ package com.wnl.cashchat.api.domain.offerwall.web.controller
 
 import com.wnl.cashchat.api.common.security.config.SecurityConfig
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
+import com.wnl.cashchat.api.domain.offerwall.properties.TnkOfferwallProperties
 import com.wnl.cashchat.api.domain.offerwall.service.OfferwallUserTokenService
+import com.wnl.cashchat.api.domain.offerwall.service.TnkOfferwallService
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.extensions.spring.SpringExtension
 import org.mockito.kotlin.whenever
@@ -29,6 +31,8 @@ class OfferwallTokenControllerTest : FunSpec() {
     @Autowired private lateinit var mockMvc: MockMvc
 
     @MockitoBean private lateinit var offerwallUserTokenService: OfferwallUserTokenService
+    @MockitoBean private lateinit var tnkOfferwallService: TnkOfferwallService
+    @MockitoBean private lateinit var tnkOfferwallProperties: TnkOfferwallProperties
     @MockitoBean private lateinit var jwtTokenHandler: JwtTokenHandler
     @MockitoBean private lateinit var jpaMetamodelMappingContext: JpaMetamodelMappingContext
 
