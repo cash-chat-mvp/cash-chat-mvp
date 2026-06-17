@@ -8,8 +8,9 @@ import com.wnl.cashchat.api.domain.point.service.UserPointService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.Instant
-import kotlin.math.floor
 
 /**
  * TNK 서버 포스트백을 검증·적립한다. 단일 @Transactional 안에서
@@ -63,7 +64,7 @@ class TnkOfferwallService(
             return TnkOfferwallStatus.REJECTED_UNKNOWN_USER
         }
 
-        val coinAmount = floor(params.payPnt.toDouble() * tnkOfferwallProperties.pointToCoinRatio).toLong()
+        val coinAmount = toCoinAmount(params.payPnt, tnkOfferwallProperties.pointToCoinRatio)
         userPointService.recordTransaction(
             userId = userId,
             delta = coinAmount,
@@ -74,3 +75,13 @@ class TnkOfferwallService(
         return TnkOfferwallStatus.GRANTED
     }
 }
+
+/**
+ * pay_pnt × 환산비를 코인으로 환산한다. Double 곱셈은 정밀도 손실(예: 50 × 0.58 = 28.999…)로
+ * floor 시 1코인 적게 적립될 수 있으므로 BigDecimal + RoundingMode.FLOOR 로 계산한다.
+ */
+internal fun toCoinAmount(payPnt: Long, ratio: Double): Long =
+    BigDecimal.valueOf(payPnt)
+        .multiply(BigDecimal.valueOf(ratio))
+        .setScale(0, RoundingMode.FLOOR)
+        .toLong()
