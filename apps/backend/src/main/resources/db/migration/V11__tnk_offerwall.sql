@@ -22,6 +22,8 @@ CREATE TABLE tnk_offerwall_callbacks (
     created_at  TIMESTAMP(6) NOT NULL,
     updated_at  TIMESTAMP(6) NOT NULL,
     PRIMARY KEY (id),
-    CONSTRAINT uk_tnk_offerwall_callbacks_seq_id UNIQUE (seq_id)
+    CONSTRAINT uk_tnk_offerwall_callbacks_seq_id UNIQUE (seq_id),
+    -- user_id 는 미지 토큰 시 NULL 허용. 값이 있으면 반드시 유효한 사용자를 참조한다.
+    CONSTRAINT fk_tnk_offerwall_callbacks_user FOREIGN KEY (user_id) REFERENCES users (id)
 );
 CREATE INDEX idx_tnk_offerwall_callbacks_user_id ON tnk_offerwall_callbacks (user_id);
