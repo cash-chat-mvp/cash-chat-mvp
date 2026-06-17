@@ -64,12 +64,13 @@ class ChatViewModel(
     fun startAdReward(showAd: suspend (nonce: String) -> Boolean) {
         viewModelScope.launch {
             _rewardPhase.value = RewardPhase.SHOWING_AD
-            val baseline = hudStore.state.value.energy
             val result = runCatching {
+                // 광고 표시 직전의 보상 적립 횟수를 baseline 으로 잡고, 광고 후 usedToday 증가로만 적립을 판정한다.
+                val baselineUsed = adRewardStore.refreshQuota().usedToday
                 val nonce = adRewardStore.requestNonce()
                 if (!showAd(nonce)) return@runCatching false
                 _rewardPhase.value = RewardPhase.POLLING
-                adRewardStore.awaitRewardApplied(baseline)
+                adRewardStore.awaitRewardApplied(baselineUsed)
             }.getOrDefault(false)
 
             runCatching { hudStore.refreshEnergyOnly() }

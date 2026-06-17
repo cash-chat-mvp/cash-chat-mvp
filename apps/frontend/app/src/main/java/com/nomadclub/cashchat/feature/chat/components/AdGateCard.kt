@@ -23,8 +23,10 @@ fun AdGateCard(
     rewardCoin: Int,
     onWatchAd: () -> Unit,
 ) {
-    val teaser = fullText.take(teaserChars)
-    val hidden = fullText.drop(teaserChars)
+    // 서버가 음수/과대 값을 보내도 take/drop 이 IllegalArgumentException 을 던지지 않도록 클램프.
+    val safeTeaser = teaserChars.coerceIn(0, fullText.length)
+    val teaser = fullText.take(safeTeaser)
+    val hidden = fullText.drop(safeTeaser)
     Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(Modifier.padding(14.dp)) {
             Text(teaser, style = MaterialTheme.typography.bodyMedium)

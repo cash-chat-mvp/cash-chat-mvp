@@ -46,11 +46,9 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single { EvolutionStore(get()) }
     single {
         val adsApi = get<AdsApi>()
-        val energyApi = get<EnergyApi>()
         AdRewardStore(
             fetchQuota = { adsApi.getQuota() },
             issueNonce = { adsApi.issueNonce() },
-            fetchEnergy = { energyApi.getMyEnergy() },
             scope = get(),
         )
     }

@@ -62,7 +62,7 @@ class ChatStoreTest {
     }
 
     @Test
-    fun `에너지 부족 - pending 유지 + 게이트 이벤트 발행, 확정 저장 안 함`() = runTest {
+    fun `에너지 부족 - pending 유지 + 게이트 이벤트 발행 + 확정 저장 안 함`() = runTest {
         val gateway = FakeChatGateway()
         gateway.streamResult = {
             throw ApiException(ApiException.INSUFFICIENT_ENERGY, "에너지 부족", 409)

@@ -93,6 +93,7 @@ class ChatStore(
 
     /** 게이트에서 충전 완료 후 호출 — 막힌 메시지를 같은 대화방으로 재전송. */
     fun retryBlocked() {
+        if (_isStreaming.value) return
         val id = blockedMessageId ?: return
         val message = _items.value.filterIsInstance<ChatItem.UserMessage>().firstOrNull { it.id == id } ?: return
         blockedMessageId = null
@@ -111,6 +112,7 @@ class ChatStore(
 
     /** 스트림 단절 후 재시도 — 마지막 user 메시지를 재전송. */
     fun retryLastMessage() {
+        if (_isStreaming.value) return
         val last = _items.value.filterIsInstance<ChatItem.UserMessage>().lastOrNull() ?: return
         _items.update { items -> items.filterNot { it is ChatItem.AssistantMessage && it.isError } }
         scope.launch { stream(last.id, last.text) }

@@ -1,6 +1,5 @@
 package com.nomadclub.cashchat.shared.ads
 
-import com.nomadclub.cashchat.shared.energy.EnergyDto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +15,6 @@ import kotlinx.coroutines.flow.asStateFlow
 class AdRewardStore(
     private val fetchQuota: suspend () -> AdRewardQuotaDto,
     private val issueNonce: suspend () -> IssueNonceDto,
-    private val fetchEnergy: suspend () -> EnergyDto,
     private val scope: CoroutineScope,
     private val pollDelaysMillis: List<Long> = listOf(2_000, 3_000, 5_000, 8_000, 12_000),
 ) {
@@ -30,15 +28,18 @@ class AdRewardStore(
     suspend fun requestNonce(): String = issueNonce().nonce
 
     /**
-     * 광고 닫힌 뒤 호출. baseline 대비 에너지 증가가 관측되면 true.
+     * 광고 닫힌 뒤 호출. baseline 대비 **광고 보상 적립 횟수(usedToday)** 증가가 관측되면 true.
+     * 에너지 증가가 아니라 quota 의 usedToday 로 판정하는 이유: 에너지는 패시브 자동회복으로도
+     * 늘어나므로(자동회복 카운트다운), 광고를 보지 않아도 폴링 구간에 회복 1틱이 끼면 보상 성공으로
+     * 오인된다. usedToday 는 서버가 SSV 콜백으로 보상을 적립할 때만 증가하므로 광고 보상만 정확히 격리한다.
      * 즉시 1회 + 백오프 간격마다 1회(총 6회) 조회, 끝까지 변동 없으면 false → UI는 "보상 확인 중" + 수동 새로고침 안내.
      */
     @Throws(Exception::class)
-    suspend fun awaitRewardApplied(baselineEnergy: Int): Boolean {
+    suspend fun awaitRewardApplied(baselineUsedToday: Int): Boolean {
         repeat(pollDelaysMillis.size + 1) { attempt ->
             if (attempt > 0) delay(pollDelaysMillis[attempt - 1])
-            val energy = fetchEnergy()
-            if (energy.energy > baselineEnergy) return true
+            val quota = fetchQuota().also { _quota.value = it }
+            if (quota.usedToday > baselineUsedToday) return true
         }
         return false
     }

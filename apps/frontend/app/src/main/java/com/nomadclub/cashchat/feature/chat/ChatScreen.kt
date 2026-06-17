@@ -38,7 +38,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nomadclub.cashchat.ads.RewardedAdManager
 import com.nomadclub.cashchat.core.data.CharacterPreferenceStore
 import com.nomadclub.cashchat.feature.chat.components.AdGateCard
@@ -76,20 +76,25 @@ fun ChatScreen(
     characterStore: CharacterPreferenceStore = koinInject(),
 ) {
     val context = LocalContext.current
-    val characterName by characterStore.name.collectAsState(initial = "미래")
-    val gateInfo by viewModel.chatStore.gateInfo.collectAsState()
-    val items by viewModel.chatStore.items.collectAsState()
-    val isStreaming by viewModel.chatStore.isStreaming.collectAsState()
-    val gateVisible by viewModel.chatStore.energyGateVisible.collectAsState()
-    val hud by viewModel.hudStore.state.collectAsState()
-    val attendance by viewModel.attendance.collectAsState()
-    val checkInResult by viewModel.checkInResult.collectAsState()
+    val characterName by characterStore.name.collectAsStateWithLifecycle(initialValue = "미래")
+    val gateInfo by viewModel.chatStore.gateInfo.collectAsStateWithLifecycle()
+    val items by viewModel.chatStore.items.collectAsStateWithLifecycle()
+    val isStreaming by viewModel.chatStore.isStreaming.collectAsStateWithLifecycle()
+    val gateVisible by viewModel.chatStore.energyGateVisible.collectAsStateWithLifecycle()
+    val hud by viewModel.hudStore.state.collectAsStateWithLifecycle()
+    val attendance by viewModel.attendance.collectAsStateWithLifecycle()
+    val checkInResult by viewModel.checkInResult.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
     var showAttendance by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    LaunchedEffect(items.size, (items.lastOrNull() as? ChatItem.AssistantMessage)?.text?.length) {
-        if (items.isNotEmpty()) listState.animateScrollToItem(items.lastIndex)
+    // 새 메시지가 추가되면(아이템 수 변화) 맨 아래로 스크롤. 스트리밍 중 토큰마다 길어지는 본문은
+    // animateScrollToItem 을 매번 재시작하면 애니메이션이 끊겨 jank 가 생기므로 즉시 스크롤로 따라간다.
+    val lastAssistantLen = (items.lastOrNull() as? ChatItem.AssistantMessage)?.text?.length
+    LaunchedEffect(items.size, lastAssistantLen) {
+        if (items.isEmpty()) return@LaunchedEffect
+        if (isStreaming) listState.scrollToItem(items.lastIndex)
+        else listState.animateScrollToItem(items.lastIndex)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -299,7 +304,9 @@ private fun shareConversation(context: android.content.Context, items: List<Chat
 private fun RecoveryCountdown(nextRecoverAtIso: String, onFinished: () -> Unit) {
     var remainText by remember { mutableStateOf("") }
     LaunchedEffect(nextRecoverAtIso) {
-        val target = java.time.Instant.parse(nextRecoverAtIso).toEpochMilli()
+        // 서버 타임스탬프 포맷이 예상과 다르면 parse 가 던지며 화면이 크래시하므로 방어한다.
+        val target = runCatching { java.time.Instant.parse(nextRecoverAtIso).toEpochMilli() }
+            .getOrElse { return@LaunchedEffect }
         while (true) {
             val remainSec = ((target - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
             remainText = "%d:%02d 후 ⚡회복".format(remainSec / 60, remainSec % 60)
