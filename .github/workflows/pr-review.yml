@@ -11,8 +11,12 @@ on:
   pull_request_review_comment:
     types: [created]
 
+# 안정성(#3.3): 기본은 "작성자 개인키"를 쓰고 공용키는 429 폴백 전용이므로, 서로 다른 PR은
+# 개인키로 병렬 실행해도 공용키 경합이 없다 → PR별로만 직렬화(동일 PR의 리뷰·요약·명령은
+# 같은 개인키를 동시 호출하지 않도록 한 줄로 처리). 일반 PR 의 제목/본문(describe job)도
+# 이 워크플로 안에서 같은 group 으로 직렬화되어, opened 시 describe→auto-review 순으로 실행된다.
 concurrency:
-  group: pr-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: gemini-pr-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: false
 
 permissions:
@@ -126,12 +130,226 @@ jobs:
           echo "::notice::Gemini 모델 — 리뷰: $MODEL0 / 대화: $MODEL1"
 
   # ====================================================
+  # 일반 PR 제목/디스크립션 자동화 (opened 전용, 직렬화의 첫 단계)
+  #   같은 run 안에서 describe → auto-review 순으로 실행되어 동시성 그룹을
+  #   통째로 점유 → 이후 push/comment run 이 describe 를 취소하지 못한다.
+  #   릴리즈 PR(base release/*)은 이 워크플로 자체가 트리거되지 않음(branches:[dev]).
+  # ====================================================
+  describe:
+    name: PR Describe (title + body)
+    needs: resolve-gemini-model
+    if: github.event_name == 'pull_request_target' && github.event.action == 'opened'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout (scripts)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Get Commit List
+        id: commits
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch --no-tags origin "pull/${PR_NUMBER}/head:pr-${PR_NUMBER}-head"
+
+          # PR 범위만 조회. 실패 시 무관한 base 브랜치 커밋을 노출하지 않도록 빈 값으로 둔다.
+          COMMITS=$(git log "origin/${BASE_REF}..pr-${PR_NUMBER}-head" \
+            --no-merges \
+            --pretty=format:"- %s (%h)" 2>/dev/null || true)
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- 커밋 내역 없음"
+          fi
+
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "commits<<$EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "$EOF" >> $GITHUB_OUTPUT
+
+      - name: Get Diff
+        id: diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          RANGE="origin/${BASE_REF}...pr-${PR_NUMBER}-head"
+          EXCLUDES=(':(exclude)**/*.lock' ':(exclude)**/*.lockb' ':(exclude)**/package-lock.json'
+                    ':(exclude)**/*.png' ':(exclude)**/*.jpg' ':(exclude)**/*.jpeg' ':(exclude)**/*.webp'
+                    ':(exclude)**/*.pdf' ':(exclude)**/*.svg' ':(exclude)**/build/**' ':(exclude)**/dist/**'
+                    ':(exclude)**/*.xcworkspacedata' ':(exclude)**/*.pbxproj')
+          DIFFSTAT=$(git diff --stat "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | tail -60 || true)
+          [ -z "$DIFFSTAT" ] && DIFFSTAT="(변경 통계 없음)"
+          DIFF=$(git diff --no-color -U2 "$RANGE" -- "${EXCLUDES[@]}" 2>/dev/null | head -c 12000 || true)
+          [ -z "$DIFF" ] && DIFF="(diff 없음)"
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          {
+            echo "diffstat<<$EOF"; echo "$DIFFSTAT"; echo "$EOF"
+            echo "diff<<$EOF"; echo "$DIFF"; echo "$EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve author key
+        id: whichkey
+        env:
+          LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_keys.sh
+          echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
+
+      - name: AI Summary
+        id: ai
+        env:
+          MAPPED_KEY:  ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          MODEL1:      ${{ needs.resolve-gemini-model.outputs.model1 }}
+          COMMITS:     ${{ steps.commits.outputs.commits }}
+          DIFFSTAT:    ${{ steps.diff.outputs.diffstat }}
+          DIFF:        ${{ steps.diff.outputs.diff }}
+          PR_TITLE:    ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_ai.sh
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 작성자 개인키 우선, 없으면 공용키
+          MODEL="${MODEL1#gemini/}"                   # resolve 출력의 gemini/ prefix 제거
+          SUMMARY=""
+          if [ -n "$PRIMARY_KEY" ] && [ -n "${COMMITS:-}" ]; then
+            PROMPT=$(jq -rn \
+              --arg t "${PR_TITLE:-}" --arg c "$COMMITS" --arg s "${DIFFSTAT:-}" --arg d "${DIFF:-}" \
+              '"당신은 시니어 리뷰어입니다. 아래 PR 제목·커밋·변경통계·실제 diff를 근거로, 리뷰어가 30초 만에 맥락을 잡도록 한국어 마크다운 요약을 작성하세요.\n\n반드시 아래 형식을 그대로 따르세요(불릿은 각 1~3개, 근거 없는 추측·일반론·파일명 나열 금지):\n\n**한 줄 요약**: (이 PR이 무엇을 하는지 한 문장)\n\n**주요 변경**\n- (핵심 동작/구조 변경을 결과 중심으로)\n\n**왜**\n- (이 변경이 필요한 이유/배경)\n\n**리뷰 포커스**\n- (리뷰어가 특히 확인해야 할 위험·엣지케이스·호환성)\n\n제목: \($t)\n\n커밋:\n\($c)\n\n변경통계:\n\($s)\n\nDiff(일부 절단됨):\n\($d)"')
+            PAYLOAD=$(mktemp); OUT=$(mktemp)
+            jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}],generationConfig:{temperature:0.3,maxOutputTokens:1024}}' > "$PAYLOAD"
+            # 공용 ai_generate: 개인키 우선, rate-limit/실패 시 공용키 폴백(백오프 포함)
+            if ai_generate "$PRIMARY_KEY" "$DEFAULT_KEY" "$MODEL" "$PAYLOAD" "$OUT"; then
+              SUMMARY=$(jq -r '.candidates[0].content.parts[0].text // empty' "$OUT" 2>/dev/null || echo "")
+            fi
+          fi
+          [ -z "$SUMMARY" ] && SUMMARY="_(AI 요약을 생성하지 못했어요 — 아래 커밋 내역을 참고해주세요)_"
+          SUMMARY="${SUMMARY:0:1800}"
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "summary<<$EOF" >> "$GITHUB_OUTPUT"
+          echo "$SUMMARY" >> "$GITHUB_OUTPUT"
+          echo "$EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Track RPD (요약=작성자 키 · model1)
+        uses: ./.github/actions/rpd
+        with:
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1"
+
+      - name: Extract Jira Issue Key
+        id: extract
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          ISSUE_KEY=$(echo "${HEAD_REF} ${PR_TITLE}" \
+            | grep -oE 'CC-[0-9]+' | head -1)
+          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+
+      - name: Update PR Title
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueKey = ${{ toJSON(steps.extract.outputs.issue_key) }};
+            const currentTitle = context.payload.pull_request.title;
+
+            // 이미 [CC-123] 으로 시작하면(공백 유무 무관) 손대지 않는다 —
+            // 공백 없는 경우까지 replace 로직을 타면 제목이 깨지므로 접두사만 본다.
+            if (/^\[CC-\d+\]/.test(currentTitle)) {
+              console.log('✅ 제목 이미 올바른 형식:', currentTitle);
+              return;
+            }
+
+            if (!issueKey) {
+              console.log('⚠️ Jira 티켓 번호를 찾을 수 없어 제목을 수정하지 않습니다.');
+              return;
+            }
+
+            const cleanTitle = currentTitle.replace(/CC-\d+\s*/g, '').trim();
+            const newTitle = `[${issueKey}] ${cleanTitle}`;
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              title: newTitle
+            });
+            console.log(`✅ 제목 변경: "${currentTitle}" → "${newTitle}"`);
+
+      - name: Update PR Description
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueKey = ${{ toJSON(steps.extract.outputs.issue_key) }};
+            const commits = ${{ toJSON(steps.commits.outputs.commits) }};
+            const summary = ${{ toJSON(steps.ai.outputs.summary) }};
+
+            const jiraUrl = issueKey
+              ? `https://moneyfactoryslave.atlassian.net/browse/${issueKey}`
+              : '없음';
+
+            const checklist = [
+              '- [ ] 코드 리뷰 요청 전 셀프 리뷰 완료',
+              '- [ ] 테스트 확인',
+              '- [ ] 불필요한 코드/주석 제거',
+            ].join('\n');
+
+            // 동기화 유지: PULL_REQUEST_TEMPLATE.md / lib_help.sh / docs/review/ai-code-review.md 와 동일하게
+            const aiReviewCommands = [
+              '| 명령어 | 설명 | 사용 위치 |',
+              '|---|---|---|',
+              '| `/gemini-review` | Gemini 코드 리뷰 (PR을 열면 자동 1회 실행, 재요청 시 입력) | PR 코멘트 |',
+              '| `/openai-review` | OpenAI 심층 리뷰 (수동 · 비용 발생) | PR 코멘트 |',
+              '| `/ask 질문내용` | AI 답변/코드에 후속 질문 (저비용 모델) | PR · 라인 코멘트 |',
+              '| `/resolve` | AI가 반영 여부 판단 → Jira 서브태스크 생성 + 스레드 해결 | 라인 코멘트 답글 |',
+              '| `/help` | 명령어 도움말 표시 | PR 코멘트 |',
+              '| `@coderabbitai review` | CodeRabbit 리뷰 (수동 · 비용 발생) | PR 코멘트 |',
+              '',
+              'ℹ️ 자동 리뷰는 PR을 열 때 공통 키로 1회만 실행돼요. 이후 푸시에는 자동 재리뷰가 없으니(해결된 코멘트만 자동 정리), 다시 받으려면 위 명령어로 요청하세요. 명령어 리뷰는 요청자 개인 키(미등록 시 공통 키)로 동작해 공통 일일 한도를 아낍니다.',
+            ].join('\n');
+
+            const body = [
+              '## 📋 연관 Jira 티켓',
+              issueKey ? `[${issueKey}](${jiraUrl})` : '없음',
+              '',
+              '## 🤖 AI 요약',
+              summary,
+              '',
+              '## 📝 커밋 내역',
+              commits,
+              '',
+              '## ✅ 체크리스트',
+              checklist,
+              '',
+              '## 🤖 AI 코드 리뷰 명령어',
+              aiReviewCommands,
+            ].join('\n');
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: body.trim()
+            });
+
+  # ====================================================
   # Gemini 자동 리뷰 (PR 최초 open 전용 + /improve 활성화)
   # ====================================================
   review-gemini-auto:
     name: Gemini Auto Review
-    needs: resolve-gemini-model
-    if: github.event_name == 'pull_request_target' && github.event.action == 'opened'
+    needs: [resolve-gemini-model, describe]
+    if: |
+      always() &&
+      needs.resolve-gemini-model.result == 'success' &&
+      github.event_name == 'pull_request_target' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -144,12 +362,21 @@ jobs:
         with:
           app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
           private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
-      - name: AI Review (Gemini, 공통 키, 라인별)
+      - name: Resolve author key
+        id: whichkey
+        env:
+          LOGIN: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_keys.sh
+          echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
+      - name: AI Review (Gemini, 작성자 키 우선·공용키 폴백, 라인별)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL0: ${{ needs.resolve-gemini-model.outputs.model0 }}
           MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
-          GEMINI_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}   # #1 공통 키
+          MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}   # 공용 키(폴백)
           PR_NUMBER: ${{ github.event.pull_request.number }}
           RETRY_CMD: "/gemini-review"
         run: |
@@ -157,14 +384,16 @@ jobs:
           . .github/scripts/review/lib_ai.sh
           . .github/scripts/review/lib_comments.sh
           . .github/scripts/review/run_pr_agent.sh
+          # 작성자 개인키 우선, 없으면 공용키. 폴백키는 항상 공용키.
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
           cleanup_notices
           PROGRESS_ID=""; trap clear_progress EXIT; post_progress
           LOG=$(mktemp)
-          # 라인별 리뷰 복원: AUTO_REVIEW + AUTO_IMPROVE 동시 활성화
-          if run_pr_agent "${{ github.event_name }}" "$GITHUB_EVENT_PATH" "$LOG" -- \
+          # 라인별 리뷰 복원: AUTO_REVIEW + AUTO_IMPROVE 동시 활성화 (키 env는 wrapper가 주입)
+          if run_pr_agent_fallback "${{ github.event_name }}" "$GITHUB_EVENT_PATH" "$LOG" \
+              "$PRIMARY_KEY" "$DEFAULT_KEY" -- \
               -e "CONFIG.AI_PROVIDER=google_ai_studio" \
               -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" \
-              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" -e "GEMINI_API_KEY=$GEMINI_KEY" \
               -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=true" \
               -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
               -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=true"; then
@@ -172,12 +401,18 @@ jobs:
           else
             notify_failure "$LOG" "$RETRY_CMD"; echo "::error::Gemini 자동 리뷰 실패"; exit 1
           fi
+      - name: Track RPD (작성자 키 · review=model0 + improve=model1)
+        uses: ./.github/actions/rpd
+        with:
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model0:1,${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1"
 
   # ====================================================
-  # push(synchronize) 시 스레드 판단·리졸브 (#2)
+  # push(synchronize) 시: ① 스레드 판단·리졸브  ② 라인별 코드 제안(/improve)
+  #   - resolve/improve 모두 model1 + 작성자 개인키(없으면 공용키), 429 시 공용키 폴백
+  #   두 단계는 동일 Job 내에서 "순차" 실행 → 같은 키 동시 호출 방지
   # ====================================================
   review-on-push:
-    name: Review On Push (thread resolve)
+    name: Review On Push (resolve + improve)
     needs: resolve-gemini-model
     if: github.event_name == 'pull_request_target' && github.event.action == 'synchronize'
     runs-on: ubuntu-latest
@@ -200,7 +435,7 @@ jobs:
           set -euo pipefail
           . .github/scripts/review/lib_keys.sh
           echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
-      - name: Judge & resolve threads (model1, 작성자 키)
+      - name: Judge & resolve threads (model1, 작성자 키 우선·공용키 폴백)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
@@ -211,8 +446,42 @@ jobs:
           set -euo pipefail
           . .github/scripts/review/lib_ai.sh
           . .github/scripts/review/resolve_threads.sh
-          export GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          export GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 개인키 우선
+          export GEMINI_FALLBACK_KEY="$DEFAULT_KEY"          # 429 시 공용키 폴백
           resolve_threads
+      - name: AI Improve (Gemini, 작성자 키 우선·공용키 폴백, model1, push 라인별 제안)
+        env:
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
+          MODEL1: ${{ needs.resolve-gemini-model.outputs.model1 }}
+          MAPPED_KEY: ${{ secrets[format('GEMINI_KEY_{0}', steps.whichkey.outputs.suffix)] }}
+          DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RETRY_CMD: "/gemini-review"
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_ai.sh
+          . .github/scripts/review/lib_comments.sh
+          . .github/scripts/review/run_pr_agent.sh
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          cleanup_notices
+          PROGRESS_ID=""; trap clear_progress EXIT; post_progress
+          LOG=$(mktemp)
+          # 전체 리뷰(AUTO_REVIEW)는 끄고 라인별 코드 제안(AUTO_IMPROVE)만 — model1 고정.
+          if run_pr_agent_fallback "${{ github.event_name }}" "$GITHUB_EVENT_PATH" "$LOG" \
+              "$PRIMARY_KEY" "$DEFAULT_KEY" -- \
+              -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+              -e "CONFIG.MODEL=$MODEL1" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" \
+              -e "GITHUB_ACTION_CONFIG.AUTO_REVIEW=false" \
+              -e "GITHUB_ACTION_CONFIG.AUTO_DESCRIBE=false" \
+              -e "GITHUB_ACTION_CONFIG.AUTO_IMPROVE=true"; then
+            localize_comments
+          else
+            notify_failure "$LOG" "$RETRY_CMD"; echo "::error::push improve 실패"; exit 1
+          fi
+      - name: Track RPD (작성자 키 · resolve + improve, 둘 다 model1)
+        uses: ./.github/actions/rpd
+        with:
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:2"
 
   # ====================================================
   # Gemini 수동 리뷰 (/gemini-review 코멘트)
@@ -241,7 +510,7 @@ jobs:
           set -euo pipefail
           . .github/scripts/review/lib_keys.sh
           echo "suffix=$(key_suffix_for "$LOGIN")" >> "$GITHUB_OUTPUT"
-      - name: AI Review (Gemini, 작성자 키, 라인별)
+      - name: AI Review (Gemini, 요청자 키 우선·공용키 폴백, 라인별)
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           MODEL0: ${{ needs.resolve-gemini-model.outputs.model0 }}
@@ -255,26 +524,30 @@ jobs:
           . .github/scripts/review/lib_ai.sh
           . .github/scripts/review/lib_comments.sh
           . .github/scripts/review/run_pr_agent.sh
-          GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 요청자 개인키 우선
           # 코멘트 본문을 /review 로 바꿔 합성(이미지가 issue_comment 경로로 파싱)
           EVT=$(mktemp); jq '.comment.body = "/review"' "$GITHUB_EVENT_PATH" > "$EVT"
           cleanup_notices; PROGRESS_ID=""; trap clear_progress EXIT; post_progress
           LOG=$(mktemp)
-          if run_pr_agent "${{ github.event_name }}" "$EVT" "$LOG" -- \
+          if run_pr_agent_fallback "${{ github.event_name }}" "$EVT" "$LOG" \
+              "$PRIMARY_KEY" "$DEFAULT_KEY" -- \
               -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-              -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" \
-              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" -e "GEMINI_API_KEY=$GEMINI_KEY"; then
+              -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]"; then
             # /improve 도 이어서 실행(라인별 커밋 제안)
             EVT2=$(mktemp); jq '.comment.body = "/improve"' "$GITHUB_EVENT_PATH" > "$EVT2"
             LOG2=$(mktemp)
-            run_pr_agent "${{ github.event_name }}" "$EVT2" "$LOG2" -- \
+            run_pr_agent_fallback "${{ github.event_name }}" "$EVT2" "$LOG2" \
+              "$PRIMARY_KEY" "$DEFAULT_KEY" -- \
               -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-              -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" \
-              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" -e "GEMINI_API_KEY=$GEMINI_KEY" || true
+              -e "CONFIG.MODEL=$MODEL0" -e "CONFIG.MODEL_WEAK=$MODEL1" -e "CONFIG.FALLBACK_MODELS=[]" || true
             localize_comments
           else
             notify_failure "$LOG" "$RETRY_CMD"; echo "::error::Gemini 수동 리뷰 실패"; exit 1
           fi
+      - name: Track RPD (요청자 키 · review=model0 + improve=model1)
+        uses: ./.github/actions/rpd
+        with:
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model0:1,${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1"
 
   # ====================================================
   # OpenAI: 사용 가능한 모델 순차 탐색 (수동 전용)
@@ -423,30 +696,43 @@ jobs:
           DEFAULT_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}
         run: |
           set -euo pipefail
-          # 명령(/ask) 작성자의 키 사용, 미매핑 시 공용 키로 폴백
-          GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          # 작성자 개인키 우선, 미매핑 시 공용 키. 폴백키는 항상 공용 키.
+          PRIMARY_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
           # /ask 는 ModelType.WEAK → CONFIG.MODEL_WEAK(=model1) 사용.
           # 코멘트 본문은 rewrite 하지 않고 그대로 pr-agent 러너가 파싱한다.
           LOG=$(mktemp)
-          set +e
-          docker run --rm \
-            -e GITHUB_TOKEN \
-            -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
-            -e GITHUB_REPOSITORY="${{ github.repository }}" \
-            -e GITHUB_API_URL="${{ github.api_url }}" \
-            -e GITHUB_SERVER_URL="${{ github.server_url }}" \
-            -e GITHUB_EVENT_PATH=/github/workflow/event.json \
-            -e "CONFIG.AI_PROVIDER=google_ai_studio" \
-            -e "CONFIG.MODEL=$MODEL0" \
-            -e "CONFIG.MODEL_WEAK=$MODEL1" \
-            -e "CONFIG.FALLBACK_MODELS=[]" \
-            -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$GEMINI_KEY" \
-            -e "GEMINI_API_KEY=$GEMINI_KEY" \
-            -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
-            "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
-          docker_status=${PIPESTATUS[0]}
-          set -e
-          if [ "$docker_status" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG" || grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429" "$LOG"; then
+          _ask_run() {   # $1=key → docker 실행, 결과를 LOG에 기록, docker exit status 반환
+            local k="$1" st
+            set +e
+            docker run --rm \
+              -e GITHUB_TOKEN \
+              -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
+              -e GITHUB_REPOSITORY="${{ github.repository }}" \
+              -e GITHUB_API_URL="${{ github.api_url }}" \
+              -e GITHUB_SERVER_URL="${{ github.server_url }}" \
+              -e GITHUB_EVENT_PATH=/github/workflow/event.json \
+              -e "CONFIG.AI_PROVIDER=google_ai_studio" \
+              -e "CONFIG.MODEL=$MODEL0" \
+              -e "CONFIG.MODEL_WEAK=$MODEL1" \
+              -e "CONFIG.FALLBACK_MODELS=[]" \
+              -e "GOOGLE_AI_STUDIO.GEMINI_API_KEY=$k" \
+              -e "GEMINI_API_KEY=$k" \
+              -v "$GITHUB_EVENT_PATH:/github/workflow/event.json:ro" \
+              "$PR_AGENT_IMAGE" 2>&1 | tee "$LOG"
+            st=${PIPESTATUS[0]}
+            set -e
+            return "$st"
+          }
+          _ask_failed() { [ "$1" -ne 0 ] || grep -qE "$PR_AGENT_FAIL_MARKERS" "$LOG" || grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429" "$LOG"; }
+          # set -e 하에서 비0 반환에 죽지 않도록 AND-OR로 status 캡처
+          _ask_run "$PRIMARY_KEY" && ask_status=0 || ask_status=$?
+          # 개인키 quota/rate-limit이면 공용키로 1회 재시도
+          if _ask_failed "$ask_status" && [ -n "$DEFAULT_KEY" ] && [ "$DEFAULT_KEY" != "$PRIMARY_KEY" ] \
+             && grep -qiE "RESOURCE_EXHAUSTED|rate.?limit|429" "$LOG"; then
+            echo "::notice::/ask 개인키 quota → 공용키 재시도"
+            _ask_run "$DEFAULT_KEY" && ask_status=0 || ask_status=$?
+          fi
+          if _ask_failed "$ask_status"; then
             . .github/scripts/review/lib_ai.sh
             . .github/scripts/review/lib_cards.sh
             PR_NUM="${{ github.event.issue.number || github.event.pull_request.number }}"
@@ -467,6 +753,10 @@ jobs:
             echo "::error::/ask 실패"
             exit 1
           fi
+      - name: Track RPD (요청자 키 · ask=model1)
+        uses: ./.github/actions/rpd
+        with:
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1"
 
   # ====================================================
   # /resolve — AI 판단 + Jira 서브태스크 + 스레드 리졸브
@@ -516,8 +806,13 @@ jobs:
           set -euo pipefail
           . .github/scripts/review/lib_ai.sh
           . .github/scripts/review/resolve_command.sh
-          export GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"
+          export GEMINI_KEY="${MAPPED_KEY:-$DEFAULT_KEY}"   # 개인키 우선
+          export GEMINI_FALLBACK_KEY="$DEFAULT_KEY"          # 429 시 공용키 폴백
           run_resolve_command
+      - name: Track RPD (요청자 키 · resolve 판단=model1)
+        uses: ./.github/actions/rpd
+        with:
+          increments: "${{ steps.whichkey.outputs.suffix != '' && steps.whichkey.outputs.suffix || 'shared' }}:model1:1"
 
   # ====================================================
   # /help — 명령어 도움말 카드 (AI 호출 없음, 비용 0)
@@ -538,10 +833,33 @@ jobs:
         with:
           app-id: ${{ secrets.GEMINI_BOT_APP_ID }}
           private-key: ${{ secrets.GEMINI_BOT_PRIVATE_KEY }}
+      - name: Resolve commenter key & model names
+        id: meta
+        env:
+          LOGIN: ${{ github.event.comment.user.login }}
+          MODELS_CSV: ${{ vars.GEMINI_MODELS }}
+        run: |
+          set -euo pipefail
+          . .github/scripts/review/lib_keys.sh
+          suffix="$(key_suffix_for "$LOGIN")"
+          echo "viewer=${suffix:-shared}" >> "$GITHUB_OUTPUT"
+          IFS=',' read -ra M <<< "${MODELS_CSV:-model0,model1}"
+          m0="${M[0]// /}"; m1="${M[1]:-${M[0]}}"; m1="${m1// /}"
+          echo "m0=${m0:-model0}" >> "$GITHUB_OUTPUT"
+          echo "m1=${m1:-model1}" >> "$GITHUB_OUTPUT"
+      - name: Render RPD table (오늘 사용량, AI 호출 없음)
+        id: rpd
+        uses: ./.github/actions/rpd
+        with:
+          mode: render
+          m0name: ${{ steps.meta.outputs.m0 }}
+          m1name: ${{ steps.meta.outputs.m1 }}
+          viewer: ${{ steps.meta.outputs.viewer }}
       - name: Post help card
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          RPD_TABLE: ${{ steps.rpd.outputs.table }}
         run: |
           set -euo pipefail
           . .github/scripts/review/lib_cards.sh
@@ -553,5 +871,9 @@ jobs:
             | jq -r '.[]|select(.user!=null and .user.type=="Bot" and .body!=null and (.body|test("<!-- cashchat-ai-review:help -->")))|.id' \
             | while read -r cid; do [ -n "$cid" ] && curl -s -X DELETE -H "Authorization: Bearer $GITHUB_TOKEN" "$api/issues/comments/${cid}" >/dev/null || true; done || true
           body="$(render_help_card)"
+          # 오늘(KST) 리뷰 사용량 추정치 섹션 덧붙이기
+          if [ -n "${RPD_TABLE:-}" ]; then
+            body="$(printf '%s\n\n---\n\n**📊 오늘(KST) 리뷰 사용량 (추정치)**\n\n%s\n\nℹ️ pr-agent 내부 다중 호출은 측정되지 않아 실제 RPD와 다를 수 있어요. 개인 키 미등록 사용자는 공통 키를 사용합니다.' "$body" "$RPD_TABLE")"
+          fi
           curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             "$api/issues/${PR_NUMBER}/comments" -d "$(jq -n --arg b "$body" '{body:$b}')" >/dev/null

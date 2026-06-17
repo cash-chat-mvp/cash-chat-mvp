@@ -6,6 +6,7 @@
 #   GEMINI_KEY, GEMINI_MODEL(=model1), JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN
 
 . "$(dirname "${BASH_SOURCE[0]}")/lib_cards.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/lib_gh.sh"
 
 parse_resolve_reason() {
   local r
@@ -23,7 +24,7 @@ ai_judge_resolve() { # $1=사유 $2=원본코멘트 $3=diff
   prompt=$(printf '리뷰어가 아래 사유로 이 코드리뷰 스레드를 resolve 요청했습니다.\n사유가 타당한지(코드가 실제로 반영되었거나, 추후 처리로 분류하는 게 합리적인지) 판단하세요.\n첫 줄에 "yes"(리졸브 타당) 또는 "no"(아직 이르다)만, 둘째 줄에 한국어 한 문장 근거.\n\n사유: %s\n원본 코멘트: %s\n\nDiff:\n%s' "$1" "$2" "$3")
   payload=$(mktemp); out=$(mktemp)
   jq -n --arg p "$prompt" '{contents:[{role:"user",parts:[{text:$p}]}],generationConfig:{maxOutputTokens:256,temperature:0}}' > "$payload"
-  if ! ai_retry gemini_generate "$GEMINI_KEY" "$model" "$payload" "$out"; then
+  if ! ai_generate "$GEMINI_KEY" "${GEMINI_FALLBACK_KEY:-}" "$model" "$payload" "$out"; then
     RESOLVE_REASON_AI="AI 판단을 가져오지 못해 사유를 신뢰해 처리합니다."; rm -f "$payload" "$out"; return 0   # 폴백: 타당 처리
   fi
   raw=$(jq -r '.candidates[0].content.parts[0].text // "yes"' "$out" 2>/dev/null || echo "yes")
@@ -62,7 +63,7 @@ run_resolve_command() {
   local PARENT PROJECT_KEY SUBTASK_TYPE_ID
   PARENT="$(extract_jira_parent "$PR_TITLE" "$HEAD_REF")"
   if [ -z "$PARENT" ]; then
-    gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 티켓(CC-###)을 못 찾아 서브태스크 없이 스레드만 리졸브할게요."
+    gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 티켓(CC-###)을 못 찾아 서브태스크 없이 스레드 리졸브만 시도할게요."
   else
     PROJECT_KEY="${PARENT%%-*}"
     SUBTASK_TYPE_ID=$(curl -s --max-time 20 --config "$JIRA_CFG" -H "Accept: application/json" \
@@ -90,12 +91,12 @@ run_resolve_command() {
       CODE=$(printf '%s' "$RESP" | tail -1); RBODY=$(printf '%s' "$RESP" | sed '$d')
       if [ "$CODE" = "201" ]; then
         NEW_KEY=$(printf '%s' "$RBODY" | jq -r '.key'); NEW_URL="${JIRA_BASE_URL}/browse/${NEW_KEY}"
-      gh_reply "$ROOT_ID" "$(render_card approve 'resolve 승인 — 추후 처리 항목 등록' "$(printf '%s\n\n- 서브태스크: [%s](%s)\n- 상위 티켓: %s\n- 사유: %s\n\n이 스레드는 리졸브됩니다. 🙏' "${RESOLVE_REASON_AI:-반영 확인}" "$NEW_KEY" "$NEW_URL" "$PARENT" "$REASON")" '')"
+      gh_reply "$ROOT_ID" "$(render_card approve 'resolve 승인 — 추후 처리 항목 등록' "$(printf '%s\n\n- 서브태스크: [%s](%s)\n- 상위 티켓: %s\n- 사유: %s\n\n이 스레드 리졸브를 시도합니다. (실패 시 별도 안내) 🙏' "${RESOLVE_REASON_AI:-반영 확인}" "$NEW_KEY" "$NEW_URL" "$PARENT" "$REASON")" '')"
       else
-        gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 서브태스크 생성 실패(HTTP ${CODE}). 스레드만 리졸브할게요."
+        gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 서브태스크 생성 실패(HTTP ${CODE}). 스레드 리졸브만 시도할게요."
       fi
     else
-      gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 서브태스크 이슈 타입을 찾지 못해 스레드만 리졸브할게요."
+      gh_reply "$ROOT_ID" "🤖 resolve는 타당하나 Jira 서브태스크 이슈 타입을 찾지 못해 스레드 리졸브만 시도할게요."
     fi
   fi
 
@@ -105,8 +106,11 @@ run_resolve_command() {
     "https://api.github.com/graphql" \
     -d "$(jq -n --arg id "$ROOT_NODE_ID" '{query:"query($id:ID!){node(id:$id){... on PullRequestReviewComment{pullRequestReviewThread{id}}}}",variables:{id:$id}}')" \
     | jq -r '.data.node.pullRequestReviewThread.id // empty')
-  [ -n "$THREAD_ID" ] && curl -s --max-time 10 -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" \
-    "https://api.github.com/graphql" \
-    -d "$(jq -n --arg id "$THREAD_ID" '{query:"mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}",variables:{id:$id}}')" >/dev/null || true
-  echo "::notice::resolve 완료"
+  # 응답을 검증해 실제 resolve 여부 확인 — 실패 시 거짓 성공 대신 수동 안내.
+  if gh_resolve_thread "$THREAD_ID"; then
+    echo "::notice::resolve 완료"
+  else
+    gh_reply "$ROOT_ID" "🤖 판단은 승인했지만 스레드 자동 리졸브에 실패했어요(권한/일시 오류). 수동으로 Resolve conversation 을 눌러 주세요. 자세한 원인은 워크플로 로그를 확인하세요."
+    echo "::warning::resolve 실패(수동 필요)"
+  fi
 }

@@ -85,7 +85,7 @@ $'일시적인 오류로 리뷰 생성에 실패했어요. 잠시 후 다시 시
 
 # ── 진행 코멘트 게시(전역 PROGRESS_ID 설정); clear_progress를 trap에 등록해 사용 ──
 post_progress() {
-  local api; api="$(_api)" body; body="$(progress_card)"
+  local api body; api="$(_api)"; body="$(progress_card)"
   PROGRESS_ID=$(curl -s -X POST -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
     "$api/issues/${PR_NUMBER}/comments" -d "$(jq -n --arg b "$body" '{body:$b}')" | jq -r '.id // empty' || true)
 }
