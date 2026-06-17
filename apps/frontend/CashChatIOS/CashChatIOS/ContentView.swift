@@ -165,6 +165,8 @@ final class AppState: ObservableObject {
         KeychainHelper.remove(forKey: Keys.accessToken)
         KeychainHelper.remove(forKey: Keys.refreshToken)
         KeychainHelper.remove(forKey: Keys.role)
+        // KMM Ktor 클라이언트(싱글톤)가 캐시한 BearerTokens 도 비워 다음 사용자에게 재사용되지 않도록 한다.
+        KoinHelper().clearApiTokenCache()
         isAuthenticated = false
         points = 0
         messageCount = 0
@@ -1090,9 +1092,8 @@ struct OnboardingView: View {
             .animation(.easeOut(duration: 0.25), value: attendanceVM.toast)
             .onChange(of: attendanceVM.toast) { _, newValue in
                 guard newValue != nil else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    attendanceVM.toast = nil
-                }
+                // 이전 타이머를 취소하고 새로 예약 — 연속 토스트 시 타이머 누적/조기 사라짐 방지.
+                attendanceVM.scheduleToastDismiss()
             }
             .opacity(animateIn ? 1 : 0)
             .offset(y: animateIn ? 0 : 14)

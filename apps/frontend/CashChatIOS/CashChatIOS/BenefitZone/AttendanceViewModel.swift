@@ -13,11 +13,27 @@ final class AttendanceViewModel: ObservableObject {
     @Published var nextRewardBonus: String = ""
     @Published var balance: Int64 = 0
     @Published var toast: String? = nil
+    @Published var isCheckingIn = false
 
     private let store = KoinHelper().attendanceStore()
     private let points = KoinHelper().pointsRepository()
     private let collector = FlowCollector()
     private var didLoad = false
+    private var toastDismissTask: DispatchWorkItem?
+
+    deinit {
+        // 무한 collect 코루틴이 살아남지 않도록 구독을 명시적으로 취소한다(메모리 누수 방지).
+        collector.cancel()
+        toastDismissTask?.cancel()
+    }
+
+    /// 토스트 자동 해제를 예약한다. 연속 토스트 시 이전 타이머를 취소해 타이머 누적을 방지한다.
+    func scheduleToastDismiss(after seconds: Double = 2) {
+        toastDismissTask?.cancel()
+        let task = DispatchWorkItem { [weak self] in self?.toast = nil }
+        toastDismissTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: task)
+    }
 
     func load() {
         store.loadMonthly(year: nil, month: nil)
@@ -32,6 +48,7 @@ final class AttendanceViewModel: ObservableObject {
                 self.month = Int(s.month)
                 self.streak = Int(s.currentStreak)
                 self.todayChecked = s.todayChecked
+                self.isCheckingIn = s.isCheckingIn
                 self.nextRewardCoin = s.nextReward?.coin ?? 0
                 self.nextRewardBonus = (s.nextReward?.bonusItems ?? [])
                     .map { "📦 \($0.itemCode) \($0.quantity)개" }
@@ -81,6 +98,8 @@ struct AttendanceWidgetView: View {
     private func weekCells() -> [DayCell] {
         var cal = Calendar(identifier: .gregorian)
         cal.firstWeekday = 1 // Sunday
+        // 서버 출석 판정 기준 시간대(Asia/Seoul)로 '오늘'을 계산해 기기 시간대와 무관하게 일치시킨다.
+        cal.timeZone = TimeZone(identifier: "Asia/Seoul") ?? cal.timeZone
         let now = Date()
         let todayComps = cal.dateComponents([.year, .month, .day], from: now)
         let dispMonth = vm.month > 0 ? vm.month : (todayComps.month ?? 1)
@@ -128,7 +147,8 @@ struct AttendanceWidgetView: View {
                 }
             }
 
-            Text("🎁 오늘 보상 🪙+\(vm.nextRewardCoin)" + (vm.nextRewardBonus.isEmpty ? "" : "  \(vm.nextRewardBonus)"))
+            // 이미 출석했다면 nextRewardCoin 은 '다음' 출석 보상이므로 라벨을 구분한다.
+            Text("🎁 \(vm.todayChecked ? "다음 보상" : "오늘 보상") 🪙+\(vm.nextRewardCoin)" + (vm.nextRewardBonus.isEmpty ? "" : "  \(vm.nextRewardBonus)"))
                 .font(.system(size: 12.5))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -144,7 +164,8 @@ struct AttendanceWidgetView: View {
                     .background(vm.todayChecked ? Color.white.opacity(0.25) : accent)
                     .clipShape(Capsule())
             }
-            .disabled(vm.todayChecked)
+            // Android(AttendanceWidget)와 동일하게 체크인 진행 중에도 비활성화해 중복 클릭을 막는다.
+            .disabled(vm.todayChecked || vm.isCheckingIn)
         }
         .padding(18)
         .background(LinearGradient(colors: [heroStart, heroEnd], startPoint: .topLeading, endPoint: .bottomTrailing))

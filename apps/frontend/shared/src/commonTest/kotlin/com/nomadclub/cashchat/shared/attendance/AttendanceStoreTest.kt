@@ -55,9 +55,13 @@ class AttendanceStoreTest {
                     HttpStatusCode.OK, jsonHeaders,
                 )
             } else {
+                // 체크인 이후 월간 재조회 시점에는 서버가 실제 출석 날짜(3일)와 todayChecked=true 를 반환한다.
+                val checkedDays = if (checkedIn) "[1,2,3]" else "[1,2]"
+                val streak = if (checkedIn) 3 else 2
                 respond(
-                    """{"year":2026,"month":6,"checkedDays":[1,2],"currentStreak":2,"todayChecked":false,
-                       "nextRewardPreview":{"dayCount":3,"coin":20,"bonusItems":[]}}""",
+                    """{"year":2026,"month":6,"checkedDays":$checkedDays,"currentStreak":$streak,
+                       "todayChecked":$checkedIn,
+                       "nextRewardPreview":{"dayCount":4,"coin":20,"bonusItems":[]}}""",
                     HttpStatusCode.OK, jsonHeaders,
                 )
             }
@@ -73,6 +77,9 @@ class AttendanceStoreTest {
         val state = store.state.first { it.todayChecked }
         assertTrue(checkedIn)
         assertEquals(3, state.currentStreak)
+        // 로컬 추론이 아닌 서버 재조회로 동기화된 실제 출석 날짜가 반영되어야 한다.
+        assertTrue(state.checkedDays.contains(3), "checkedDays should contain the server-confirmed day")
+        assertEquals(listOf(1, 2, 3), state.checkedDays)
         assertEquals(1030, points.balance.first())
     }
 }

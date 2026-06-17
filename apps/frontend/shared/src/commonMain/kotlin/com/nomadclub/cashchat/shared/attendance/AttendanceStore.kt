@@ -3,6 +3,7 @@ package com.nomadclub.cashchat.shared.attendance
 import com.nomadclub.cashchat.shared.attendance.model.BonusItem
 import com.nomadclub.cashchat.shared.attendance.model.RewardPreview
 import com.nomadclub.cashchat.shared.points.PointsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,6 +52,8 @@ class AttendanceStore(
                         nextReward = m.nextRewardPreview, isLoading = false,
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _state.update { it.copy(isLoading = false, errorMessage = e.message ?: "출석 정보를 불러오지 못했어요") }
             }
@@ -64,17 +67,26 @@ class AttendanceStore(
             try {
                 val result = service.checkIn()
                 pointsRepository.applyDelta(result.awardedCoin)
+                // 체크인 응답에 실제 출석 날짜가 없어 로컬 추론(maxOrNull()+1)은 공백 출석 시 잘못된 날짜를 기록한다.
+                // 서버에서 최신 월간 출석 정보를 다시 조회해 권위 있는 상태로 동기화한다.
+                val monthly = service.getMonthly(
+                    _state.value.year.takeIf { it > 0 },
+                    _state.value.month.takeIf { it > 0 },
+                )
                 _state.update { prev ->
-                    val today = prev.checkedDays.maxOrNull()?.plus(1) ?: 1
                     prev.copy(
                         isCheckingIn = false,
-                        todayChecked = true,
-                        currentStreak = result.streakDayCount,
-                        checkedDays = (prev.checkedDays + today).distinct().sorted(),
-                        nextReward = result.nextRewardPreview,
+                        year = monthly.year,
+                        month = monthly.month,
+                        todayChecked = monthly.todayChecked,
+                        currentStreak = monthly.currentStreak,
+                        checkedDays = monthly.checkedDays,
+                        nextReward = monthly.nextRewardPreview,
                     )
                 }
                 _rewardEvents.emit(CheckInRewardEvent(result.awardedCoin, result.bonusItems))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _state.update { it.copy(isCheckingIn = false, errorMessage = e.message ?: "이미 출석했거나 오류가 발생했어요") }
             }

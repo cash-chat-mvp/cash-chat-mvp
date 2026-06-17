@@ -19,11 +19,14 @@ class AttendanceApiService(
     private val httpClient: HttpClient,
 ) {
     @Throws(CancellationException::class, Exception::class)
-    suspend fun getMonthly(year: Int? = null, month: Int? = null): MonthlyAttendance =
-        httpClient.get("${config.baseUrl}/api/attendance/me") {
+    suspend fun getMonthly(year: Int? = null, month: Int? = null): MonthlyAttendance {
+        require(year == null || year > 0) { "year must be positive" }
+        require(month == null || month in 1..12) { "month must be between 1 and 12" }
+        return httpClient.get("${config.baseUrl}/api/attendance/me") {
             if (year != null) parameter("year", year)
             if (month != null) parameter("month", month)
         }.body()
+    }
 
     @Throws(CancellationException::class, Exception::class)
     suspend fun checkIn(): CheckInResult =

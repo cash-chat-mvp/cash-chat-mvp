@@ -21,11 +21,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.remember
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nomadclub.cashchat.shared.attendance.AttendanceUiState
 import java.util.Calendar
+import java.util.TimeZone
 
 private val HeroStart = Color(0xFF5C6BFA)
 private val HeroEnd = Color(0xFF8466FA)
@@ -33,19 +35,30 @@ private val Accent = Color(0xFFFFB800)
 private val White = Color(0xFFFFFFFF)
 private val DayLabels = listOf("일", "월", "화", "수", "목", "금", "토")
 
+/** 서버 출석 판정 기준 시간대(Asia/Seoul). 기기 시간대와 무관하게 동일한 '오늘'을 계산한다. */
+private val ServerTimeZone: TimeZone = TimeZone.getTimeZone("Asia/Seoul")
+
 @Composable
 fun AttendanceWidget(
     state: AttendanceUiState,
     onCheckIn: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val cal = Calendar.getInstance()
-    val ty = cal.get(Calendar.YEAR)
-    val tm = cal.get(Calendar.MONTH) + 1
-    val td = cal.get(Calendar.DAY_OF_MONTH)
-    val dispYear = if (state.year > 0) state.year else ty
-    val dispMonth = if (state.month in 1..12) state.month else tm
-    val cells = weeklyAttendanceCells(dispYear, dispMonth, ty, tm, td, state.checkedDays.toSet())
+    // 컴포지션마다 Calendar 를 재생성하지 않도록 state 기준으로만 재계산한다.
+    val cells = remember(state.year, state.month, state.checkedDays) {
+        val cal = Calendar.getInstance(ServerTimeZone)
+        val ty = cal.get(Calendar.YEAR)
+        val tm = cal.get(Calendar.MONTH) + 1
+        val td = cal.get(Calendar.DAY_OF_MONTH)
+        val dispYear = if (state.year > 0) state.year else ty
+        val dispMonth = if (state.month in 1..12) state.month else tm
+        weeklyAttendanceCells(dispYear, dispMonth, ty, tm, td, state.checkedDays.toSet())
+    }
+    val dispMonth = if (state.month in 1..12) {
+        state.month
+    } else {
+        Calendar.getInstance(ServerTimeZone).get(Calendar.MONTH) + 1
+    }
 
     Column(
         modifier = modifier
@@ -105,6 +118,8 @@ fun AttendanceWidget(
         Spacer(Modifier.height(14.dp))
         state.nextReward?.let { r ->
             val bonus = r.bonusItems.joinToString(" ") { "📦 ${it.itemCode} ${it.quantity}개" }
+            // 이미 오늘 출석했다면 nextRewardPreview 는 '다음' 출석 보상이므로 라벨을 구분한다.
+            val rewardLabel = if (state.todayChecked) "다음 보상" else "오늘 보상"
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -112,7 +127,7 @@ fun AttendanceWidget(
                     .background(White.copy(alpha = 0.16f))
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             ) {
-                Text("🎁 오늘 보상 🪙+${r.coin}  $bonus", color = White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text("🎁 $rewardLabel 🪙+${r.coin}  $bonus", color = White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(12.dp))
         }

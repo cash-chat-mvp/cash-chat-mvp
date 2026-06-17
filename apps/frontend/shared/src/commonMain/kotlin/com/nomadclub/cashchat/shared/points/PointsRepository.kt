@@ -22,5 +22,13 @@ class LocalPointsRepository(initial: Long = 1250) : PointsRepository {
     private val _balance = MutableStateFlow(initial)
     override val balance: StateFlow<Long> = _balance.asStateFlow()
     override suspend fun refresh() { /* no-op until GET /api/points/me 구현 */ }
-    override fun applyDelta(delta: Long) = _balance.update { (it + delta).coerceAtLeast(0) }
+    override fun applyDelta(delta: Long) = _balance.update { current ->
+        // 누적 합산이 Long 범위를 넘어 래핑(wrap)되어 잔액이 손상되지 않도록 포화(saturating) 덧셈 처리.
+        val next = when {
+            delta > 0 && current > Long.MAX_VALUE - delta -> Long.MAX_VALUE
+            delta < 0 && current < Long.MIN_VALUE - delta -> Long.MIN_VALUE
+            else -> current + delta
+        }
+        next.coerceAtLeast(0)
+    }
 }
