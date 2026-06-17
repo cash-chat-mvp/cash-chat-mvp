@@ -46,6 +46,11 @@ final class AppState: ObservableObject {
     private let defaults = UserDefaults.standard
     private let appleSignInCoordinator = AppleSignInCoordinator()
 
+    // 코인 잔액 단일 소스 — 혜택존(출석)·상점·프로필이 동일한 KMM PointsRepository 를 공유한다.
+    // (이전엔 AppState.points 가 별도 상태라 출석 적립이 다른 탭에 반영되지 않았음)
+    private let pointsRepository = KoinHelper().pointsRepository()
+    private let pointsCollector = FlowCollector()
+
     private enum Keys {
         static let accessToken = "access_token"
         static let refreshToken = "refresh_token"
@@ -58,6 +63,14 @@ final class AppState: ObservableObject {
             clientID: AppConfig.googleIOSClientId,
             serverClientID: AppConfig.googleWebClientId
         )
+        pointsCollector.collectBalance(repo: pointsRepository) { [weak self] value in
+            Task { @MainActor in self?.points = Int(value.int64Value) }
+        }
+    }
+
+    deinit {
+        // 무한 collect 코루틴이 살아남지 않도록 구독을 취소한다(메모리 누수 방지).
+        pointsCollector.cancel()
     }
 
     // 앱 시작 시 저장된 토큰으로 세션 복원
@@ -165,20 +178,25 @@ final class AppState: ObservableObject {
         KeychainHelper.remove(forKey: Keys.accessToken)
         KeychainHelper.remove(forKey: Keys.refreshToken)
         KeychainHelper.remove(forKey: Keys.role)
+        // KMM Ktor 클라이언트(싱글톤)가 캐시한 BearerTokens 도 비워 다음 사용자에게 재사용되지 않도록 한다.
+        KoinHelper().clearApiTokenCache()
+        // 싱글톤 PointsRepository 의 잔액을 초기화(다음 사용자에게 이전 잔액 노출 방지). points 는 balance 구독으로 갱신됨.
+        pointsRepository.reset()
+        // 싱글톤 AttendanceStore 의 출석 상태도 초기화(다음 사용자에게 이전 출석 노출 방지).
+        KoinHelper().attendanceStore().reset()
         isAuthenticated = false
-        points = 0
         messageCount = 0
     }
 
     func addPoints(_ value: Int) {
         guard value > 0 else { return }
-        points += value
+        pointsRepository.applyDelta(delta: Int64(value))
     }
 
     func spendPoints(_ value: Int) -> Bool {
         guard value > 0 else { return false }
         guard points >= value else { return false }
-        points -= value
+        pointsRepository.applyDelta(delta: Int64(-value))
         return true
     }
 
@@ -1038,124 +1056,75 @@ struct OnboardingView: View {
         }
     }
     
-    private struct MissionItem: Identifiable {
-        let id: String
-        let title: String
-        let subtitle: String
-        let reward: Int
-        let icon: String
-        let maxProgress: Int?
-    }
-    
     private struct RewardsView: View {
-        @EnvironmentObject private var appState: AppState
+        @StateObject private var attendanceVM = AttendanceViewModel()
         @State private var animateIn = false
-        @State private var claimedIDs: Set<String> = []
-        private let targetPoints = 4500
-        private let missions = [
-            MissionItem(id: "attendance", title: "출석 체크", subtitle: "오늘 하루 출석하고 포인트 받기", reward: 10, icon: "calendar", maxProgress: nil),
-            MissionItem(id: "chat-10", title: "채팅 미션", subtitle: "오늘 AI와 10번 대화하기", reward: 50, icon: "message", maxProgress: 10),
-            MissionItem(id: "watch-video", title: "동영상 시청", subtitle: "광고 보고 룰렛 돌리기", reward: 100, icon: "play.fill", maxProgress: nil)
-        ]
-        
+
         var body: some View {
             ScrollView {
-                VStack(spacing: 14) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("리워드 미션")
-                            .font(.system(size: 30, weight: .black))
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack {
-                                Text("커피 교환까지")
-                                    .font(.system(size: 15, weight: .bold))
-                                Spacer()
-                                Text("\(appState.points.formatted()) / \(targetPoints.formatted()) P")
-                                    .font(.caption.weight(.semibold))
-                            }
-                            .foregroundStyle(.white)
-                            
-                            ProgressView(value: min(Double(appState.points) / Double(targetPoints), 1))
-                                .tint(.white)
-                            
-                            let remain = max(targetPoints - appState.points, 0)
-                            Text("\(remain.formatted())P 더 모으면 스타벅스 아메리카노!")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.9))
-                        }
-                        .padding(18)
-                        .background(
-                            LinearGradient(colors: [Color(red: 0.36, green: 0.42, blue: 0.98), Color(red: 0.29, green: 0.35, blue: 0.91)], startPoint: .leading, endPoint: .trailing)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                VStack(spacing: 12) {
+                    HStack {
+                        Text("혜택존").font(.system(size: 22, weight: .heavy))
+                        Spacer()
+                        Text("🪙 \(attendanceVM.balance)")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(Color(red: 0.69, green: 0.49, blue: 0.0))
+                            .padding(.horizontal, 11).padding(.vertical, 5)
+                            .background(Color(red: 1.0, green: 0.97, blue: 0.90))
+                            .clipShape(Capsule())
                     }
-                    .padding(20)
-                    .background(Color(.systemBackground))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
 
-                    ForEach(missions) { mission in
-                        let isClaimed = claimedIDs.contains(mission.id)
-                        let progress = mission.maxProgress.map { min(appState.messageCount, $0) } ?? 0
-                        let canClaim = !isClaimed && (mission.maxProgress == nil || progress >= (mission.maxProgress ?? 0))
-                        
-                        HStack(alignment: .top, spacing: 14) {
-                            Image(systemName: sfSymbol(mission.icon, fallback: "star.fill"))
-                                .foregroundStyle(Color(red: 0.36, green: 0.42, blue: 0.98))
-                                .frame(width: 44, height: 44)
-                                .background(Color(.tertiarySystemGroupedBackground))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                            
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(mission.title).font(.headline.weight(.bold))
-                                Text(mission.subtitle).font(.caption).foregroundStyle(.secondary)
-                                if let max = mission.maxProgress {
-                                    ProgressView(value: Double(progress) / Double(max))
-                                        .tint(Color(red: 0.36, green: 0.42, blue: 0.98))
-                                    Text("진행도 \(progress)/\(max)")
-                                        .font(.caption2).foregroundStyle(.secondary)
-                                }
-                                
-                                HStack {
-                                    Text("+\(mission.reward)P")
-                                        .font(.system(size: 18, weight: .black))
-                                        .foregroundStyle(.orange)
-                                    Spacer()
-                                    Button(isClaimed ? "완료됨" : "받기") {
-                                        if canClaim {
-                                            appState.addPoints(mission.reward)
-                                            claimedIDs.insert(mission.id)
-                                        }
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(isClaimed ? .gray : .orange)
-                                    .disabled(!canClaim)
-                                }
-                            }
-                        }
-                        .padding(18)
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                        .padding(.horizontal, 20)
-                    }
+                    AttendanceWidgetView(vm: attendanceVM)
+                        .padding(.horizontal, 16)
+
+                    BenefitInfoCardView(icon: "📺", title: "리워드 광고", badge: .next,
+                        description: "광고 1회 시청 → 🪙+40 코인 · 하루 10회까지", dimmed: false)
+                        .padding(.horizontal, 16)
+                    BenefitInfoCardView(icon: "🎯", title: "데일리 미션", badge: .soon,
+                        description: "매일 바뀌는 3가지 미션을 완료하고 코인 적립", dimmed: true)
+                        .padding(.horizontal, 16)
+                    BenefitInfoCardView(icon: "🎮", title: "TNK 오퍼월", badge: .soon,
+                        description: "앱 설치·설문 참여로 대량 코인 (최대 🪙+1,500)", dimmed: true)
+                        .padding(.horizontal, 16)
                 }
                 .padding(.bottom, 16)
             }
             .background(Color(.systemGroupedBackground))
+            .safeAreaInset(edge: .bottom) {
+                if let toast = attendanceVM.toast {
+                    Text(toast)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background(Color(red: 0.1, green: 0.1, blue: 0.16).opacity(0.92))
+                        .clipShape(Capsule())
+                        .padding(.bottom, 8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.25), value: attendanceVM.toast)
+            .onChange(of: attendanceVM.toast) { _, newValue in
+                guard newValue != nil else { return }
+                // 이전 타이머를 취소하고 새로 예약 — 연속 토스트 시 타이머 누적/조기 사라짐 방지.
+                attendanceVM.scheduleToastDismiss()
+            }
             .opacity(animateIn ? 1 : 0)
             .offset(y: animateIn ? 0 : 14)
             .animation(.easeOut(duration: 0.34), value: animateIn)
             .onAppear {
                 animateIn = false
+                attendanceVM.load()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                    withAnimation(.easeOut(duration: 0.34)) {
-                        animateIn = true
-                    }
+                    withAnimation(.easeOut(duration: 0.34)) { animateIn = true }
                 }
             }
-            .onDisappear {
-                animateIn = false
-            }
+            .onDisappear { animateIn = false }
         }
     }
-    
+
     private enum ShopCategory: String, CaseIterable {
         case all = "전체"
         case cafe = "카페"

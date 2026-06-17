@@ -1,9 +1,14 @@
 import SwiftUI
 import GoogleSignIn
+import CashChatShared
 
 @main
 struct CashChatIOSApp: App {
     @StateObject private var themeSettings = ThemeSettings()
+
+    init() {
+        KoinIosKt.doInitKoin(baseUrl: AppConfig.apiBaseUrl, tokenProvider: KeychainTokenProvider())
+    }
 
     var body: some Scene {
         WindowGroup {
