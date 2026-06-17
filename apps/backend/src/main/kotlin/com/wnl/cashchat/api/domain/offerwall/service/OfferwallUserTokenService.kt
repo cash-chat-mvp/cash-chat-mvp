@@ -12,13 +12,15 @@ class OfferwallUserTokenService(
     private val offerwallUserTokenRepository: OfferwallUserTokenRepository,
 ) {
     /**
-     * 사용자당 안정적 토큰을 get-or-create 한다. 동시 최초 호출이 와도 PK(user_id) 충돌을
-     * DataIntegrityViolationException 으로 흡수하고 기존 토큰을 다시 읽어 반환한다(단일 생성 보장).
+     * 사용자당 안정적 토큰을 get-or-create 한다. UserPointService.createInitialPoint 와 동일 패턴:
+     * 메서드에 @Transactional 을 두지 않아 saveAndFlush 가 자체 암시적 트랜잭션에서 실행된다.
+     * 동시 최초 호출이 와도 PK(user_id) 충돌은 DataIntegrityViolationException 으로 흡수되고
+     * (해당 암시적 트랜잭션만 롤백), 새 읽기로 기존 토큰을 다시 조회해 반환한다(단일 생성 보장).
      */
     fun tokenFor(userId: Long): String {
         offerwallUserTokenRepository.findByUserId(userId)?.let { return it.token }
         return try {
-            doSaveToken(
+            offerwallUserTokenRepository.saveAndFlush(
                 OfferwallUserToken(
                     userId = userId,
                     token = UUID.randomUUID().toString().replace("-", ""),
@@ -28,10 +30,6 @@ class OfferwallUserTokenService(
             offerwallUserTokenRepository.findByUserId(userId)?.token ?: throw e
         }
     }
-
-    @Transactional
-    private fun doSaveToken(token: OfferwallUserToken): OfferwallUserToken =
-        offerwallUserTokenRepository.saveAndFlush(token)
 
     @Transactional(readOnly = true)
     fun resolveUserId(token: String): Long? =
