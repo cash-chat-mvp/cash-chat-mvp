@@ -52,7 +52,7 @@ val appModule = module {
             .create(ApiService::class.java)
     }
 
-    single { AuthRepository(get(), get(), get()) }
+    single { AuthRepository(get(), get(), get(), get(), get()) }
 
     viewModel { AuthViewModel(get()) }
 

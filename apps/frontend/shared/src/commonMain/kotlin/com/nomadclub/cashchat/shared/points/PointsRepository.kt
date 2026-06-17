@@ -15,13 +15,16 @@ interface PointsRepository {
     suspend fun refresh()
     /** 적립 발생 시 로컬 잔액 반영(서버 동기화 전 즉시 UI 갱신용). */
     fun applyDelta(delta: Long)
+    /** 로그아웃 시 다음 사용자에게 이전 사용자의 잔액이 노출되지 않도록 초기화한다. */
+    fun reset()
 }
 
 /** BE 부재 동안 사용하는 잠정 구현 — 초기값 + 적립 누적. */
-class LocalPointsRepository(initial: Long = 1250) : PointsRepository {
+class LocalPointsRepository(private val initial: Long = 1250) : PointsRepository {
     private val _balance = MutableStateFlow(initial)
     override val balance: StateFlow<Long> = _balance.asStateFlow()
     override suspend fun refresh() { /* no-op until GET /api/points/me 구현 */ }
+    override fun reset() { _balance.value = initial }
     override fun applyDelta(delta: Long) = _balance.update { current ->
         // 누적 합산이 Long 범위를 넘어 래핑(wrap)되어 잔액이 손상되지 않도록 포화(saturating) 덧셈 처리.
         val next = when {

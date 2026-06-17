@@ -46,6 +46,11 @@ final class AppState: ObservableObject {
     private let defaults = UserDefaults.standard
     private let appleSignInCoordinator = AppleSignInCoordinator()
 
+    // 코인 잔액 단일 소스 — 혜택존(출석)·상점·프로필이 동일한 KMM PointsRepository 를 공유한다.
+    // (이전엔 AppState.points 가 별도 상태라 출석 적립이 다른 탭에 반영되지 않았음)
+    private let pointsRepository = KoinHelper().pointsRepository()
+    private let pointsCollector = FlowCollector()
+
     private enum Keys {
         static let accessToken = "access_token"
         static let refreshToken = "refresh_token"
@@ -58,6 +63,14 @@ final class AppState: ObservableObject {
             clientID: AppConfig.googleIOSClientId,
             serverClientID: AppConfig.googleWebClientId
         )
+        pointsCollector.collectBalance(repo: pointsRepository) { [weak self] value in
+            Task { @MainActor in self?.points = Int(value.int64Value) }
+        }
+    }
+
+    deinit {
+        // 무한 collect 코루틴이 살아남지 않도록 구독을 취소한다(메모리 누수 방지).
+        pointsCollector.cancel()
     }
 
     // 앱 시작 시 저장된 토큰으로 세션 복원
@@ -167,20 +180,23 @@ final class AppState: ObservableObject {
         KeychainHelper.remove(forKey: Keys.role)
         // KMM Ktor 클라이언트(싱글톤)가 캐시한 BearerTokens 도 비워 다음 사용자에게 재사용되지 않도록 한다.
         KoinHelper().clearApiTokenCache()
+        // 싱글톤 PointsRepository 의 잔액을 초기화(다음 사용자에게 이전 잔액 노출 방지). points 는 balance 구독으로 갱신됨.
+        pointsRepository.reset()
+        // 싱글톤 AttendanceStore 의 출석 상태도 초기화(다음 사용자에게 이전 출석 노출 방지).
+        KoinHelper().attendanceStore().reset()
         isAuthenticated = false
-        points = 0
         messageCount = 0
     }
 
     func addPoints(_ value: Int) {
         guard value > 0 else { return }
-        points += value
+        pointsRepository.applyDelta(delta: Int64(value))
     }
 
     func spendPoints(_ value: Int) -> Bool {
         guard value > 0 else { return false }
         guard points >= value else { return false }
-        points -= value
+        pointsRepository.applyDelta(delta: Int64(-value))
         return true
     }
 

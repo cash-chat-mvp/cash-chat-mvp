@@ -2,7 +2,9 @@ package com.nomadclub.cashchat.data.repository
 
 import com.nomadclub.cashchat.core.data.TokenDataStore
 import com.nomadclub.cashchat.core.network.ApiService
+import com.nomadclub.cashchat.shared.attendance.AttendanceStore
 import com.nomadclub.cashchat.shared.core.network.AuthenticatedApiClient
+import com.nomadclub.cashchat.shared.points.PointsRepository
 import com.nomadclub.cashchat.shared.auth.model.AuthResponse
 import com.nomadclub.cashchat.shared.auth.model.GoogleOAuthCallbackRequest
 import com.nomadclub.cashchat.shared.auth.model.LogoutRequest
@@ -13,7 +15,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 class AuthRepository(
     private val apiService: ApiService,
     private val tokenDataStore: TokenDataStore,
-    private val authenticatedApiClient: AuthenticatedApiClient
+    private val authenticatedApiClient: AuthenticatedApiClient,
+    private val attendanceStore: AttendanceStore,
+    private val pointsRepository: PointsRepository,
 ) {
     // TokenAuthenticator에서 RefreshToken도 만료된 경우 재로그인 필요를 알리는 이벤트
     private val _reAuthRequired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -44,7 +48,7 @@ class AuthRepository(
         val response = apiService.refreshToken(TokenRefreshRequest(refreshToken))
         if (!response.isSuccessful) {
             tokenDataStore.clearTokens()
-            authenticatedApiClient.clearTokenCache()
+            clearLocalSession()
             _reAuthRequired.tryEmit(Unit)
             error("Refresh Token 만료 (${response.code()})")
         }
@@ -67,8 +71,19 @@ class AuthRepository(
             }
         }
         tokenDataStore.clearTokens()
-        // KMM Ktor 클라이언트(싱글톤)가 캐시한 BearerTokens 도 비워 다음 사용자에게 재사용되지 않도록 한다.
+        clearLocalSession()
+    }
+
+    /**
+     * 로그아웃/세션 만료 시 메모리에 남은 사용자별 상태를 모두 비운다.
+     * 싱글톤이라 비우지 않으면 다음 사용자에게 이전 사용자의 토큰/출석/잔액이 노출될 수 있다.
+     * - Ktor 클라이언트가 캐시한 BearerTokens
+     * - 출석(AttendanceStore) / 코인 잔액(PointsRepository) 상태
+     */
+    private fun clearLocalSession() {
         authenticatedApiClient.clearTokenCache()
+        attendanceStore.reset()
+        pointsRepository.reset()
     }
 
     fun getAccessToken() = tokenDataStore.getAccessTokenBlocking()

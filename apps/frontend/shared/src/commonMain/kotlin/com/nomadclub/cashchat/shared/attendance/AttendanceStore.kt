@@ -60,22 +60,43 @@ class AttendanceStore(
         }
     }
 
+    /** 로그아웃/세션 종료 시 다음 사용자에게 이전 출석 상태가 노출되지 않도록 초기화한다. */
+    fun reset() {
+        _state.value = AttendanceUiState()
+    }
+
     fun checkIn() {
         if (_state.value.todayChecked || _state.value.isCheckingIn) return
         _state.update { it.copy(isCheckingIn = true, errorMessage = null) }
         scope.launch {
-            try {
-                val result = service.checkIn()
-                pointsRepository.applyDelta(result.awardedCoin)
-                // 체크인 응답에 실제 출석 날짜가 없어 로컬 추론(maxOrNull()+1)은 공백 출석 시 잘못된 날짜를 기록한다.
-                // 서버에서 최신 월간 출석 정보를 다시 조회해 권위 있는 상태로 동기화한다.
-                val monthly = service.getMonthly(
-                    _state.value.year.takeIf { it > 0 },
-                    _state.value.month.takeIf { it > 0 },
+            val result = try {
+                service.checkIn()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(isCheckingIn = false, errorMessage = e.message ?: "이미 출석했거나 오류가 발생했어요") }
+                return@launch
+            }
+            // 체크인 성공 — 서버가 이미 출석을 기록하고 코인을 적립했다.
+            // 코인 적립·보상 이벤트·todayChecked 는 후속 월간 재조회 성공 여부와 무관하게 확정한다.
+            // (재조회 실패로 todayChecked 를 되돌리면 사용자가 다시 눌러 중복 체크인 오류만 보게 된다)
+            pointsRepository.applyDelta(result.awardedCoin)
+            _state.update {
+                it.copy(
+                    isCheckingIn = false,
+                    todayChecked = true,
+                    currentStreak = result.streakDayCount,
+                    nextReward = result.nextRewardPreview,
                 )
+            }
+            _rewardEvents.emit(CheckInRewardEvent(result.awardedCoin, result.bonusItems))
+            // 체크인 응답엔 실제 출석 '날짜'가 없어 달력(checkedDays) 동기화를 위해 월간 정보를 재조회한다.
+            // 인자 없이 호출해 서버가 현재 월을 판정하게 한다(이전 _state 의 year/month 는 stale 일 수 있음).
+            // best-effort: 실패해도 위 체크인 성공 상태는 유지하고 다음 loadMonthly 에서 보정한다.
+            try {
+                val monthly = service.getMonthly()
                 _state.update { prev ->
                     prev.copy(
-                        isCheckingIn = false,
                         year = monthly.year,
                         month = monthly.month,
                         todayChecked = monthly.todayChecked,
@@ -84,11 +105,10 @@ class AttendanceStore(
                         nextReward = monthly.nextRewardPreview,
                     )
                 }
-                _rewardEvents.emit(CheckInRewardEvent(result.awardedCoin, result.bonusItems))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(isCheckingIn = false, errorMessage = e.message ?: "이미 출석했거나 오류가 발생했어요") }
+                // 달력 동기화 실패는 사용자에게 노출하지 않는다(체크인 자체는 성공).
             }
         }
     }
