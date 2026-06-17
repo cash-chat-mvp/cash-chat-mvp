@@ -1,10 +1,13 @@
 spring:
   ai:
+    # 채팅 LLM 은 Gemini 의 OpenAI 호환 엔드포인트를 사용한다(dev 와 동일 방식).
+    # 프로바이더 빈은 prod 프로파일의 OpenAiLlmProvider 이지만, base-url 을 Gemini 로 지정해 Gemini 모델을 호출한다.
     openai:
-      api-key: ${OPENAI_API_KEY}
+      api-key: ${GEMINI_API_KEY}
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai
       chat:
         options:
-          model: gpt-4o-mini
+          model: gemini-3.1-flash-lite
           max-tokens: 1024
           temperature: 0.7
 
