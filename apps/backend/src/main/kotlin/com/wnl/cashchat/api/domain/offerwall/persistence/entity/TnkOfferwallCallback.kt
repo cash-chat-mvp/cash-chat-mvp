@@ -60,7 +60,11 @@ class TnkOfferwallCallback(
     }
 
     fun markRejected(status: TnkOfferwallStatus) {
-        require(status == TnkOfferwallStatus.REJECTED_BAD_SIGNATURE || status == TnkOfferwallStatus.REJECTED_UNKNOWN_USER) {
+        require(
+            status == TnkOfferwallStatus.REJECTED_BAD_SIGNATURE ||
+                status == TnkOfferwallStatus.REJECTED_UNKNOWN_USER ||
+                status == TnkOfferwallStatus.REJECTED_NON_POSITIVE
+        ) {
             "status must be a REJECTED_* value"
         }
         this.status = status
@@ -72,4 +76,5 @@ enum class TnkOfferwallStatus {
     GRANTED,
     REJECTED_BAD_SIGNATURE,
     REJECTED_UNKNOWN_USER,
+    REJECTED_NON_POSITIVE,
 }

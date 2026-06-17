@@ -49,6 +49,14 @@ class TnkOfferwallService(
             return callback.status
         }
 
+        // 적립액은 양수여야 한다. 음수/0 pay_pnt 를 그대로 적립하면 recordTransaction 이 차감으로 처리해
+        // 포인트가 사라진다(환수는 범위 외). 비정상 콜백은 기록만 하고 적립하지 않는다.
+        if (params.payPnt <= 0) {
+            log.warn("TNK offerwall callback rejected: non-positive pay_pnt={} (seqId={})", params.payPnt, params.seqId)
+            callback.markRejected(TnkOfferwallStatus.REJECTED_NON_POSITIVE)
+            return TnkOfferwallStatus.REJECTED_NON_POSITIVE
+        }
+
         val userId = offerwallUserTokenService.resolveUserId(params.mdUserNm)
         if (userId == null) {
             callback.markRejected(TnkOfferwallStatus.REJECTED_UNKNOWN_USER)

@@ -109,6 +109,18 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             pointTransactionRepository.count() shouldBe 0L
         }
 
+        test("non-positive pay_pnt is rejected and never deducts points") {
+            val (userId, token) = newUserWithToken("nonpos")
+            val baseline = userPointRepository.findByUserId(userId)!!.balance
+
+            val status = service.handleCallback(params("s7", token, -1000), now)
+
+            status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
+            userPointRepository.findByUserId(userId)!!.balance shouldBe baseline
+            callbackRepository.findBySeqId("s7")!!.status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
+            pointTransactionRepository.count() shouldBe 0L
+        }
+
         test("duplicate seq_id does not double-credit") {
             val (userId, token) = newUserWithToken("dup")
             val baseline = userPointRepository.findByUserId(userId)!!.balance
