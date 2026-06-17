@@ -13,15 +13,6 @@ spring:
 
   application.name: cash-chat-api
 
-  h2.console.enabled: true
-
-  datasource:
-    driver-class-name: org.h2.Driver
-    # MODE=MySQL: prod(MySQL)와 동일한 방언으로 Flyway 마이그레이션을 실행하기 위함
-    # DB_CLOSE_DELAY=-1: 마지막 커넥션이 닫혀도 인메모리 DB를 JVM 종료까지 유지해 Flyway가 적용한 스키마가 보존되도록 함
-    url: jdbc:h2:mem:test;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
-    username: sa
-
   jpa:
     hibernate:
       ddl-auto: validate
@@ -45,8 +36,57 @@ app:
       coin-amount: ${APP_ADS_REWARD_COIN_AMOUNT:40}
       daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}
       nonce-ttl: ${APP_ADS_REWARD_NONCE_TTL:10m}
+  energy:
+    max-energy: 50
+    signup-bonus: 50
+    post-evolution-ratio: 0.5
+  evolution:
+    rules:
+      - from-level: 1
+        attempt-cost: 500
+        success-rate: 0.7
+      - from-level: 2
+        attempt-cost: 1200
+        success-rate: 0.5
+      - from-level: 3
+        attempt-cost: 3000
+        success-rate: 0.25
+      - from-level: 4
+        attempt-cost: 8000
+        success-rate: 0.1
+  ledger:
+    risk-rate: 0.15
+    service-rate: 0.1
+    min-profit-rate: 0.2
+    min-profit-floor: 2
+    rewards:
+      - source: AD
+        cashable-pt: 4
+        energy: 3
+  quality:
+    pool-safety-floor-centi-pt: 500000
+    premium-daily-cap-per-user: 50
+  routing:
+    meal-margin-centi-pt: 32
+    mini-delta-centi-pt: 270
+    gpt-delta-centi-pt: 1620
+    levels:
+      - level: 1
+        mini: 0.00
+        gpt: 0.00
+      - level: 2
+        mini: 0.05
+        gpt: 0.00
+      - level: 3
+        mini: 0.20
+        gpt: 0.00
+      - level: 4
+        mini: 0.35
+        gpt: 0.05
+      - level: 5
+        mini: 0.50
+        gpt: 0.10
 
-# O-Auth (Open Authorization)
 # OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml
 oauth:
   provider:
@@ -57,11 +97,7 @@ oauth:
     token-uri: ${APPLE_TOKEN_URI:https://appleid.apple.com/auth/token}
     jwks-uri: ${APPLE_JWKS_URI:https://appleid.apple.com/auth/keys}
 
-
-# JWT (JSON Web Token)
 jwt:
   secret-key: ${JWT_SECRET:this-is-a-development-secret-key-at-least-32-bytes-long!!}
-  # 30 (m) = 1,800 (s) = 1,800,000 (ms)
   access-token-expiry: 1800000
-  # 14 (d) = 336 (h) = 20,160 (m) = 1,209,600 (s) = 1,209,600,000 (ms)
   refresh-token-expiry: 1209600000

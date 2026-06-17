@@ -11,18 +11,20 @@ import com.wnl.cashchat.api.domain.chat.persistence.repository.ConversationRepos
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessage
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
+import com.wnl.cashchat.api.domain.chat.service.routing.ChatModelRouter
+import com.wnl.cashchat.api.domain.chat.service.routing.ModelTier
 import com.wnl.cashchat.api.domain.chat.web.response.ChatMessageResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
-import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
-import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import reactor.core.publisher.Flux
 import reactor.core.publisher.SignalType
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 /**
@@ -33,10 +35,11 @@ class ChatService(
     private val conversationRepository: ConversationRepository,
     private val chatMessageRepository: ChatMessageRepository,
     private val userRepository: UserRepository,
-    private val userPointService: UserPointService,
     private val llmProvider: LlmProvider,
+    private val chatModelRouter: ChatModelRouter,
     transactionManager: PlatformTransactionManager,
 ) {
+    private val log = LoggerFactory.getLogger(ChatService::class.java)
     private val transactionTemplate = TransactionTemplate(transactionManager)
 
     fun createConversation(userId: Long, title: String?): ConversationResponse {
@@ -86,15 +89,21 @@ class ChatService(
 
     /**
      * Streams an assistant response while persisting the user input and final assistant state.
+     *
+     * Economic loop (CC-340): routeAndConsume runs exactly once inside the setup transaction,
+     * consuming 밥(energy) and routing to the appropriate model tier.
+     * InsufficientEnergyException is the sole gate — it propagates up and is mapped to 409 by ChatExceptionHandler.
      */
     fun stream(userId: Long, conversationId: Long, content: String): Flux<String> {
+        val today = LocalDate.now()
         val streamContext = transactionTemplate.execute {
             val conversation = conversationRepository.findByIdAndUserId(conversationId, userId)
                 ?: throw ConversationNotFoundException(conversationId)
 
-            if (!userPointService.hasEnoughBalance(userId)) {
-                throw InsufficientPointsException()
-            }
+            // Economic gate + routing decision (밥 차감 → 풀 적립 → 티어 결정).
+            // InsufficientEnergyException propagates; no LLM call occurs.
+            val modelTier = chatModelRouter.routeAndConsume(userId, today)
+            log.debug("stream: userId={} conversationId={} modelTier={}", userId, conversationId, modelTier)
 
             val userMessage = chatMessageRepository.save(
                 ChatMessage(
@@ -117,7 +126,8 @@ class ChatService(
                     conversation = conversation,
                     role = MessageRole.ASSISTANT,
                     content = "",
-                    status = MessageStatus.STREAMING
+                    status = MessageStatus.STREAMING,
+                    model = modelTier.name.lowercase(),
                 )
             )
 
@@ -126,6 +136,7 @@ class ChatService(
             StreamContext(
                 assistantMessageId = assistantMessage.id,
                 providerMessages = providerMessages,
+                modelTier = modelTier,
             )
         } ?: error("Failed to initialize chat stream")
 
@@ -211,6 +222,7 @@ class ChatService(
     private data class StreamContext(
         val assistantMessageId: Long,
         val providerMessages: List<LlmMessage>,
+        val modelTier: ModelTier,
     )
 
     private companion object {

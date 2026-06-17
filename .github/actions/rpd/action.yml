@@ -1,0 +1,70 @@
+name: "RPD Counter"
+description: "리뷰 호출 횟수(추정치)를 KST 일자별 Actions 캐시에 누적/표시. pr-agent 내부 호출은 측정 불가."
+inputs:
+  mode:
+    description: "add | render"
+    default: "add"
+  increments:
+    description: '"keylabel:model:count" CSV (예: shared:model0:1,shared:model1:1)'
+    default: ""
+  m0name:
+    description: "표시용 model0 이름"
+    default: "model0"
+  m1name:
+    description: "표시용 model1 이름"
+    default: "model1"
+  viewer:
+    description: "render 시 '내 키' 컬럼 대상 keylabel"
+    default: "shared"
+outputs:
+  table:
+    description: "render 모드에서 생성된 마크다운 표"
+    value: ${{ steps.render.outputs.table }}
+runs:
+  using: composite
+  steps:
+    - id: d
+      shell: bash
+      run: echo "date=$(TZ='Asia/Seoul' date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+    # KST 일자 prefix 로 가장 최근 누적본 복원(없으면 0부터 = 자정 KST 자동 초기화)
+    - uses: actions/cache/restore@v4
+      with:
+        path: .rpd-state.json
+        key: gemini-rpd-${{ steps.d.outputs.date }}-seed
+        restore-keys: |
+          gemini-rpd-${{ steps.d.outputs.date }}-
+    - id: apply
+      if: ${{ inputs.mode == 'add' && inputs.increments != '' }}
+      shell: bash
+      env:
+        INCR: ${{ inputs.increments }}
+      run: |
+        set -euo pipefail
+        . "$GITHUB_ACTION_PATH/../../scripts/review/lib_rpd.sh"
+        IFS=',' read -ra items <<< "$INCR"
+        for it in "${items[@]}"; do
+          [ -z "$it" ] && continue
+          IFS=':' read -r k m c <<< "$it"
+          [ -z "${k:-}" ] || [ -z "${m:-}" ] && continue
+          rpd_add ".rpd-state.json" "$k" "$m" "${c:-1}"
+        done
+        echo "::notice::RPD 카운트 누적: $INCR"
+    # 고유 키로 저장(잡당 1회 호출 전제 → 충돌 없음)
+    - uses: actions/cache/save@v4
+      if: ${{ inputs.mode == 'add' && inputs.increments != '' }}
+      with:
+        path: .rpd-state.json
+        key: gemini-rpd-${{ steps.d.outputs.date }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+    - id: render
+      if: ${{ inputs.mode == 'render' }}
+      shell: bash
+      env:
+        M0: ${{ inputs.m0name }}
+        M1: ${{ inputs.m1name }}
+        VIEWER: ${{ inputs.viewer }}
+      run: |
+        set -euo pipefail
+        . "$GITHUB_ACTION_PATH/../../scripts/review/lib_rpd.sh"
+        T=$(rpd_render ".rpd-state.json" "$M0" "$M1" "$VIEWER")
+        DELIM="RPD_$(date +%s%N)"
+        { echo "table<<$DELIM"; printf '%s\n' "$T"; echo "$DELIM"; } >> "$GITHUB_OUTPUT"

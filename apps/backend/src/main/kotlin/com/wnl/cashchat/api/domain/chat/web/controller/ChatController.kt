@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import reactor.core.publisher.Flux
+import java.time.Duration
 import java.util.UUID
 
 /**
@@ -274,12 +275,16 @@ class ChatController(
             .onErrorResume {
                 Flux.just(ServerSentEvent.builder<String>(STREAM_FAILED_MESSAGE).event(ERROR_EVENT).build())
             }
+            .withHeartbeat(Duration.ofSeconds(HEARTBEAT_INTERVAL_SECONDS))
     }
 
     companion object {
         private const val MESSAGE_EVENT = "message"
         private const val ERROR_EVENT = "error"
         private const val STREAM_FAILED_MESSAGE = "stream failed"
+
+        /** Heartbeat cadence; must stay well below the nginx SSE read timeout (60s). */
+        private const val HEARTBEAT_INTERVAL_SECONDS = 15L
     }
 
     private fun Authentication.userId(): Long =

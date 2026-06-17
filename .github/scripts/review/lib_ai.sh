@@ -38,3 +38,30 @@ gemini_generate() {
   if [ "$code" != "200" ] || ai_is_rate_limited "$(cat "$out" 2>/dev/null)"; then return 1; fi
   return 0
 }
+
+# ai_generate PRIMARY_KEY FALLBACK_KEY MODEL PAYLOAD OUT
+#   기본은 개인키(PRIMARY)로 호출하고, 실패 시에만 공용키(FALLBACK)로 폴백한다.
+#   - 개인키 rate-limit(RPD/RPM 소진): 같은 키 재시도는 무의미 → 즉시 공용키로 폴백
+#   - 개인키 일시 오류: 개인키로 백오프 재시도 후 그래도 실패하면 공용키 폴백
+#   FALLBACK이 비었거나 PRIMARY와 같으면 폴백하지 않는다. rc0=성공 / rc1=최종 실패.
+ai_generate() {
+  local kp="$1" kf="$2" model="$3" payload="$4" out="$5"
+  # 1차: 개인키 1회
+  if gemini_generate "$kp" "$model" "$payload" "$out"; then return 0; fi
+  local can_fallback=0
+  [ -n "$kf" ] && [ "$kf" != "$kp" ] && can_fallback=1
+  # 개인키가 rate-limit이면 재시도 없이 곧장 공용키로
+  if [ "$can_fallback" -eq 1 ] && ai_is_rate_limited "$(cat "$out" 2>/dev/null)"; then
+    echo "::notice::개인키 rate-limit → 공용키로 폴백"
+    ai_retry gemini_generate "$kf" "$model" "$payload" "$out" && return 0
+    return 1
+  fi
+  # 일시 오류: 개인키로 백오프 재시도
+  if ai_retry gemini_generate "$kp" "$model" "$payload" "$out"; then return 0; fi
+  # 그래도 실패 → 공용키 폴백
+  if [ "$can_fallback" -eq 1 ]; then
+    echo "::notice::개인키 실패 → 공용키로 폴백"
+    ai_retry gemini_generate "$kf" "$model" "$payload" "$out" && return 0
+  fi
+  return 1
+}
