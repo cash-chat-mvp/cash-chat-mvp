@@ -3,6 +3,7 @@ package com.nomadclub.cashchat.shared.di
 import com.nomadclub.cashchat.shared.ads.AdRewardStore
 import com.nomadclub.cashchat.shared.ads.AdsApi
 import com.nomadclub.cashchat.shared.attendance.AttendanceApi
+import com.nomadclub.cashchat.shared.attendance.AttendanceStore
 import com.nomadclub.cashchat.shared.chat.ApiChatGateway
 import com.nomadclub.cashchat.shared.chat.ChatApi
 import com.nomadclub.cashchat.shared.chat.ChatGateway
@@ -13,6 +14,8 @@ import com.nomadclub.cashchat.shared.energy.EnergyApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudStore
+import com.nomadclub.cashchat.shared.points.LocalPointsRepository
+import com.nomadclub.cashchat.shared.points.PointsRepository
 import com.nomadclub.cashchat.shared.wallet.PointsApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +40,9 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single { AdsApi(get(), baseUrl) }
     single { PointsApi(get(), baseUrl) }
     single { AttendanceApi(get(), baseUrl) }
+    // 혜택존(출석/코인) — BE 잔액 API 미구현 동안 LocalPointsRepository 사용
+    single<PointsRepository> { LocalPointsRepository() }
+    single { AttendanceStore(get(), get(), get()) }
     single { com.nomadclub.cashchat.shared.shop.ShopApi(get(), baseUrl) }
     single { com.nomadclub.cashchat.shared.energy.EnergyTopupApi(get(), baseUrl) }
 
