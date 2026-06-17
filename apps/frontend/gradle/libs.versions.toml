@@ -24,6 +24,7 @@ ktor = "2.3.12"
 kotlinxSerializationJson = "1.7.3"
 sqldelight = "2.0.2"
 sentryKmp = "0.7.1"
+markdownRenderer = "0.27.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -53,6 +54,7 @@ koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = 
 koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koinCompose" }
 play-services-ads = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "admob" }
 security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+markdown-renderer-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
 
 # ── shared 모듈(KMM) 전용 라이브러리 — iOS 연동 시점에 :shared 포함 후 사용 ──
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }

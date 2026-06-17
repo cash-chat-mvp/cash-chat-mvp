@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.mikepenz.markdown.m3.Markdown
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
 
 /** 코인/밥 공용 칩 */
@@ -96,9 +97,10 @@ fun MessageBubble(item: ChatItem) {
             ) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 300.dp).animateContentSize()) {
                     if (item.text.isNotEmpty()) {
-                        Text(
-                            item.text + if (item.isStreaming) " ▍" else "",
-                            style = MaterialTheme.typography.bodyMedium,
+                        // LLM 응답은 마크다운(굵게/목록/제목/코드 등)으로 오므로 렌더링해 보여준다.
+                        // 스트리밍 커서 ▍는 마크다운 특수문자가 아니라 그대로 인라인 표시된다.
+                        Markdown(
+                            content = item.text + if (item.isStreaming) " ▍" else "",
                         )
                     }
                     if (item.isError) {
