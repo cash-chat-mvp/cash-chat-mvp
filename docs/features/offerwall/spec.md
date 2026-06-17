@@ -84,10 +84,10 @@ And 동시 도착한 동일 `seq_id` 2건 중 정확히 1건만 적립되고 나
 
 ### 서명 검증 실패
 
-Given 콜백의 `md_chk`가 `appKey` 재계산값과 일치하지 않는다
+Given 콜백의 `md_chk`가 `appKey` 재계산값과 일치하지 않는다 (또는 `appKey`가 미설정이라 fail-closed로 거절된다)
 When 백엔드가 콜백을 처리한다
 Then 백엔드는 적립하지 않는다
-And `tnk_offerwall_callbacks`에 `status=REJECTED_BAD_SIGNATURE`로 기록한다
+And **서명 검증을 DB 쓰기보다 먼저 수행하므로 `tnk_offerwall_callbacks`에 행을 만들지 않고 `warn` 로그만 남긴다** — public 엔드포인트로 들어온 미검증 요청이 원장을 무제한 오염시키는 것을 막는다 (AdMob SSV 패턴과 정합). 서명 통과 콜백만 원장에 기록된다.
 And 코인이 적립되지 않는다.
 
 ### 미지의 토큰
@@ -135,12 +135,12 @@ sequenceDiagram
     User->>SDK: 오퍼 완료(설치/가입/설문)
     SDK->>TNK: 전환 보고
     TNK->>API: POST /api/offerwall/tnk/callback?seq_id&pay_pnt&md_user_nm&md_chk
-    API->>API: md_chk == MD5(appKey + md_user_nm + seq_id) 검증
-    alt 서명 실패
-        API->>DB: tnk_offerwall_callbacks INSERT (REJECTED_BAD_SIGNATURE)
+    API->>API: md_chk == MD5(appKey + md_user_nm + seq_id) 검증 (DB 쓰기 전)
+    alt 서명 실패 (또는 appKey 미설정)
+        API->>API: warn 로그만 (원장 행 미생성)
         API-->>TNK: ack(거절)
     else 서명 성공
-        API->>DB: seq_id 중복 체크
+        API->>DB: insertIfAbsent(PENDING) + seq_id 중복 체크
         alt 이미 처리됨
             API-->>TNK: SUCCESS (멱등)
         else 신규

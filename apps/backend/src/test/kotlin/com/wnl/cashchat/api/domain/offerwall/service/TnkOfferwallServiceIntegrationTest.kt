@@ -86,7 +86,7 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             callbackRepository.findBySeqId("s2")!!.coinAmount shouldBe 750L
         }
 
-        test("bad signature records REJECTED_BAD_SIGNATURE and credits nothing") {
+        test("bad signature is rejected without persisting a ledger row and credits nothing") {
             val (userId, token) = newUserWithToken("badsig")
             val baseline = userPointRepository.findByUserId(userId)!!.balance
 
@@ -94,7 +94,8 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
 
             status shouldBe TnkOfferwallStatus.REJECTED_BAD_SIGNATURE
             userPointRepository.findByUserId(userId)!!.balance shouldBe baseline
-            callbackRepository.findBySeqId("s3")!!.status shouldBe TnkOfferwallStatus.REJECTED_BAD_SIGNATURE
+            // 서명 검증을 DB 쓰기 앞에서 수행하므로 원장 행이 생기지 않는다(미검증 요청 차단).
+            callbackRepository.findBySeqId("s3") shouldBe null
             pointTransactionRepository.count() shouldBe 0L
         }
 
