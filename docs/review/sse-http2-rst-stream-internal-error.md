@@ -96,3 +96,56 @@ location = /api/v1/chat/stream {
 - 관련 PR: nginx SSE 설정 [#185](https://github.com/cash-chat-mvp/cash-chat-mvp/pull/185)
 - 관련 코드: `apps/backend/.../chat/web/controller/ChatController.kt`,
   `ServerSentEventHeartbeat.kt`, `infra/deploy/nginx/.../conf.d/*.conf.template`
+
+---
+
+# 이슈 2 (별건) — 인증 엔드포인트 행(hang)으로 로그인/토큰 갱신 무응답
+
+> 발견: 2026-06-17, FE 디바이스 테스트 중 (이슈 1과 무관한 별개 서버 장애)
+> 상태: **서버 측 점검 필요** (FE 수정 사항 아님)
+
+## 한 줄 요약
+
+`POST /api/auth/guest`, `POST /api/auth/refresh` 등 **DB를 건드리는 auth POST 요청이 응답 없이
+행(hang)** 된다. 앱이 시작 시 토큰을 못 받아 채팅을 포함한 인증 필요 기능이 전부 막힌다.
+
+## 증상 (앱 로그)
+
+```
+okhttp.OkHttpClient  --> POST https://cashchat.duckdns.org/api/auth/refresh (55-byte body)
+okhttp.OkHttpClient  <-- HTTP FAILED: java.net.SocketTimeoutException: timeout   (~10초 후)
+okhttp.OkHttpClient  --> POST .../api/auth/refresh ...   (재시도 반복)
+okhttp.OkHttpClient  <-- HTTP FAILED: java.io.IOException: Canceled
+```
+
+## 근거 (서버 직접 호출, 2026-06-17 06:49 UTC)
+
+| 요청 | 결과 |
+|---|---|
+| `GET /` | **HTTP/2 401 즉시 응답** (`server: nginx/1.27.5`) — nginx·웹 계층 정상 |
+| `POST /api/auth/refresh` (dummy token) ×2 | **15초+ 무응답** (`http_code=000`, timeout) |
+| `POST /api/auth/guest?deviceToken=...` | **15초+ 무응답** (`http_code=000`, timeout) |
+
+- `GET /` 는 Spring Security가 인증 없이 즉시 401을 돌려줌 → **웹 계층은 살아있음**.
+- 더미 토큰이면 즉시 401/400을 줘야 할 auth POST가 모두 멈춤 → **DB/서비스 계층에서 막힘**.
+
+## 분석
+
+웹 계층은 응답하는데 **DB 접근이 필요한 요청만 행**되는 전형적 패턴. 후보:
+
+- **DB 커넥션 풀 고갈** (반납 안 되는 커넥션 누수, 풀 사이즈 부족)
+- **DB 다운/네트워크 단절** (MySQL 접속 대기 중 행)
+- 스레드 풀 고갈 / 외부 호출(OAuth 등) 무한 대기
+
+## 점검 요청 (BE/인프라)
+
+1. 백엔드 컨테이너/프로세스 상태 및 재시작 필요 여부
+2. **MySQL 상태 + 커넥션 풀** (HikariCP active/idle/pending 지표, `max-lifetime`/`connection-timeout`)
+3. auth 요청이 막히는 지점 — 애플리케이션 로그 / 스레드 덤프
+4. 풀 고갈이라면 누수 지점(트랜잭션 미종료, 커넥션 미반납) 추적
+
+## FE 영향
+
+- FE 수정 사항 아님. 서버 정상화 시 현재 빌드로 정상 동작 예상.
+- 다만 앱의 auth OkHttp 클라이언트 read timeout이 ~10s라 서버 지연 시 즉시 실패·재시도 반복 →
+  서버 복구 후에도 재시도 폭주(Canceled 루프)가 보이면 FE 재시도 정책 별도 검토 가능.
