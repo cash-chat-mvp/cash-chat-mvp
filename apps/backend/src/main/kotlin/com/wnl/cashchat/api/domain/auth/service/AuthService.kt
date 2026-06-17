@@ -54,6 +54,7 @@ class AuthService(
     private val extractorMap = oAuthUserInfoExtractors.associateBy { it.providerType }
     private val transactionTemplate = TransactionTemplate(transactionManager).apply {
         propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        timeout = 5 // 초. DB 지연 시 커넥션을 오래 물지 않도록 짧은 로그인 트랜잭션에 상한을 둔다.
     }
 
     @Transactional
