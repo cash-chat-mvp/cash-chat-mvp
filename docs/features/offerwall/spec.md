@@ -199,7 +199,7 @@ sequenceDiagram
 TNK SDK README(Android/iOS)에 미명시된 항목으로, TNK 콘솔 또는 담당자(platform@tnkfactory.com) 확인 후 확정한다.
 
 - [ ] 포스트백 HTTP 메서드(POST 가정) 및 파라미터 전달 방식(query vs body)
-- [ ] `md_chk` 정확한 산식 — 연결 순서·구분자·대소문자·인코딩 (현재 가정: `MD5(appKey + md_user_nm + seq_id)`, lowercase hex)
+- [ ] **(프로덕션 출시 블로커)** `md_chk` 정확한 산식 — 연결 순서·구분자·대소문자·인코딩 (현재 가정: `MD5(appKey + md_user_nm + seq_id)`, lowercase hex). **특히 `pay_pnt`(적립액)가 서명 페이로드에 포함되는지 반드시 확인** — 현재 가정 산식은 `pay_pnt`를 검증하지 않으므로, 유효한 `md_chk`를 만들 수 있는 주체가 `pay_pnt`를 임의 변조하면 그대로 적립된다. TNK 실제 산식에 `pay_pnt`가 포함되면 `TnkMdChecksumVerifier`를 출시 전 반드시 갱신.
 - [ ] TNK가 기대하는 정확한 성공/실패 ack 본문·HTTP 상태코드 (현재 가정: 200 + `SUCCESS`)
 - [ ] 취소/환수 콜백의 존재 여부 및 규격 (존재 시 D3 후속 자동화 범위에서 처리)
 - [ ] dev/prod 콜백 URL 등록 및 `app-key` 발급(TNK 콘솔)
