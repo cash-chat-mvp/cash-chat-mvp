@@ -236,8 +236,8 @@ class ChatController(
                 ]
             ),
             ApiResponse(
-                responseCode = "402",
-                description = "The user does not have enough points.",
+                responseCode = "409",
+                description = "The user does not have enough energy(밥) to start a chat. Refill via rewarded ad and retry.",
                 content = [
                     Content(
                         mediaType = MediaType.APPLICATION_JSON_VALUE,
