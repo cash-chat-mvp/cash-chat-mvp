@@ -20,7 +20,7 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 - `SPRING_DATASOURCE_URL`: MySQL JDBC URL, for example `jdbc:mysql://<mysql-host>:3306/cashchat?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true`
 - `SPRING_DATASOURCE_USERNAME`: MySQL username with privileges on the `cashchat` database
 - `SPRING_DATASOURCE_PASSWORD`: MySQL password
-- `OPENAI_API_KEY`: OpenAI API key, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `GEMINI_API_KEY`: Gemini API key (used via the OpenAI-compatible endpoint for chat), required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_REDIRECT_URI`: Google OAuth redirect URI, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
