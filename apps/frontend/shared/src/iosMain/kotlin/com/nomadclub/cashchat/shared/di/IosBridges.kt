@@ -10,6 +10,7 @@ import com.nomadclub.cashchat.shared.chat.model.ChatItem
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudStore
 import com.nomadclub.cashchat.shared.points.PointsRepository
+import com.nomadclub.cashchat.shared.shop.ShopApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,9 +28,11 @@ class KoinHelper : KoinComponent {
     private val evolution: EvolutionStore by inject()
     private val adReward: AdRewardStore by inject()
     private val chatApiInstance: ChatApi by inject()
+    private val shopApiInstance: ShopApi by inject()
 
     fun chatStore(): ChatStore = chat
     fun chatApi(): ChatApi = chatApiInstance
+    fun shopApi(): ShopApi = shopApiInstance
     fun attendanceStore(): AttendanceStore = attendance
     fun pointsRepository(): PointsRepository = points
     fun hudStore(): HudStore = hud

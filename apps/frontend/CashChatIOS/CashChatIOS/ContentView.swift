@@ -390,7 +390,7 @@ struct OnboardingView: View {
                     .tabItem { Label(MainTab.rewards.rawValue, systemImage: MainTab.rewards.icon) }
                     .tag(MainTab.rewards)
                 
-                ShopView()
+                ShopScreen()
                     .tabItem { Label(MainTab.shop.rawValue, systemImage: MainTab.shop.icon) }
                     .tag(MainTab.shop)
                 
