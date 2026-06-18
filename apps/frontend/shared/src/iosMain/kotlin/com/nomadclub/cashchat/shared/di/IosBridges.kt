@@ -5,6 +5,7 @@ import com.nomadclub.cashchat.shared.attendance.AttendanceStore
 import com.nomadclub.cashchat.shared.attendance.AttendanceUiState
 import com.nomadclub.cashchat.shared.attendance.CheckInRewardEvent
 import com.nomadclub.cashchat.shared.chat.ChatStore
+import com.nomadclub.cashchat.shared.chat.model.ChatItem
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudStore
 import com.nomadclub.cashchat.shared.points.PointsRepository
@@ -52,6 +53,14 @@ class FlowCollector {
 
     fun collectBalance(repo: PointsRepository, onEach: (Long) -> Unit) {
         scope.launch { repo.balance.collect { onEach(it) } }
+    }
+
+    fun collectChatItems(store: ChatStore, onEach: (List<ChatItem>) -> Unit) {
+        scope.launch { store.items.collect { onEach(it) } }
+    }
+
+    fun collectIsStreaming(store: ChatStore, onEach: (Boolean) -> Unit) {
+        scope.launch { store.isStreaming.collect { onEach(it) } }
     }
 
     fun cancel() {

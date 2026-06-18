@@ -382,7 +382,7 @@ struct OnboardingView: View {
         
         var body: some View {
             TabView(selection: $selected) {
-                ChatView()
+                ChatScreen()
                     .tabItem { Label(MainTab.chat.rawValue, systemImage: MainTab.chat.icon) }
                     .tag(MainTab.chat)
                 
