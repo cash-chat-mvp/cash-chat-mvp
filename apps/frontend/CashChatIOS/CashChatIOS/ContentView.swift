@@ -386,7 +386,7 @@ struct OnboardingView: View {
                     .tabItem { Label(MainTab.chat.rawValue, systemImage: MainTab.chat.icon) }
                     .tag(MainTab.chat)
                 
-                RewardsView()
+                BenefitZoneScreen()
                     .tabItem { Label(MainTab.rewards.rawValue, systemImage: MainTab.rewards.icon) }
                     .tag(MainTab.rewards)
                 
