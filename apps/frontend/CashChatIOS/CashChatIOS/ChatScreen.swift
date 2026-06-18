@@ -1,9 +1,16 @@
 import SwiftUI
+import UIKit
 import CashChatShared
+
+/// 일부 SF Symbol 이름은 iOS 버전에 따라 없을 수 있어, 없으면 폴백 이름을 사용한다.
+private func chatSFSymbol(_ primary: String, fallback: String) -> String {
+    UIImage(systemName: primary) == nil ? fallback : primary
+}
 
 struct ChatScreen: View {
     @StateObject private var vm = ChatViewModel()
     @State private var input = ""
+    @State private var showConversations = false
     @FocusState private var isInputFocused: Bool
 
     private let accent = Color(red: 0.36, green: 0.42, blue: 0.98)
@@ -12,20 +19,31 @@ struct ChatScreen: View {
         VStack(spacing: 0) {
             header
             messageList
+            if vm.energyGateVisible { energyBanner }
             inputBar
         }
         .background(Color(.systemGroupedBackground))
         .onAppear { vm.load() }
+        .sheet(isPresented: $showConversations) {
+            conversationListSheet
+        }
     }
 
     private var header: some View {
         HStack {
+            Button {
+                showConversations = true
+            } label: {
+                Image(systemName: chatSFSymbol("line.3.horizontal", fallback: "line.horizontal.3"))
+                    .foregroundStyle(.primary)
+            }
+            Spacer()
             Text("CashAI 비서").font(.headline)
             Spacer()
             Button {
                 vm.startNew()
             } label: {
-                Image(systemName: "square.and.pencil")
+                Image(systemName: chatSFSymbol("square.and.pencil", fallback: "plus.square"))
                     .foregroundStyle(.primary)
             }
         }
@@ -102,6 +120,21 @@ struct ChatScreen: View {
         // ChatItemProductCards 는 Slice 1d 에서 처리.
     }
 
+    // Slice 1c(에너지 게이트)의 임시 알림 — 밥 부족으로 응답이 막혔음을 사용자에게 표시.
+    private var energyBanner: some View {
+        HStack(spacing: 8) {
+            Text("🍚 밥이 부족해 답변을 받지 못했어요.")
+                .font(.caption)
+                .foregroundStyle(.primary)
+            Spacer()
+            Button("닫기") { vm.dismissEnergyGate() }
+                .font(.caption.weight(.semibold))
+                .tint(.orange)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(Color.orange.opacity(0.15))
+    }
+
     private var inputBar: some View {
         HStack(spacing: 8) {
             TextField("메시지를 입력하세요...", text: $input)
@@ -110,7 +143,7 @@ struct ChatScreen: View {
                 .focused($isInputFocused)
                 .onSubmit(sendCurrent)
             Button(action: sendCurrent) {
-                Image(systemName: "paperplane.fill")
+                Image(systemName: chatSFSymbol("paperplane.fill", fallback: "arrow.up.circle.fill"))
             }
             .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isStreaming)
         }
@@ -139,5 +172,34 @@ struct ChatScreen: View {
             return Text(attributed)
         }
         return Text(raw)
+    }
+
+    private var conversationListSheet: some View {
+        NavigationStack {
+            List {
+                Button {
+                    vm.startNew()
+                    showConversations = false
+                } label: {
+                    Label("새 대화", systemImage: "plus")
+                }
+                ForEach(vm.conversations, id: \.conversationId) { c in
+                    Button {
+                        vm.open(c.conversationId)
+                        showConversations = false
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(c.title).font(.body).foregroundStyle(.primary)
+                            if let last = c.lastMessage, !last.isEmpty {
+                                Text(last).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("대화 목록")
+            .navigationBarTitleDisplayMode(.inline)
+            .task { await vm.loadConversations() }
+        }
     }
 }

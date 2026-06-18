@@ -4,6 +4,7 @@ import com.nomadclub.cashchat.shared.ads.AdRewardStore
 import com.nomadclub.cashchat.shared.attendance.AttendanceStore
 import com.nomadclub.cashchat.shared.attendance.AttendanceUiState
 import com.nomadclub.cashchat.shared.attendance.CheckInRewardEvent
+import com.nomadclub.cashchat.shared.chat.ChatApi
 import com.nomadclub.cashchat.shared.chat.ChatStore
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
@@ -25,8 +26,10 @@ class KoinHelper : KoinComponent {
     private val hud: HudStore by inject()
     private val evolution: EvolutionStore by inject()
     private val adReward: AdRewardStore by inject()
+    private val chatApiInstance: ChatApi by inject()
 
     fun chatStore(): ChatStore = chat
+    fun chatApi(): ChatApi = chatApiInstance
     fun attendanceStore(): AttendanceStore = attendance
     fun pointsRepository(): PointsRepository = points
     fun hudStore(): HudStore = hud
@@ -61,6 +64,10 @@ class FlowCollector {
 
     fun collectIsStreaming(store: ChatStore, onEach: (Boolean) -> Unit) {
         scope.launch { store.isStreaming.collect { onEach(it) } }
+    }
+
+    fun collectEnergyGate(store: ChatStore, onEach: (Boolean) -> Unit) {
+        scope.launch { store.energyGateVisible.collect { onEach(it) } }
     }
 
     fun cancel() {
