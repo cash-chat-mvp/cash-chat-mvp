@@ -79,9 +79,11 @@ class TnkOfferwallService(
 /**
  * pay_pnt × 환산비를 코인으로 환산한다. Double 곱셈은 정밀도 손실(예: 50 × 0.58 = 28.999…)로
  * floor 시 1코인 적게 적립될 수 있으므로 BigDecimal + RoundingMode.FLOOR 로 계산한다.
+ * 결과가 Long 범위를 넘으면 toLongExact() 가 예외를 던진다 — toLong() 의 조용한 wrap 으로
+ * 음수 coinAmount 가 만들어져 차감되는 사고를 막는다(과대 pay_pnt/ratio 방어).
  */
 internal fun toCoinAmount(payPnt: Long, ratio: Double): Long =
     BigDecimal.valueOf(payPnt)
         .multiply(BigDecimal.valueOf(ratio))
         .setScale(0, RoundingMode.FLOOR)
-        .toLong()
+        .longValueExact()

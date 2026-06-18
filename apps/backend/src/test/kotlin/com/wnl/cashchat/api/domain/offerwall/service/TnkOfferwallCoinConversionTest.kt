@@ -1,5 +1,6 @@
 package com.wnl.cashchat.api.domain.offerwall.service
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 
@@ -20,5 +21,11 @@ class TnkOfferwallCoinConversionTest : FunSpec({
 
     test("zero pay_pnt yields zero coins") {
         toCoinAmount(0, 1.0) shouldBe 0L
+    }
+
+    test("overflow throws instead of wrapping to a negative deduction") {
+        // 과대 pay_pnt × ratio 가 Long 범위를 넘으면 toLong() 은 음수로 wrap 되어 차감 사고를 낸다.
+        // toLongExact() 는 예외로 드러내야 한다.
+        shouldThrow<ArithmeticException> { toCoinAmount(Long.MAX_VALUE, 2.0) }
     }
 })
