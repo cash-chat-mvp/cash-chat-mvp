@@ -271,18 +271,11 @@ class ChatController(
             conversationId = request.conversationId!!,
             content = request.message,
         )
-            .map { chunk -> ServerSentEvent.builder<String>(chunk).event(MESSAGE_EVENT).build() }
-            .onErrorResume {
-                Flux.just(ServerSentEvent.builder<String>(STREAM_FAILED_MESSAGE).event(ERROR_EVENT).build())
-            }
+            .asChatSseEvents()
             .withHeartbeat(Duration.ofSeconds(HEARTBEAT_INTERVAL_SECONDS))
     }
 
     companion object {
-        private const val MESSAGE_EVENT = "message"
-        private const val ERROR_EVENT = "error"
-        private const val STREAM_FAILED_MESSAGE = "stream failed"
-
         /** Heartbeat cadence; must stay well below the nginx SSE read timeout (60s). */
         private const val HEARTBEAT_INTERVAL_SECONDS = 15L
     }
