@@ -92,7 +92,7 @@ jobs:
         shell: bash
         env:
           BACKEND_SPRING_PROFILES_ACTIVE: ${{ secrets.BACKEND_SPRING_PROFILES_ACTIVE }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
@@ -125,7 +125,7 @@ jobs:
             if [ -z "${SPRING_DATASOURCE_URL}" ]; then missing_vars+=("SPRING_DATASOURCE_URL"); fi
             if [ -z "${SPRING_DATASOURCE_USERNAME}" ]; then missing_vars+=("SPRING_DATASOURCE_USERNAME"); fi
             if [ -z "${SPRING_DATASOURCE_PASSWORD}" ]; then missing_vars+=("SPRING_DATASOURCE_PASSWORD"); fi
-            if [ -z "${OPENAI_API_KEY}" ]; then missing_vars+=("OPENAI_API_KEY"); fi
+            if [ -z "${GEMINI_API_KEY}" ]; then missing_vars+=("GEMINI_API_KEY"); fi
             if [ -z "${GOOGLE_CLIENT_ID}" ]; then missing_vars+=("GOOGLE_CLIENT_ID"); fi
             if [ -z "${GOOGLE_CLIENT_SECRET}" ]; then missing_vars+=("GOOGLE_CLIENT_SECRET"); fi
             if [ -z "${GOOGLE_REDIRECT_URI}" ]; then missing_vars+=("GOOGLE_REDIRECT_URI"); fi
@@ -173,7 +173,7 @@ jobs:
             write_env "SPRING_DATASOURCE_USERNAME" "${SPRING_DATASOURCE_USERNAME}"
             write_env "SPRING_DATASOURCE_PASSWORD" "${SPRING_DATASOURCE_PASSWORD}"
             write_env "SPRING_DATASOURCE_DRIVER_CLASS_NAME" "${DATASOURCE_DRIVER}"
-            write_env "OPENAI_API_KEY" "${OPENAI_API_KEY}"
+            write_env "GEMINI_API_KEY" "${GEMINI_API_KEY}"
             write_env "GOOGLE_CLIENT_ID" "${GOOGLE_CLIENT_ID}"
             write_env "GOOGLE_CLIENT_SECRET" "${GOOGLE_CLIENT_SECRET}"
             write_env "GOOGLE_REDIRECT_URI" "${GOOGLE_REDIRECT_URI}"

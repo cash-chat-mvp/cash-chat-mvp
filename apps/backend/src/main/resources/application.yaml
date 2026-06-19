@@ -14,8 +14,20 @@ spring:
   application.name: cash-chat-api
 
   jpa:
+    # OSIV 비활성화: 요청 스레드에 EntityManager/DB 커넥션을 요청 전체 수명 동안 묶어두지 않는다.
+    # 커넥션은 명시적 트랜잭션 경계 안에서만 점유·반납된다. (SSE 등 장수명 응답에서 특히 중요)
+    open-in-view: false
     hibernate:
       ddl-auto: validate
+
+  datasource:
+    # url/username/password 는 프로파일/.env 에서 주입된다. 여기서는 풀 동작만 튜닝한다.
+    hikari:
+      maximum-pool-size: 20
+      # 커넥션을 못 받을 때 30s(기본) 대신 5s 안에 fast-fail 시킨다 — 무응답(hang) 대신 명확한 에러.
+      connection-timeout: 5000
+      # 커넥션을 10s 이상 점유하면 누수 의심 로그를 남긴다(진단용). 운영 상시 유지 여부는 별도 판단.
+      leak-detection-threshold: 10000
 
   flyway:
     enabled: true

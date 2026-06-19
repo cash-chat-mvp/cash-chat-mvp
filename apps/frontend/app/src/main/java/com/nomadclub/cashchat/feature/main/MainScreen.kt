@@ -18,7 +18,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nomadclub.cashchat.feature.chat.ChatScreen
 import com.nomadclub.cashchat.feature.mypage.MyPageScreen
-import com.nomadclub.cashchat.feature.rewards.RewardsScreen
+import com.nomadclub.cashchat.feature.rewards.BenefitZoneScreen
 import com.nomadclub.cashchat.feature.settings.SettingsScreen
 import com.nomadclub.cashchat.feature.shop.ShopScreen
 
@@ -92,7 +92,7 @@ fun MainScreen(
                 )
             }
             composable(MainTab.REWARDS.route) {
-                RewardsScreen(points = points, messageCount = messageCount, addPoints = addPoints)
+                BenefitZoneScreen()
             }
             composable(MainTab.SHOP.route) {
                 ShopScreen(points = points, spendPoints = spendPoints)

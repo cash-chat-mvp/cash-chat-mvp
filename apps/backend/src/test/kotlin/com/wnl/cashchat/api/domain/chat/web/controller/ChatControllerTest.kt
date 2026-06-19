@@ -170,7 +170,7 @@ class ChatControllerWebMvcTest : FunSpec() {
             mockMvc.perform(asyncDispatch(result))
                 .andExpect(status().isOk)
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
-                .andExpect(content().string("event:message\ndata:hi there\n\n"))
+                .andExpect(content().string("event:message\ndata:hi there\n\nevent:done\ndata:[DONE]\n\n"))
 
             verify(chatService).stream(eq(1L), eq(7L), eq("hello"))
         }

@@ -42,10 +42,12 @@ import com.nomadclub.cashchat.feature.auth.LoginScreen
 import com.nomadclub.cashchat.feature.main.MainScreen
 import com.nomadclub.cashchat.feature.onboarding.OnboardingScreen
 import com.nomadclub.cashchat.feature.settings.SettingsViewModel
+import com.nomadclub.cashchat.shared.points.PointsRepository
 import com.nomadclub.cashchat.ui.theme.CashChatTheme
 import com.nomadclub.cashchat.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 /**
  * 앱 내 화면 경로(route)를 정의하는 객체.
@@ -128,19 +130,22 @@ private fun CashChatAppContent() {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // 앱 전역에서 쓰는 포인트와 대화 횟수 (다른 화면에서도 동일한 값을 참조)
-    var points by rememberSaveable { mutableIntStateOf(0) }
+    // 앱 전역 포인트 단일 소스 — 혜택존(BenefitZoneScreen)·출석(AttendanceStore)과 동일한
+    // Koin PointsRepository 를 공유한다. (이전엔 별도 로컬 상태라 탭 간 잔액이 불일치했음)
+    val pointsRepository: PointsRepository = koinInject()
+    val balance by pointsRepository.balance.collectAsState()
+    val points = balance.toInt()
     var messageCount by rememberSaveable { mutableIntStateOf(0) }
 
     fun addPoints(value: Int) {
         if (value <= 0) return
-        points += value
+        pointsRepository.applyDelta(value.toLong())
     }
 
     fun spendPoints(value: Int): Boolean {
         if (value <= 0) return false
-        return if (points >= value) {
-            points -= value
+        return if (pointsRepository.balance.value >= value) {
+            pointsRepository.applyDelta(-value.toLong())
             true
         } else false
     }

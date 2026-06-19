@@ -74,4 +74,11 @@ class TokenDataStore(private val context: Context) {
      * 신규 설치 직후 게스트 토큰 갱신 시 deviceToken이 없는 엣지케이스 방어.
      */
     fun getOrCreateDeviceTokenBlocking(): String = runBlocking { getOrCreateDeviceToken() }
+
+    fun updateTokensBlocking(accessToken: String, refreshToken: String) = runBlocking {
+        store.edit { prefs ->
+            prefs[KEY_ACCESS_TOKEN] = accessToken
+            prefs[KEY_REFRESH_TOKEN] = refreshToken
+        }
+    }
 }

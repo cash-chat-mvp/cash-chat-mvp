@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.retrofit.converter.gson)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.ktor.client.okhttp)
 
     // Storage
     implementation(libs.datastore.preferences)

@@ -236,8 +236,8 @@ class ChatController(
                 ]
             ),
             ApiResponse(
-                responseCode = "402",
-                description = "The user does not have enough points.",
+                responseCode = "409",
+                description = "The user does not have enough energy(밥) to start a chat. Refill via rewarded ad and retry.",
                 content = [
                     Content(
                         mediaType = MediaType.APPLICATION_JSON_VALUE,
@@ -271,18 +271,11 @@ class ChatController(
             conversationId = request.conversationId!!,
             content = request.message,
         )
-            .map { chunk -> ServerSentEvent.builder<String>(chunk).event(MESSAGE_EVENT).build() }
-            .onErrorResume {
-                Flux.just(ServerSentEvent.builder<String>(STREAM_FAILED_MESSAGE).event(ERROR_EVENT).build())
-            }
+            .asChatSseEvents()
             .withHeartbeat(Duration.ofSeconds(HEARTBEAT_INTERVAL_SECONDS))
     }
 
     companion object {
-        private const val MESSAGE_EVENT = "message"
-        private const val ERROR_EVENT = "error"
-        private const val STREAM_FAILED_MESSAGE = "stream failed"
-
         /** Heartbeat cadence; must stay well below the nginx SSE read timeout (60s). */
         private const val HEARTBEAT_INTERVAL_SECONDS = 15L
     }
