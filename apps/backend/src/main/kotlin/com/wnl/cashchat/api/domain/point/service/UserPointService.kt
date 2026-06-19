@@ -9,6 +9,8 @@ import com.wnl.cashchat.api.domain.point.persistence.repository.UserPointReposit
 import com.wnl.cashchat.api.domain.point.properties.PointProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -24,6 +26,10 @@ class UserPointService(
     @Transactional(readOnly = true)
     fun getBalance(userId: Long): Long =
         userPointRepository.findByUserId(userId)?.balance ?: 0L
+
+    @Transactional(readOnly = true)
+    fun getHistory(userId: Long, pageable: Pageable): Page<PointTransaction> =
+        pointTransactionRepository.findByUserId(userId, pageable)
 
     fun ensureInitialized(user: User): UserPoint =
         userPointRepository.findByUserId(user.id)
