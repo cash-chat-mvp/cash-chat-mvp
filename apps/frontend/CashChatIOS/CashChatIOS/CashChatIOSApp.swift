@@ -1,5 +1,6 @@
 import SwiftUI
 import GoogleSignIn
+import GoogleMobileAds
 import CashChatShared
 
 @main
@@ -12,6 +13,8 @@ struct CashChatIOSApp: App {
             baseUrl: AppConfig.apiBaseUrl,
             tokenProvider: KeychainTokenProvider()
         )
+        // AdMob 초기화 (리워드 광고). 앱 생명주기당 1회.
+        MobileAds.shared.start(completionHandler: nil)
     }
 
     var body: some Scene {
