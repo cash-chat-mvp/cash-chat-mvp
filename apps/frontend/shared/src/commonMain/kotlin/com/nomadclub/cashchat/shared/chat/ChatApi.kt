@@ -21,6 +21,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.utils.io.readUTF8Line
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
@@ -90,12 +91,13 @@ class ChatApi(
             val channel = response.bodyAsChannel()
             val parser = SseParser()
             var errored = false
+            var completed = false
             suspend fun dispatch(event: SseEvent) {
                 when {
                     // PR #189(CC-311): 정상 종료 신호(event: done / data: [DONE]).
-                    // 토큰으로 방출하면 말풍선에 "[DONE]"이 텍스트로 붙으므로 소비만 하고 무시한다.
-                    // 실제 Done 방출은 스트림 종료 후 1회(아래 emit(Done))로 처리.
-                    event.event == "done" || event.data == "[DONE]" -> Unit
+                    // 토큰으로 방출하면 말풍선에 "[DONE]"이 텍스트로 붙으므로 소비만 하고
+                    // completed 플래그만 세운다(아래 전송 리셋 흡수 + Done 방출 판단에 사용).
+                    event.event == "done" || event.data == "[DONE]" -> completed = true
                     event.event == "error" -> { errored = true; emit(ChatStreamEvent.StreamError(event.data)) }
                     event.event == "product" -> emit(ChatStreamEvent.ProductCards(sseJson.decodeFromString<ProductPayload>(event.data).products))
                     event.event == "gate" -> {
@@ -105,12 +107,21 @@ class ChatApi(
                     else -> emit(ChatStreamEvent.Token(event.data))
                 }
             }
-            while (!channel.isClosedForRead) {
-                val line = channel.readUTF8Line() ?: break
-                dispatch(parser.feed(line) ?: continue)
+            try {
+                while (!channel.isClosedForRead) {
+                    val line = channel.readUTF8Line() ?: break
+                    dispatch(parser.feed(line) ?: continue)
+                }
+                // 종결 빈 줄 없이 끊긴 마지막 이벤트(토큰/에러)를 유실하지 않도록 flush.
+                parser.flush()?.let { dispatch(it) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // done 신호를 이미 받았다면, 그 직후의 전송 리셋(nginx HTTP/2 SSE 종료 시
+                // RST_STREAM / iOS -1005 "network connection lost")은 정상 종료로 간주하고 삼킨다.
+                // 아직 done 전이라면 진짜 네트워크 오류이므로 전파한다.
+                if (!completed) throw e
             }
-            // 종결 빈 줄 없이 끊긴 마지막 이벤트(토큰/에러)를 유실하지 않도록 flush.
-            parser.flush()?.let { dispatch(it) }
             if (!errored) emit(ChatStreamEvent.Done)
         }
     }

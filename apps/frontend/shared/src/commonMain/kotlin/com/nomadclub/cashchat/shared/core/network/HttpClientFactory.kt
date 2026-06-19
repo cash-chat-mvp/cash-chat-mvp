@@ -41,10 +41,13 @@ fun createCashChatHttpClient(
             connectTimeoutMillis = 15_000
         }
     }
-    // engine이 주어지면(테스트 MockEngine) 그대로, 아니면 플랫폼 HTTP/1.1 엔진을 사용한다.
-    // SSE 스트림이 nginx HTTP/2 환경에서 응답 종료 직후 RST_STREAM(INTERNAL_ERROR)로
-    // 끊기는 문제를 피하기 위해 HTTP/1.1을 강제한다([http1ClientEngine] 참고).
-    val client = HttpClient(engine ?: http1ClientEngine(), config)
+    // engine이 주어지면(테스트 MockEngine) 그대로, 아니면 플랫폼 기본 엔진을 사용한다.
+    // 과거에는 nginx HTTP/2 SSE 종료 시 RST_STREAM(INTERNAL_ERROR)을 회피하려 HTTP/1.1을
+    // 강제했지만, iOS Darwin(NSURLSession)은 HTTP/1.1 강제가 불가능해 iOS SSE가 막혀 있었다.
+    // 이제 백엔드(PR #189/CC-311)가 정상 종료 시 `event: done`을 명시 전송하므로, 클라이언트는
+    // done 수신 후 오는 전송 리셋을 정상 종료로 흡수한다([ChatApi.streamMessage] 참고).
+    // 따라서 HTTP/1.1 강제를 제거하고 양 플랫폼 모두 기본 엔진(HTTP/2 협상)을 사용한다.
+    val client = HttpClient(engine ?: defaultClientEngine(), config)
 
     // 동시 401 발생 시 refresh가 중복 실행되는 것을 막는다(refresh 토큰 회전 서버 대응).
     // 여러 요청이 만료된 access 토큰으로 동시에 401을 받으면 각자 refresh를 시도하는데,
@@ -79,11 +82,11 @@ fun createCashChatHttpClient(
 }
 
 /**
- * 플랫폼별 Ktor HTTP 엔진. SSE 안정성을 위해 가능한 경우 HTTP/1.1을 강제한다.
+ * 플랫폼별 Ktor HTTP 기본 엔진(Android: OkHttp, iOS: Darwin). HTTP 버전은 강제하지 않고
+ * 서버와 협상(HTTP/2 가능)한다.
  *
- * nginx가 `proxy_buffering off`로 SSE를 HTTP/2 클라이언트에 중계할 때, 응답이 끝나면
- * 깨끗한 END_STREAM 대신 RST_STREAM(INTERNAL_ERROR)을 보내는 사례가 있다. 그러면 OkHttp가
- * StreamResetException을 던져 정상 종료가 오류로 처리된다. HTTP/1.1은 스트림 리셋 개념이
- * 없어 연결 종료/청크 종료로 정상 마감되므로 이 문제를 회피한다.
+ * SSE 종료 시 nginx가 RST_STREAM(INTERNAL_ERROR)/iOS -1005 로 스트림을 리셋하는 문제는
+ * 백엔드(PR #189/CC-311)의 `event: done` 명시 종료 신호로 구분하고, 클라이언트가 done 이후
+ * 리셋을 정상 종료로 흡수해 처리한다([ChatApi.streamMessage]).
  */
-internal expect fun http1ClientEngine(): io.ktor.client.engine.HttpClientEngine
+internal expect fun defaultClientEngine(): io.ktor.client.engine.HttpClientEngine
