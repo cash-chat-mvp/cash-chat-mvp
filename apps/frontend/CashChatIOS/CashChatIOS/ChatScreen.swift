@@ -11,6 +11,7 @@ struct ChatScreen: View {
     @StateObject private var vm = ChatViewModel()
     @State private var input = ""
     @State private var showConversations = false
+    @State private var showEvolution = false
     @FocusState private var isInputFocused: Bool
 
     private let accent = Color(red: 0.36, green: 0.42, blue: 0.98)
@@ -30,16 +31,34 @@ struct ChatScreen: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Button {
                 showConversations = true
             } label: {
                 Image(systemName: chatSFSymbol("line.3.horizontal", fallback: "line.horizontal.3"))
                     .foregroundStyle(.primary)
             }
+            // 캐릭터/레벨 탭 → 진화 화면.
+            Button { showEvolution = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles").foregroundStyle(accent)
+                    if vm.hudLoaded {
+                        Text("Lv.\(vm.level)").font(.subheadline.weight(.bold)).foregroundStyle(.primary)
+                    }
+                }
+            }
             Spacer()
-            Text("CashAI 비서").font(.headline)
-            Spacer()
+            if vm.hudLoaded {
+                if let p = vm.points {
+                    chip("🪙", "\(p)")
+                }
+                VStack(alignment: .trailing, spacing: 2) {
+                    chip("⚡", "\(vm.energy)/\(vm.maxEnergy)", warning: vm.energy == 0)
+                    if let iso = vm.nextRecoverAt {
+                        RecoveryCountdown(nextRecoverAtIso: iso) { vm.refreshEnergy() }
+                    }
+                }
+            }
             Button {
                 vm.startNew()
             } label: {
@@ -50,6 +69,14 @@ struct ChatScreen: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Color(.systemBackground))
+    }
+
+    private func chip(_ emoji: String, _ value: String, warning: Bool = false) -> some View {
+        Text("\(emoji) \(value)")
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(warning ? Color.red.opacity(0.15) : Color(.secondarySystemGroupedBackground))
+            .clipShape(Capsule())
     }
 
     private var messageList: some View {
@@ -201,5 +228,32 @@ struct ChatScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .task { await vm.loadConversations() }
         }
+    }
+}
+
+/// 다음 에너지 회복까지 카운트다운. 0 도달 시 onFinished로 에너지 재조회.
+private struct RecoveryCountdown: View {
+    let nextRecoverAtIso: String
+    let onFinished: () -> Void
+    @State private var remain = ""
+
+    var body: some View {
+        Text(remain)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .task(id: nextRecoverAtIso) {
+                let fmt = ISO8601DateFormatter()
+                fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                let target = fmt.date(from: nextRecoverAtIso)
+                    ?? ISO8601DateFormatter().date(from: nextRecoverAtIso)
+                guard let target else { return }
+                while !Task.isCancelled {
+                    let sec = max(Int(target.timeIntervalSinceNow), 0)
+                    remain = String(format: "%d:%02d 후 ⚡", sec / 60, sec % 60)
+                    if sec == 0 { break }
+                    try? await Task.sleep(for: .seconds(1))
+                }
+                onFinished()
+            }
     }
 }
