@@ -91,10 +91,14 @@ class ChatApi(
             val parser = SseParser()
             var errored = false
             suspend fun dispatch(event: SseEvent) {
-                when (event.event) {
-                    "error" -> { errored = true; emit(ChatStreamEvent.StreamError(event.data)) }
-                    "product" -> emit(ChatStreamEvent.ProductCards(sseJson.decodeFromString<ProductPayload>(event.data).products))
-                    "gate" -> {
+                when {
+                    // PR #189(CC-311): 정상 종료 신호(event: done / data: [DONE]).
+                    // 토큰으로 방출하면 말풍선에 "[DONE]"이 텍스트로 붙으므로 소비만 하고 무시한다.
+                    // 실제 Done 방출은 스트림 종료 후 1회(아래 emit(Done))로 처리.
+                    event.event == "done" || event.data == "[DONE]" -> Unit
+                    event.event == "error" -> { errored = true; emit(ChatStreamEvent.StreamError(event.data)) }
+                    event.event == "product" -> emit(ChatStreamEvent.ProductCards(sseJson.decodeFromString<ProductPayload>(event.data).products))
+                    event.event == "gate" -> {
                         val gate = sseJson.decodeFromString<GatePayload>(event.data)
                         emit(ChatStreamEvent.Gate(gate.teaserChars, gate.rewardCoin))
                     }

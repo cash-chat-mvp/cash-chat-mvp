@@ -60,6 +60,19 @@ class ChatApiTest {
     }
 
     @Test
+    fun `done 이벤트는 토큰으로 렌더하지 않고 정상 종료한다`() = runTest {
+        // PR #189(CC-311): 백엔드가 정상 종료 시 event:done / data:[DONE] 전송.
+        // 이를 토큰으로 처리하면 말풍선에 "[DONE]"이 붙으므로 무시하고 Done 1회만 방출해야 한다.
+        val sse = "event:message\ndata:안녕\n\nevent:done\ndata:[DONE]\n\n"
+        val engine = MockEngine {
+            respond(sse, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "text/event-stream"))
+        }
+        val api = ChatApi(createCashChatHttpClient("https://api.test", NoAuth, engine), "https://api.test")
+        val events = api.streamMessage(7, "hi").toList()
+        assertEquals(listOf<ChatStreamEvent>(ChatStreamEvent.Token("안녕"), ChatStreamEvent.Done), events)
+    }
+
+    @Test
     fun `error 이벤트는 StreamError로 매핑된다`() = runTest {
         val sse = "event:message\ndata:부분\n\nevent:error\ndata:stream failed\n\n"
         val engine = MockEngine {
