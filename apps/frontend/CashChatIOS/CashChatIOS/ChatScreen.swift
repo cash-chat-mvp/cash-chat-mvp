@@ -153,27 +153,52 @@ struct ChatScreen: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14))
             }
         } else if let a = item as? ChatItemAssistantMessage {
-            HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    markdownText(a.text.isEmpty && a.isStreaming ? "…" : a.text)
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .foregroundStyle(.primary)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                    if a.isError {
-                        Button {
-                            vm.retry()
-                        } label: {
-                            Label("다시 시도", systemImage: "arrow.clockwise")
-                                .font(.caption.weight(.semibold))
+            if a.gated && !a.isStreaming {
+                AdGateCardView(
+                    fullText: a.text,
+                    teaserChars: vm.gateTeaserChars,
+                    rewardCoin: vm.gateRewardCoin,
+                    onWatch: {
+                        vm.startGateUnlock(messageId: a.id) { nonce in
+                            await withCheckedContinuation { cont in
+                                adManager.manager.show(
+                                    nonce: nonce,
+                                    onRewarded: { _ in },
+                                    onDismissed: { cont.resume(returning: true) },
+                                    onNotReady: { cont.resume(returning: false) }
+                                )
+                            }
                         }
-                        .tint(.orange)
                     }
+                )
+            } else {
+                HStack {
+                    VStack(alignment: .leading, spacing: 6) {
+                        markdownText(a.text.isEmpty && a.isStreaming ? "…" : a.text)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(Color(.secondarySystemGroupedBackground))
+                            .foregroundStyle(.primary)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                        if a.isError {
+                            Button {
+                                vm.retry()
+                            } label: {
+                                Label("다시 시도", systemImage: "arrow.clockwise")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .tint(.orange)
+                        }
+                    }
+                    Spacer()
                 }
-                Spacer()
+            }
+        } else if let p = item as? ChatItemProductCards {
+            VStack(spacing: 8) {
+                ForEach(p.products, id: \.trackingUrl) { product in
+                    ProductCardView(product: product)
+                }
             }
         }
-        // ChatItemProductCards 는 Slice 1d 에서 처리.
     }
 
     private var inputBar: some View {
@@ -242,6 +267,59 @@ struct ChatScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .task { await vm.loadConversations() }
         }
+    }
+}
+
+/// 쿠팡 상품 카드 (SSE product 이벤트).
+private struct ProductCardView: View {
+    let product: ProductDto
+    var body: some View {
+        HStack(spacing: 10) {
+            AsyncImage(url: URL(string: product.imageUrl ?? "")) { img in
+                img.resizable().scaledToFill()
+            } placeholder: {
+                Color(.tertiarySystemGroupedBackground)
+            }
+            .frame(width: 64, height: 64).clipShape(RoundedRectangle(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(product.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                Text("\(product.price)원").font(.subheadline.weight(.bold)).foregroundStyle(.orange)
+                if let rating = product.rating?.doubleValue {
+                    Text("★ \(rating, specifier: "%.1f")").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .onTapGesture {
+            if let url = URL(string: product.trackingUrl) { UIApplication.shared.open(url) }
+        }
+    }
+}
+
+/// Ad Gate 블라인드 답변 카드 — teaser 일부 노출 + 광고 보고 전체 보기.
+private struct AdGateCardView: View {
+    let fullText: String
+    let teaserChars: Int
+    let rewardCoin: Int
+    let onWatch: () -> Void
+    var body: some View {
+        let teaser = String(fullText.prefix(teaserChars))
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(teaser + "…").foregroundStyle(.primary)
+            Button(action: onWatch) {
+                Label("광고 보고 전체 보기 (+\(rewardCoin))", systemImage: "play.fill")
+                    .font(.caption.weight(.bold))
+                    .frame(maxWidth: .infinity).padding(.vertical, 10)
+                    .background(.orange).foregroundStyle(.white)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
