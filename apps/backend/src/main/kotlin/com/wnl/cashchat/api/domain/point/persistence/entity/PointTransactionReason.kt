@@ -6,6 +6,7 @@ package com.wnl.cashchat.api.domain.point.persistence.entity
 enum class PointTransactionReason {
     ATTENDANCE,
     AD_REWARD,
+    OFFERWALL,
     EVOLUTION_ATTEMPT,
     LEDGER_REWARD,
     SHOP_PURCHASE,
