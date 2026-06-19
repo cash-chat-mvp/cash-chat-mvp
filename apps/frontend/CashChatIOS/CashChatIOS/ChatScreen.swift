@@ -8,6 +8,8 @@ private func chatSFSymbol(_ primary: String, fallback: String) -> String {
     UIImage(systemName: primary) == nil ? fallback : primary
 }
 
+private let suggestedQuestions = ["오늘 저녁 뭐 먹을까?", "가성비 이어폰 추천해줘", "영어 공부 팁 알려줘"]
+
 struct ChatScreen: View {
     @StateObject private var vm = ChatViewModel()
     @StateObject private var adManager = RewardedAdManagerBox()
@@ -15,6 +17,7 @@ struct ChatScreen: View {
     @State private var showConversations = false
     @State private var showEvolution = false
     @State private var showAttendance = false
+    @State private var shareItems: String? = nil
     @FocusState private var isInputFocused: Bool
 
     private let accent = Color(red: 0.36, green: 0.42, blue: 0.98)
@@ -35,6 +38,9 @@ struct ChatScreen: View {
         }
         .sheet(isPresented: $showEvolution) {
             EvolutionScreen()
+        }
+        .sheet(isPresented: Binding(get: { shareItems != nil }, set: { if !$0 { shareItems = nil } })) {
+            if let text = shareItems { ShareSheet(text: text) }
         }
         .sheet(isPresented: $vm.energyGateVisible, onDismiss: { vm.dismissGate() }) {
             EnergyGateSheet(vm: vm, adManager: adManager.manager)
@@ -91,6 +97,12 @@ struct ChatScreen: View {
                     }
                 }
             }
+            if !vm.items.isEmpty {
+                Button { shareItems = exportText(vm.items) } label: {
+                    Image(systemName: chatSFSymbol("square.and.arrow.up", fallback: "arrowshape.turn.up.right"))
+                        .foregroundStyle(.primary)
+                }
+            }
             Button {
                 vm.startNew()
             } label: {
@@ -140,6 +152,16 @@ struct ChatScreen: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            VStack(spacing: 8) {
+                ForEach(suggestedQuestions, id: \.self) { q in
+                    Button(q) { vm.send(q) }
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 12).padding(.vertical, 8)
+                        .background(Color(.secondarySystemGroupedBackground))
+                        .clipShape(Capsule())
+                }
+            }
+            .padding(.top, 12)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 60)
@@ -271,6 +293,24 @@ struct ChatScreen: View {
             .task { await vm.loadConversations() }
         }
     }
+}
+
+/// 대화 전체를 텍스트로 변환 (공유 시트용).
+private func exportText(_ items: [ChatItem]) -> String {
+    items.compactMap { item -> String? in
+        if let u = item as? ChatItemUserMessage { return "나: \(u.text)" }
+        if let a = item as? ChatItemAssistantMessage { return "비서: \(a.text)" }
+        return nil
+    }.joined(separator: "\n")
+}
+
+/// iOS 공유 시트 래퍼.
+private struct ShareSheet: UIViewControllerRepresentable {
+    let text: String
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [text], applicationActivities: nil)
+    }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
 
 /// 쿠팡 상품 카드 (SSE product 이벤트).
