@@ -121,6 +121,34 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             pointTransactionRepository.count() shouldBe 0L
         }
 
+        test("zero pay_pnt is rejected at the non-positive boundary and never credits") {
+            // 서비스 분기는 pay_pnt <= 0 이므로 음수뿐 아니라 0 경계도 거절돼야 한다.
+            val (userId, token) = newUserWithToken("zero")
+            val baseline = userPointRepository.findByUserId(userId)!!.balance
+
+            val status = service.handleCallback(params("s8", token, 0), now)
+
+            status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
+            userPointRepository.findByUserId(userId)!!.balance shouldBe baseline
+            callbackRepository.findBySeqId("s8")!!.status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
+            pointTransactionRepository.count() shouldBe 0L
+        }
+
+        test("callback converting to zero coins grants without recording a point transaction") {
+            // payPnt=1, ratio=0.5 → floor(0.5)=0 코인. 적립액이 0이면 불필요한 0원 트랜잭션을 남기지 않는다.
+            val (userId, token) = newUserWithToken("zerocoin")
+            val baseline = userPointRepository.findByUserId(userId)!!.balance
+
+            val status = service.handleCallback(params("s9", token, 1), now)
+
+            status shouldBe TnkOfferwallStatus.GRANTED
+            userPointRepository.findByUserId(userId)!!.balance shouldBe baseline
+            val row = callbackRepository.findBySeqId("s9")!!
+            row.status shouldBe TnkOfferwallStatus.GRANTED
+            row.coinAmount shouldBe 0L
+            pointTransactionRepository.count() shouldBe 0L
+        }
+
         test("duplicate seq_id does not double-credit") {
             val (userId, token) = newUserWithToken("dup")
             val baseline = userPointRepository.findByUserId(userId)!!.balance

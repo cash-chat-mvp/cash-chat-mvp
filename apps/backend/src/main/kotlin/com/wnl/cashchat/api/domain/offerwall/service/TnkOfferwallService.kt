@@ -60,17 +60,23 @@ class TnkOfferwallService(
 
         val userId = offerwallUserTokenService.resolveUserId(params.mdUserNm)
         if (userId == null) {
+            log.warn("TNK offerwall callback rejected: unknown token (seqId={})", params.seqId)
             callback.markRejected(TnkOfferwallStatus.REJECTED_UNKNOWN_USER)
             return TnkOfferwallStatus.REJECTED_UNKNOWN_USER
         }
 
+        // 환산비가 1 미만이면 floor 후 0 코인이 될 수 있다(예: pay_pnt=1, ratio=0.5). 적립액이 0이면
+        // recordTransaction 을 건너뛰어 불필요한 0원 트랜잭션을 남기지 않는다. 콜백 행은 멱등성을 위해
+        // GRANTED(coinAmount=0)로 종결한다(seq_id 재전송 시 재처리 안 함).
         val coinAmount = toCoinAmount(params.payPnt, tnkOfferwallProperties.pointToCoinRatio)
-        userPointService.recordTransaction(
-            userId = userId,
-            delta = coinAmount,
-            reason = PointTransactionReason.OFFERWALL,
-            idempotencyKey = "tnk:offerwall:${params.seqId}",
-        )
+        if (coinAmount > 0) {
+            userPointService.recordTransaction(
+                userId = userId,
+                delta = coinAmount,
+                reason = PointTransactionReason.OFFERWALL,
+                idempotencyKey = "tnk:offerwall:${params.seqId}",
+            )
+        }
         callback.markGranted(userId = userId, coinAmount = coinAmount)
         return TnkOfferwallStatus.GRANTED
     }
