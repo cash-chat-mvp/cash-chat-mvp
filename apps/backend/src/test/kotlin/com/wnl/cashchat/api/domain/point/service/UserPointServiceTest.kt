@@ -89,4 +89,17 @@ class UserPointServiceTest : FunSpec({
 
         violations.map { it.propertyPath.toString() } shouldContain "initialBalance"
     }
+
+    test("getBalance returns the stored balance when a point row exists") {
+        val user = User(id = 1L, role = Role.GUEST, provider = AuthProviderType.NONE, name = "Guest")
+        whenever(userPointRepository.findByUserId(1L)).thenReturn(UserPoint(user = user, balance = 1350L))
+
+        userPointService.getBalance(1L) shouldBe 1350L
+    }
+
+    test("getBalance returns zero when the point row is missing") {
+        whenever(userPointRepository.findByUserId(1L)).thenReturn(null)
+
+        userPointService.getBalance(1L) shouldBe 0L
+    }
 })

@@ -21,6 +21,10 @@ class UserPointService(
     fun hasEnoughBalance(userId: Long): Boolean =
         userPointRepository.existsByUserIdAndBalanceGreaterThanEqual(userId, REQUIRED_STREAM_POINTS)
 
+    @Transactional(readOnly = true)
+    fun getBalance(userId: Long): Long =
+        userPointRepository.findByUserId(userId)?.balance ?: 0L
+
     fun ensureInitialized(user: User): UserPoint =
         userPointRepository.findByUserId(user.id)
             ?: createInitialPoint(user)
