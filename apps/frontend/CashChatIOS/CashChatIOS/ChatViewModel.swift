@@ -12,8 +12,18 @@ final class ChatViewModel: ObservableObject {
     @Published var energyGateVisible = false
     @Published var conversations: [ConversationSummaryDto] = []
 
+    // HUD (에너지/레벨/포인트) — Android ChatScreen 톱바와 동일 정보.
+    @Published var level: Int = 1
+    @Published var isMaxLevel = false
+    @Published var energy: Int = 0
+    @Published var maxEnergy: Int = 0
+    @Published var points: Int64? = nil
+    @Published var nextRecoverAt: String? = nil
+    @Published var hudLoaded = false
+
     private let store = KoinHelper().chatStore()
     private let chatApi = KoinHelper().chatApi()
+    private let hudStore = KoinHelper().hudStore()
     private let collector = FlowCollector()
     private var didLoad = false
 
@@ -34,6 +44,31 @@ final class ChatViewModel: ObservableObject {
         collector.collectEnergyGate(store: store) { [weak self] visible in
             Task { @MainActor in self?.energyGateVisible = visible.boolValue }
         }
+        hudStore.refresh()
+        collector.collectHud(store: hudStore) { [weak self] s in
+            Task { @MainActor in
+                guard let self else { return }
+                self.level = Int(s.level)
+                self.isMaxLevel = s.isMaxLevel
+                self.energy = Int(s.energy)
+                self.maxEnergy = Int(s.maxEnergy)
+                self.points = s.points?.int64Value
+                self.nextRecoverAt = s.nextRecoverAt
+                self.hudLoaded = s.isLoaded
+            }
+        }
+        // 스트림 정상 종료 시 에너지(밥) 소모 반영 위해 재조회.
+        collector.collectStreamCompleted(store: store) { [weak self] count in
+            Task { @MainActor in
+                guard let self, count.intValue > 0 else { return }
+                try? await self.hudStore.refreshEnergyOnly()
+            }
+        }
+    }
+
+    /// 회복 카운트다운 종료 등 — 에너지만 재조회.
+    func refreshEnergy() {
+        Task { @MainActor in try? await self.hudStore.refreshEnergyOnly() }
     }
 
     func dismissEnergyGate() {
