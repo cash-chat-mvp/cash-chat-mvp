@@ -12,6 +12,7 @@ struct ChatScreen: View {
     @State private var input = ""
     @State private var showConversations = false
     @State private var showEvolution = false
+    @State private var showAttendance = false
     @FocusState private var isInputFocused: Bool
 
     private let accent = Color(red: 0.36, green: 0.42, blue: 0.98)
@@ -28,6 +29,25 @@ struct ChatScreen: View {
         .sheet(isPresented: $showConversations) {
             conversationListSheet
         }
+        .sheet(isPresented: $showAttendance) {
+            AttendanceSheet()
+        }
+        .overlay(alignment: .top) {
+            if let toast = vm.checkInToast {
+                Text(toast)
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .background(.orange).foregroundStyle(.white)
+                    .clipShape(Capsule())
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .task {
+                        try? await Task.sleep(for: .seconds(2))
+                        vm.checkInToast = nil
+                    }
+            }
+        }
+        .animation(.easeInOut, value: vm.checkInToast)
     }
 
     private var header: some View {
@@ -48,6 +68,10 @@ struct ChatScreen: View {
                 }
             }
             Spacer()
+            Button { showAttendance = true } label: {
+                Image(systemName: chatSFSymbol("calendar", fallback: "calendar.circle"))
+                    .foregroundStyle(.primary)
+            }
             if vm.hudLoaded {
                 if let p = vm.points {
                     chip("🪙", "\(p)")
@@ -227,6 +251,21 @@ struct ChatScreen: View {
             .navigationTitle("대화 목록")
             .navigationBarTitleDisplayMode(.inline)
             .task { await vm.loadConversations() }
+        }
+    }
+}
+
+/// 출석 캘린더 시트 — BenefitZone의 AttendanceWidgetView 재사용.
+private struct AttendanceSheet: View {
+    @StateObject private var vm = AttendanceViewModel()
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                AttendanceWidgetView(vm: vm).padding()
+            }
+            .navigationTitle("출석 체크")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear { vm.load() }
         }
     }
 }
