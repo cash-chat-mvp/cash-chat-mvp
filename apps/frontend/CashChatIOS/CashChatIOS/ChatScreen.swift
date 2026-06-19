@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Combine
 import CashChatShared
 
 /// 일부 SF Symbol 이름은 iOS 버전에 따라 없을 수 있어, 없으면 폴백 이름을 사용한다.
@@ -9,6 +10,7 @@ private func chatSFSymbol(_ primary: String, fallback: String) -> String {
 
 struct ChatScreen: View {
     @StateObject private var vm = ChatViewModel()
+    @StateObject private var adManager = RewardedAdManagerBox()
     @State private var input = ""
     @State private var showConversations = false
     @State private var showEvolution = false
@@ -21,7 +23,6 @@ struct ChatScreen: View {
         VStack(spacing: 0) {
             header
             messageList
-            if vm.energyGateVisible { energyBanner }
             inputBar
         }
         .background(Color(.systemGroupedBackground))
@@ -31,6 +32,10 @@ struct ChatScreen: View {
         }
         .sheet(isPresented: $showAttendance) {
             AttendanceSheet()
+        }
+        .sheet(isPresented: $vm.energyGateVisible, onDismiss: { vm.dismissGate() }) {
+            EnergyGateSheet(vm: vm, adManager: adManager.manager)
+                .presentationDetents([.height(300)])
         }
         .overlay(alignment: .top) {
             if let toast = vm.checkInToast {
@@ -171,21 +176,6 @@ struct ChatScreen: View {
         // ChatItemProductCards 는 Slice 1d 에서 처리.
     }
 
-    // Slice 1c(에너지 게이트)의 임시 알림 — 밥 부족으로 응답이 막혔음을 사용자에게 표시.
-    private var energyBanner: some View {
-        HStack(spacing: 8) {
-            Text("🍚 밥이 부족해 답변을 받지 못했어요.")
-                .font(.caption)
-                .foregroundStyle(.primary)
-            Spacer()
-            Button("닫기") { vm.dismissEnergyGate() }
-                .font(.caption.weight(.semibold))
-                .tint(.orange)
-        }
-        .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(Color.orange.opacity(0.15))
-    }
-
     private var inputBar: some View {
         HStack(spacing: 8) {
             TextField("메시지를 입력하세요...", text: $input)
@@ -251,6 +241,63 @@ struct ChatScreen: View {
             .navigationTitle("대화 목록")
             .navigationBarTitleDisplayMode(.inline)
             .task { await vm.loadConversations() }
+        }
+    }
+}
+
+/// RewardedAdManager(NSObject)를 SwiftUI @StateObject로 보유하기 위한 박싱 래퍼.
+@MainActor
+final class RewardedAdManagerBox: ObservableObject {
+    let manager = RewardedAdManager()
+    init() { manager.preload() }
+}
+
+/// 밥 부족 게이트 바텀시트 — 광고 보고 충전 후 막힌 메시지 재전송.
+private struct EnergyGateSheet: View {
+    @ObservedObject var vm: ChatViewModel
+    let adManager: RewardedAdManager
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("🍚 밥이 부족해요").font(.headline)
+            Text("광고를 보고 밥을 충전하면\n바로 답변을 이어받을 수 있어요.")
+                .font(.subheadline).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            switch vm.rewardPhase {
+            case .showingAd, .polling:
+                ProgressView(vm.rewardPhase == .polling ? "보상 확인 중…" : "광고 준비 중…")
+            case .failed:
+                Text("보상 적립을 확인하지 못했어요. 다시 시도해 주세요.")
+                    .font(.caption).foregroundStyle(.orange)
+                watchButton
+            case .idle:
+                watchButton
+            }
+            Button("닫기") { vm.dismissGate() }
+                .font(.subheadline).tint(.secondary)
+        }
+        .padding(24)
+    }
+
+    private var watchButton: some View {
+        Button {
+            vm.startAdReward { nonce in
+                await withCheckedContinuation { cont in
+                    adManager.show(
+                        nonce: nonce,
+                        onRewarded: { _ in },
+                        onDismissed: { cont.resume(returning: true) },
+                        onNotReady: { cont.resume(returning: false) }
+                    )
+                }
+            }
+        } label: {
+            Label("광고 보고 밥 충전", systemImage: "play.fill")
+                .font(.subheadline.weight(.bold))
+                .frame(maxWidth: .infinity).padding(.vertical, 12)
+                .background(.orange).foregroundStyle(.white)
+                .clipShape(Capsule())
         }
     }
 }
