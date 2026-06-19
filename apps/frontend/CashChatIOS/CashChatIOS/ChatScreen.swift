@@ -33,6 +33,9 @@ struct ChatScreen: View {
         .sheet(isPresented: $showAttendance) {
             AttendanceSheet()
         }
+        .sheet(isPresented: $showEvolution) {
+            EvolutionScreen()
+        }
         .sheet(isPresented: $vm.energyGateVisible, onDismiss: { vm.dismissGate() }) {
             EnergyGateSheet(vm: vm, adManager: adManager.manager)
                 .presentationDetents([.height(300)])
