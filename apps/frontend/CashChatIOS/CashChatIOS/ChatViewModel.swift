@@ -28,10 +28,15 @@ final class ChatViewModel: ObservableObject {
     @Published var attendanceTodayChecked = false
     @Published var checkInToast: String? = nil
 
+    // 에너지 게이트 리워드 광고 보상 단계 (Android RewardPhase 미러).
+    enum RewardPhase { case idle, showingAd, polling, failed }
+    @Published var rewardPhase: RewardPhase = .idle
+
     private let store = KoinHelper().chatStore()
     private let chatApi = KoinHelper().chatApi()
     private let hudStore = KoinHelper().hudStore()
     private let attendanceStore = KoinHelper().attendanceStore()
+    private let adRewardStore = KoinHelper().adRewardStore()
     private let collector = FlowCollector()
     private var didLoad = false
 
@@ -50,7 +55,11 @@ final class ChatViewModel: ObservableObject {
             Task { @MainActor in self?.isStreaming = streaming.boolValue }
         }
         collector.collectEnergyGate(store: store) { [weak self] visible in
-            Task { @MainActor in self?.energyGateVisible = visible.boolValue }
+            Task { @MainActor in
+                guard let self else { return }
+                self.energyGateVisible = visible.boolValue
+                if visible.boolValue { try? await self.adRewardStore.refreshQuota() }
+            }
         }
         hudStore.refresh()
         collector.collectHud(store: hudStore) { [weak self] s in
@@ -95,6 +104,38 @@ final class ChatViewModel: ObservableObject {
     /// 회복 카운트다운 종료 등 — 에너지만 재조회.
     func refreshEnergy() {
         Task { @MainActor in try? await self.hudStore.refreshEnergyOnly() }
+    }
+
+    /// 게이트 CTA: baseline 적립횟수 → nonce → 광고 표시 → 적립 폴링 → 성공 시 재전송.
+    /// showAd는 nonce를 받아 광고를 띄우고, 광고를 끝까지 봤는지(닫힘=true, 미준비=false)를 반환한다.
+    func startAdReward(showAd: @escaping (_ nonce: String) async -> Bool) {
+        Task { @MainActor in
+            rewardPhase = .showingAd
+            var applied = false
+            do {
+                let baseline = try await adRewardStore.refreshQuota().usedToday
+                let nonce = try await adRewardStore.requestNonce()
+                if await showAd(nonce) {
+                    rewardPhase = .polling
+                    applied = try await adRewardStore.awaitRewardApplied(baselineUsedToday: baseline).boolValue
+                }
+            } catch {
+                applied = false
+            }
+            try? await hudStore.refreshEnergyOnly()
+            _ = try? await adRewardStore.refreshQuota()
+            if applied {
+                rewardPhase = .idle
+                store.retryBlocked()
+            } else {
+                rewardPhase = .failed
+            }
+        }
+    }
+
+    func dismissGate() {
+        rewardPhase = .idle
+        store.dismissEnergyGate()
     }
 
     func dismissEnergyGate() {
