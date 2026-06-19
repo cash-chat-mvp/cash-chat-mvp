@@ -32,6 +32,10 @@ final class ChatViewModel: ObservableObject {
     enum RewardPhase { case idle, showingAd, polling, failed }
     @Published var rewardPhase: RewardPhase = .idle
 
+    // Ad Gate(블라인드 답변) 정보.
+    @Published var gateTeaserChars: Int = 80
+    @Published var gateRewardCoin: Int = 30
+
     private let store = KoinHelper().chatStore()
     private let chatApi = KoinHelper().chatApi()
     private let hudStore = KoinHelper().hudStore()
@@ -99,6 +103,13 @@ final class ChatViewModel: ObservableObject {
         collector.collectRewards(store: attendanceStore) { [weak self] ev in
             Task { @MainActor in self?.checkInToast = "출석 완료! +\(ev.awardedCoin) 코인" }
         }
+        collector.collectGateInfo(store: store) { [weak self] info in
+            Task { @MainActor in
+                guard let self, let info else { return }
+                self.gateTeaserChars = Int(info.teaserChars)
+                self.gateRewardCoin = Int(info.rewardCoin)
+            }
+        }
     }
 
     /// 회복 카운트다운 종료 등 — 에너지만 재조회.
@@ -136,6 +147,18 @@ final class ChatViewModel: ObservableObject {
     func dismissGate() {
         rewardPhase = .idle
         store.dismissEnergyGate()
+    }
+
+    /// Ad Gate 해제: nonce 발급 → 광고 → 성공 시 해당 메시지 blur 해제.
+    func startGateUnlock(messageId: String, showAd: @escaping (_ nonce: String) async -> Bool) {
+        Task { @MainActor in
+            var watched = false
+            do {
+                let nonce = try await adRewardStore.requestNonce()
+                watched = await showAd(nonce)
+            } catch { watched = false }
+            if watched { store.unlockGatedMessage(messageId: messageId) }
+        }
     }
 
     func dismissEnergyGate() {
