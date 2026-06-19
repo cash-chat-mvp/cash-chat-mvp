@@ -1,5 +1,6 @@
 package com.nomadclub.cashchat.shared.di
 
+import com.nomadclub.cashchat.shared.ads.AdRewardQuotaDto
 import com.nomadclub.cashchat.shared.ads.AdRewardStore
 import com.nomadclub.cashchat.shared.attendance.AttendanceStore
 import com.nomadclub.cashchat.shared.attendance.AttendanceUiState
@@ -8,6 +9,7 @@ import com.nomadclub.cashchat.shared.chat.ChatApi
 import com.nomadclub.cashchat.shared.chat.ChatStore
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
+import com.nomadclub.cashchat.shared.hud.HudState
 import com.nomadclub.cashchat.shared.hud.HudStore
 import com.nomadclub.cashchat.shared.points.PointsRepository
 import com.nomadclub.cashchat.shared.shop.ShopApi
@@ -71,6 +73,22 @@ class FlowCollector {
 
     fun collectEnergyGate(store: ChatStore, onEach: (Boolean) -> Unit) {
         scope.launch { store.energyGateVisible.collect { onEach(it) } }
+    }
+
+    fun collectHud(store: HudStore, onEach: (HudState) -> Unit) {
+        scope.launch { store.state.collect { onEach(it) } }
+    }
+
+    fun collectStreamCompleted(store: ChatStore, onEach: (Int) -> Unit) {
+        scope.launch { store.streamCompletedCount.collect { onEach(it) } }
+    }
+
+    fun collectGateInfo(store: ChatStore, onEach: (ChatStore.GateInfo?) -> Unit) {
+        scope.launch { store.gateInfo.collect { onEach(it) } }
+    }
+
+    fun collectQuota(store: AdRewardStore, onEach: (AdRewardQuotaDto?) -> Unit) {
+        scope.launch { store.quota.collect { onEach(it) } }
     }
 
     fun cancel() {
