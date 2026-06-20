@@ -2,6 +2,7 @@ import SwiftUI
 import GoogleSignIn
 import GoogleMobileAds
 import CashChatShared
+import TnkRwdSdk2
 
 @main
 struct CashChatIOSApp: App {
@@ -15,6 +16,8 @@ struct CashChatIOSApp: App {
         )
         // AdMob 초기화 (리워드 광고). 앱 생명주기당 1회.
         MobileAds.shared.start(completionHandler: nil)
+        // TNK 오퍼월 SDK 초기화. 앱 생명주기당 1회.
+        TnkSession.initInstance(appId: AppConfig.tnkAppId)
     }
 
     var body: some Scene {

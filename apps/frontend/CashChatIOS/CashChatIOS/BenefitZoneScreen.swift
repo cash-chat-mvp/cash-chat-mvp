@@ -3,6 +3,7 @@ import SwiftUI
 struct BenefitZoneScreen: View {
     @StateObject private var attendanceVM = AttendanceViewModel()
     @State private var animateIn = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollView {
@@ -32,12 +33,18 @@ struct BenefitZoneScreen: View {
                 BenefitInfoCardView(icon: "target", title: "데일리 미션", badge: .soon,
                     description: "매일 바뀌는 3가지 미션을 완료하고 코인 적립", dimmed: true)
                     .padding(.horizontal, 16)
-                BenefitInfoCardView(icon: "gamecontroller.fill", title: "TNK 오퍼월", badge: .soon,
-                    description: "앱 설치·설문 참여로 대량 코인 (최대 +1,500 코인)", dimmed: true)
+                BenefitInfoCardView(icon: "gamecontroller.fill", title: "TNK 오퍼월", badge: .next,
+                    description: "앱 설치·설문 참여로 대량 코인 (최대 +1,500 코인)", dimmed: false)
                     .padding(.horizontal, 16)
+                    .onTapGesture {
+                        if let top = TnkOfferwallManager.topViewController() {
+                            TnkOfferwallManager.present(from: top)
+                        }
+                    }
             }
             .padding(.bottom, 16)
         }
+        .refreshable { await attendanceVM.refresh() }
         .background(Color(.systemGroupedBackground))
         .safeAreaInset(edge: .bottom) {
             if let toast = attendanceVM.toast {
@@ -69,5 +76,9 @@ struct BenefitZoneScreen: View {
             }
         }
         .onDisappear { animateIn = false }
+        .onChange(of: scenePhase) { _, phase in
+            // 오퍼월/백그라운드에서 복귀 시 잔액·출석 갱신 (비동기 적립 반영).
+            if phase == .active { Task { await attendanceVM.refresh() } }
+        }
     }
 }
