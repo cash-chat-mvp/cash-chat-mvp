@@ -137,11 +137,16 @@ fun ShopScreen(
             currentCatalog.items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("판매 중인 아이템이 없어요")
             }
-            else -> LazyColumn(
-                contentPadding = PaddingValues(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(currentCatalog.items.sortedBy { it.displayOrder }, key = { it.itemCode }) { item ->
+            else -> {
+                // recomposition마다 재정렬되지 않도록 정렬 결과를 캐싱한다.
+                val sortedItems = remember(currentCatalog.items) {
+                    currentCatalog.items.sortedBy { it.displayOrder }
+                }
+                LazyColumn(
+                    contentPadding = PaddingValues(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                items(sortedItems, key = { it.itemCode }) { item ->
                     Card(shape = RoundedCornerShape(16.dp)) {
                         Row(
                             Modifier.fillMaxWidth().padding(16.dp),
@@ -162,6 +167,7 @@ fun ShopScreen(
                             }
                         }
                     }
+                }
                 }
             }
         }

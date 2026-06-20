@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,8 +59,16 @@ fun AttendanceCalendar(monthly: MonthlyAttendanceDto) {
             color = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(12.dp))
+        // 해당 월의 실제 일수만 렌더 (2월/소월에 31일이 표시되는 버그 방지).
+        // java.time 미사용(desugaring 미설정) — java.util.Calendar 사용.
+        val daysInMonth = remember(monthly.year, monthly.month) {
+            java.util.Calendar.getInstance().apply {
+                clear()
+                set(monthly.year, monthly.month - 1, 1)
+            }.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
+        }
         LazyVerticalGrid(columns = GridCells.Fixed(7), modifier = Modifier.height(220.dp)) {
-            items((1..31).toList()) { day ->
+            items((1..daysInMonth).toList()) { day ->
                 val checked = day in monthly.checkedDays
                 Box(
                     Modifier.padding(3.dp).size(34.dp).clip(CircleShape)

@@ -216,12 +216,19 @@ fun ChatScreen(
                                     val activity = context as? Activity ?: return@AdGateCard
                                     viewModel.startGateUnlock(item.id) { nonce ->
                                         suspendCancellableCoroutine { continuation ->
+                                            // 보상은 onRewarded(=리워드 적립)에서만 확정한다.
+                                            // 광고를 끝까지 보지 않고 닫으면 unlock 하지 않는다.
+                                            var rewarded = false
                                             adManager.show(
                                                 activity = activity,
                                                 nonce = nonce,
-                                                onRewarded = { },
-                                                onDismissed = { continuation.resume(true) },
-                                                onNotReady = { continuation.resume(false) },
+                                                onRewarded = { rewarded = true },
+                                                onDismissed = {
+                                                    if (continuation.isActive) continuation.resume(rewarded)
+                                                },
+                                                onNotReady = {
+                                                    if (continuation.isActive) continuation.resume(false)
+                                                },
                                             )
                                         }
                                     }
@@ -305,7 +312,8 @@ private fun RecoveryCountdown(nextRecoverAtIso: String, onFinished: () -> Unit) 
     var remainText by remember { mutableStateOf("") }
     LaunchedEffect(nextRecoverAtIso) {
         // 서버 타임스탬프 포맷이 예상과 다르면 parse 가 던지며 화면이 크래시하므로 방어한다.
-        val target = runCatching { java.time.Instant.parse(nextRecoverAtIso).toEpochMilli() }
+        // java.time 미사용(desugaring 미설정으로 구버전 기기 NoClassDefFoundError 회피) — SimpleDateFormat 사용.
+        val target = runCatching { parseIsoInstantMillis(nextRecoverAtIso) }
             .getOrElse { return@LaunchedEffect }
         while (true) {
             val remainSec = ((target - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
@@ -319,4 +327,18 @@ private fun RecoveryCountdown(nextRecoverAtIso: String, onFinished: () -> Unit) 
         remainText, style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/**
+ * ISO-8601 instant 문자열을 epoch millis로 파싱. (java.time desugaring 미설정 → SimpleDateFormat)
+ * "2026-06-20T12:34:56Z", "...56.789Z", "...+09:00" 형태를 허용한다. 실패 시 예외를 던진다.
+ */
+private fun parseIsoInstantMillis(iso: String): Long {
+    val normalized = iso
+        .replace(Regex("\\.\\d+"), "")                       // 소수 초 제거
+        .replace("Z", "+0000")                                 // UTC 표기 보정
+        .replace(Regex("([+-]\\d{2}):(\\d{2})$"), "$1$2")     // +09:00 -> +0900
+    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", java.util.Locale.US)
+    return fmt.parse(normalized)?.time
+        ?: throw IllegalArgumentException("Unparseable timestamp: $iso")
 }

@@ -16,6 +16,7 @@ import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudStore
 import com.nomadclub.cashchat.shared.points.LocalPointsRepository
 import com.nomadclub.cashchat.shared.points.PointsRepository
+import com.nomadclub.cashchat.shared.session.SessionResetter
 import com.nomadclub.cashchat.shared.wallet.PointsApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,4 +59,6 @@ fun sharedDataModule(rawBaseUrl: String) = module {
             scope = get(),
         )
     }
+    // 로그아웃/세션 만료 시 사용자별 스토어를 일괄 초기화 (계정 전환 후 이전 사용자 데이터 노출 방지)
+    single { SessionResetter(get(), get(), get(), get(), get(), get()) }
 }

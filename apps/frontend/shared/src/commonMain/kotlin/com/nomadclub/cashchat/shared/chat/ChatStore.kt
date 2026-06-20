@@ -83,6 +83,17 @@ class ChatStore(
         _energyGateVisible.value = false
     }
 
+    /** 로그아웃/세션 종료 시 다음 사용자에게 이전 대화·게이트 상태가 노출되지 않도록 초기화한다. */
+    fun reset() {
+        conversationId = null
+        blockedMessageId = null
+        _items.value = emptyList()
+        _isStreaming.value = false
+        _energyGateVisible.value = false
+        _streamCompletedCount.value = 0
+        _gateInfo.value = null
+    }
+
     fun sendMessage(text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty() || _isStreaming.value) return

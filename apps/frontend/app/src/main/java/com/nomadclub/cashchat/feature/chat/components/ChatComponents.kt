@@ -61,7 +61,7 @@ fun StatChip(emoji: String, text: String, warning: Boolean = false) {
 /** 밥 게이지 — 잔량 비율 따라 색 전환, 변화 시 부드럽게 차오름 */
 @Composable
 fun EnergyGauge(energy: Int, maxEnergy: Int, modifier: Modifier = Modifier) {
-    val ratio = if (maxEnergy > 0) energy.toFloat() / maxEnergy else 0f
+    val ratio = if (maxEnergy > 0) (energy.toFloat() / maxEnergy).coerceIn(0f, 1f) else 0f
     val animated by animateFloatAsState(ratio, animationSpec = tween(600), label = "energy")
     val barColor = if (ratio <= 0.2f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Box(

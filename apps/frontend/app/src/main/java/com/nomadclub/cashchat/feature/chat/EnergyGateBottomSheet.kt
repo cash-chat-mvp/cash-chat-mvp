@@ -91,7 +91,7 @@ fun EnergyGateBottomSheet(
                 ChatViewModel.RewardPhase.FAILED -> {
                     Text("보상 확인이 지연되고 있어요", color = MaterialTheme.colorScheme.error)
                     OutlinedButton(onClick = {
-                        viewModel.startAdReward { _ -> true } // 폴링만 재시도 (광고 재시청 없이)
+                        viewModel.retryRewardPolling() // 광고 재시청 없이 원래 baseline 으로 폴링만 재시도
                     }) { Text("다시 확인") }
                 }
                 else -> {
@@ -100,12 +100,18 @@ fun EnergyGateBottomSheet(
                             val activity = context as? Activity ?: return@Button
                             viewModel.startAdReward { nonce ->
                                 suspendCancellableCoroutine { continuation ->
+                                    // 광고를 끝까지 봐 보상이 적립된 경우에만 true (이후 SSV 폴링으로 최종 확정)
+                                    var rewarded = false
                                     adManager.show(
                                         activity = activity,
                                         nonce = nonce,
-                                        onRewarded = { },
-                                        onDismissed = { continuation.resume(true) },
-                                        onNotReady = { continuation.resume(false) },
+                                        onRewarded = { rewarded = true },
+                                        onDismissed = {
+                                            if (continuation.isActive) continuation.resume(rewarded)
+                                        },
+                                        onNotReady = {
+                                            if (continuation.isActive) continuation.resume(false)
+                                        },
                                     )
                                 }
                             }

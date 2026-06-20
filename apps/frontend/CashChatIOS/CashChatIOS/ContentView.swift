@@ -165,6 +165,8 @@ final class AppState: ObservableObject {
         KeychainHelper.remove(forKey: Keys.accessToken)
         KeychainHelper.remove(forKey: Keys.refreshToken)
         KeychainHelper.remove(forKey: Keys.role)
+        // 계정 전환 시 다음 사용자에게 이전 사용자의 대화·출석·잔액 등이 노출되지 않도록 공유 스토어 초기화
+        KoinHelper().resetSession()
         isAuthenticated = false
         points = 0
         messageCount = 0

@@ -12,6 +12,7 @@ import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudState
 import com.nomadclub.cashchat.shared.hud.HudStore
 import com.nomadclub.cashchat.shared.points.PointsRepository
+import com.nomadclub.cashchat.shared.session.SessionResetter
 import com.nomadclub.cashchat.shared.shop.ShopApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,7 @@ class KoinHelper : KoinComponent {
     private val adReward: AdRewardStore by inject()
     private val chatApiInstance: ChatApi by inject()
     private val shopApiInstance: ShopApi by inject()
+    private val sessionResetter: SessionResetter by inject()
 
     fun chatStore(): ChatStore = chat
     fun chatApi(): ChatApi = chatApiInstance
@@ -40,6 +42,9 @@ class KoinHelper : KoinComponent {
     fun hudStore(): HudStore = hud
     fun evolutionStore(): EvolutionStore = evolution
     fun adRewardStore(): AdRewardStore = adReward
+
+    /** 로그아웃/세션 만료 시 공유 스토어를 일괄 초기화 (계정 전환 후 이전 사용자 데이터 노출 방지). */
+    fun resetSession() = sessionResetter.reset()
 }
 
 /**

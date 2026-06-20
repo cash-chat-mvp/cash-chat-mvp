@@ -43,6 +43,8 @@ final class ChatViewModel: ObservableObject {
     private let adRewardStore = KoinHelper().adRewardStore()
     private let collector = FlowCollector()
     private var didLoad = false
+    // 자동 출석 체크인은 세션당 1회만 시도 — 실패(네트워크/409 등) 시 무한 재시도 방지.
+    private var hasAttemptedAutoCheckIn = false
 
     deinit {
         collector.cancel()
@@ -93,9 +95,9 @@ final class ChatViewModel: ObservableObject {
                 self.attendanceMonth = Int(s.month)
                 self.attendanceStreak = Int(s.currentStreak)
                 self.attendanceCheckedDays = Set(s.checkedDays.map { $0.intValue })
-                let wasUnchecked = !self.attendanceTodayChecked
                 self.attendanceTodayChecked = s.todayChecked
-                if !s.todayChecked && wasUnchecked && !s.isCheckingIn {
+                if !s.todayChecked && !s.isCheckingIn && !self.hasAttemptedAutoCheckIn {
+                    self.hasAttemptedAutoCheckIn = true
                     self.attendanceStore.checkIn()
                 }
             }

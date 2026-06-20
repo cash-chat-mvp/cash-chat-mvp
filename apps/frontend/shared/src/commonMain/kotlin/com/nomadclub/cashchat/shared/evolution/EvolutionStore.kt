@@ -40,6 +40,13 @@ class EvolutionStore(private val api: EvolutionApi) {
         return api.attempt(key)
     }
 
+    /** 로그아웃/세션 종료 시 다음 사용자에게 이전 진화 상태·기록이 노출되지 않도록 초기화한다. */
+    fun reset() {
+        _state.value = null
+        _history.value = emptyList()
+        currentAttemptKey = null
+    }
+
     // commonMain에는 UUID API가 없어 시간+난수 조합으로 충분한 유일성 확보(서버 max 255자)
     private fun newUuidLike(): String =
         "${currentTimeMillis()}-${Random.nextLong().toULong().toString(16)}-${Random.nextLong().toULong().toString(16)}"

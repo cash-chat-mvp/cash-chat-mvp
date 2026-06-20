@@ -55,7 +55,7 @@ struct ChatScreen: View {
                     .clipShape(Capsule())
                     .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
-                    .task {
+                    .task(id: toast) {
                         try? await Task.sleep(for: .seconds(2))
                         vm.checkInToast = nil
                     }
@@ -186,10 +186,12 @@ struct ChatScreen: View {
                     onWatch: {
                         vm.startGateUnlock(messageId: a.id) { nonce in
                             await withCheckedContinuation { cont in
+                                // 보상은 onRewarded에서만 확정. 광고를 끝까지 보지 않고 닫으면 unlock 안 함.
+                                var rewarded = false
                                 adManager.manager.show(
                                     nonce: nonce,
-                                    onRewarded: { _ in },
-                                    onDismissed: { cont.resume(returning: true) },
+                                    onRewarded: { _ in rewarded = true },
+                                    onDismissed: { cont.resume(returning: rewarded) },
                                     onNotReady: { cont.resume(returning: false) }
                                 )
                             }
@@ -405,10 +407,12 @@ private struct EnergyGateSheet: View {
         Button {
             vm.startAdReward { nonce in
                 await withCheckedContinuation { cont in
+                    // 광고를 끝까지 봐서 보상이 적립된 경우에만 true. (이후 SSV 폴링으로 최종 확정)
+                    var rewarded = false
                     adManager.show(
                         nonce: nonce,
-                        onRewarded: { _ in },
-                        onDismissed: { cont.resume(returning: true) },
+                        onRewarded: { _ in rewarded = true },
+                        onDismissed: { cont.resume(returning: rewarded) },
                         onNotReady: { cont.resume(returning: false) }
                     )
                 }

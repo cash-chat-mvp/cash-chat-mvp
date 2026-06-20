@@ -70,4 +70,9 @@ class HudStore(
             isLoaded = true,
         )
     }
+
+    /** 로그아웃/세션 종료 시 다음 사용자에게 이전 레벨·에너지·포인트가 노출되지 않도록 초기화한다. */
+    fun reset() {
+        _state.value = HudState()
+    }
 }

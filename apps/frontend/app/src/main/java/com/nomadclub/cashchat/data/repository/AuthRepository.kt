@@ -7,6 +7,7 @@ import com.nomadclub.cashchat.shared.auth.model.AuthResponse
 import com.nomadclub.cashchat.shared.auth.model.GoogleOAuthCallbackRequest
 import com.nomadclub.cashchat.shared.auth.model.LogoutRequest
 import com.nomadclub.cashchat.shared.auth.model.TokenRefreshRequest
+import com.nomadclub.cashchat.shared.session.SessionResetter
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.sync.withLock
@@ -15,6 +16,7 @@ class AuthRepository(
     private val apiService: ApiService,
     private val tokenDataStore: TokenDataStore,
     private val refreshGate: TokenRefreshGate,
+    private val sessionResetter: SessionResetter,
 ) {
     // TokenAuthenticator에서 RefreshToken도 만료된 경우 재로그인 필요를 알리는 이벤트
     private val _reAuthRequired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
@@ -59,6 +61,7 @@ class AuthRepository(
                 // 멀쩡한 세션을 날려 재로그인을 강요하지 않도록 한다.
                 if (response.code() == 401 || response.code() == 403) {
                     tokenDataStore.clearTokens()
+                    sessionResetter.reset()
                     _reAuthRequired.tryEmit(Unit)
                 }
                 error("${if (isGuest) "게스트 재인증" else "Refresh"} 실패 (${response.code()})")
@@ -83,6 +86,8 @@ class AuthRepository(
             }
         }
         tokenDataStore.clearTokens()
+        // 계정 전환 시 다음 사용자에게 이전 사용자의 대화·출석·잔액 등이 노출되지 않도록 공유 스토어 초기화
+        sessionResetter.reset()
     }
 
     fun getAccessToken() = tokenDataStore.getAccessTokenBlocking()
