@@ -139,14 +139,17 @@ fun ShopScreen(
         // 카테고리 전환 시 catalog가 null로 바뀌는 순간 catalog!! 가 NPE를 일으켰다.
         val currentCatalog = catalog
         when {
-            loadFailed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("상점을 불러오지 못했어요")
-                    TextButton(onClick = { reloadTrigger++ }) { Text("다시 시도") }
-                }
-            }
+            // catalog 미로드 상태를 먼저 평가한다. 실패 시엔 catalog 도 null 이므로 이 분기에서
+            // loadFailed 여부로 로딩/에러를 구분한다(이후 분기의 스마트캐스트도 보존됨).
             currentCatalog == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                if (loadFailed) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("상점을 불러오지 못했어요")
+                        TextButton(onClick = { reloadTrigger++ }) { Text("다시 시도") }
+                    }
+                } else {
+                    CircularProgressIndicator()
+                }
             }
             !currentCatalog.phase1Active -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("🔒 준비 중인 카테고리예요")

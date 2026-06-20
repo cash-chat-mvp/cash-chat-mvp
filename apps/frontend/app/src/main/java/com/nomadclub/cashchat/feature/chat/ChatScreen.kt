@@ -107,10 +107,11 @@ fun ChatScreen(
         if (isStreaming) listState.scrollToItem(items.lastIndex)
         else listState.animateScrollToItem(items.lastIndex)
     }
-    // 스트리밍 중 토큰으로 본문이 길어질 때는, 사용자가 위로 올려둔 경우 강제 스크롤하지 않는다.
+    // 스트리밍 중 토큰으로 본문이 바뀔 때는, 사용자가 위로 올려둔 경우 강제 스크롤하지 않는다.
+    // 길이가 아니라 텍스트 내용을 키로 관찰한다(같은 길이로 내용만 바뀌는 경우도 추적).
     // animateScrollToItem 을 매번 재시작하면 jank 가 생기므로 즉시 스크롤로 따라간다.
-    val lastAssistantLen = (items.lastOrNull() as? ChatItem.AssistantMessage)?.text?.length
-    LaunchedEffect(lastAssistantLen) {
+    val lastAssistantText = (items.lastOrNull() as? ChatItem.AssistantMessage)?.text
+    LaunchedEffect(lastAssistantText) {
         if (items.isEmpty() || !isStreaming || !isAtBottom) return@LaunchedEffect
         listState.scrollToItem(items.lastIndex)
     }

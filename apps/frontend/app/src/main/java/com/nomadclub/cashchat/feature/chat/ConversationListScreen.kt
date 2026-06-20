@@ -90,14 +90,16 @@ fun ConversationListScreen(
             }
         },
     ) { padding ->
+        // 강제 언래핑(!!) 대신 불변 지역값으로 캡처해 스마트캐스트를 활용한다.
+        val currentConversations = conversations
         when {
             loadFailed -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text("목록을 불러오지 못했어요")
             }
-            conversations == null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            currentConversations == null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-            conversations!!.isEmpty() -> Column(
+            currentConversations.isEmpty() -> Column(
                 Modifier.fillMaxSize().padding(padding),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -107,7 +109,7 @@ fun ConversationListScreen(
                 Text("첫 대화를 시작해보세요")
             }
             else -> LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                items(conversations!!, key = { it.conversationId }) { conversation ->
+                items(currentConversations, key = { it.conversationId }) { conversation ->
                     Box {
                         ListItem(
                             headlineContent = { Text(conversation.title) },

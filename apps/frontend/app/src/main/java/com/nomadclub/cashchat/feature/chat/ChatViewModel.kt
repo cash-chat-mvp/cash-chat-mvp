@@ -48,7 +48,7 @@ class ChatViewModel(
                     runCatching { pointsRepository.refresh() }
                     _attendance.value = attendanceApi.getMonthly()
                 }
-            }
+            }.onFailure { android.util.Log.e("ChatViewModel", "자동 출석 체크 실패", it) }
         }
         viewModelScope.launch {
             chatStore.streamCompletedCount.collect { if (it > 0) runCatching { hudStore.refreshEnergyOnly() } }
