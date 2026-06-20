@@ -43,6 +43,8 @@ android {
         buildConfigField("String", "ADMOB_NATIVE_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_NATIVE_AD_UNIT_ID", "")}\"")
         buildConfigField("String", "ADMOB_REWARDED_AD_UNIT_ID", "\"${localProperties.getProperty("ADMOB_REWARDED_AD_UNIT_ID", "")}\"")
         buildConfigField("String", "SENTRY_DSN", "\"${localProperties.getProperty("SENTRY_DSN", "")}\"")
+        buildConfigField("String", "TNK_APP_ID", "\"${localProperties.getProperty("TNK_APP_ID", "")}\"")
+        manifestPlaceholders["tnkAppId"] = localProperties.getProperty("TNK_APP_ID", "")
     }
 
     buildTypes {
@@ -99,6 +101,9 @@ dependencies {
 
     // AdMob
     implementation(libs.play.services.ads)
+
+    // TNK Offerwall
+    implementation("com.tnkfactory:rwd:8.09.07")
 
     // Encrypted SharedPreferences
     implementation(libs.security.crypto)
