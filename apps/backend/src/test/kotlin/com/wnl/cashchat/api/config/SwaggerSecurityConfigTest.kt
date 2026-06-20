@@ -18,7 +18,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
     ]
 )
 @AutoConfigureMockMvc
-class ProdDisabledSwaggerSecurityConfigTest @Autowired constructor(
+class ProdSwaggerSecurityConfigTest @Autowired constructor(
     private val mockMvc: MockMvc,
 ) {
 
