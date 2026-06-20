@@ -21,7 +21,7 @@ import jakarta.persistence.UniqueConstraint
 class WalletLedger(
     @Column(name = "user_id", nullable = false) val userId: Long,
     @Enumerated(EnumType.STRING) @Column(name = "tx_type", nullable = false, length = 40) val type: WalletTxType,
-    @Column(nullable = false) val delta: Long,
+    @Column(name = "delta", nullable = false) val delta: Long,
     @Column(name = "balance_after", nullable = false) val balanceAfter: Long,
     @Column(name = "reference_id", length = 255) val referenceId: String?,
     @Column(name = "idempotency_key", nullable = false, length = 255) val idempotencyKey: String,
