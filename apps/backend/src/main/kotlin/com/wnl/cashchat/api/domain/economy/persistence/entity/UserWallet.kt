@@ -68,7 +68,7 @@ class UserWallet(
     fun refundReserved(amount: Long = 1) {
         require(amount >= 0) { "Refund amount must be non-negative" }
         require(energyReserved >= amount) { "Insufficient reserved energy" }
-        energyReserved -= amount; energyAvailable += amount
+        energyReserved -= amount; energyAvailable = Math.addExact(energyAvailable, amount)
     }
     fun addPendingPt(amount: Long) {
         require(amount >= 0) { "Pending point amount must be non-negative" }

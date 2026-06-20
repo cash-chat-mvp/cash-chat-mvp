@@ -40,4 +40,13 @@ class UserWalletTest : FunSpec({
     test("addExp accumulates evolution exp") {
         val w = wallet(); w.addExp(1); w.addExp(1); w.evolutionExp shouldBe 2L
     }
+    test("confirmPending rejects confirming more than pending") {
+        shouldThrow<IllegalArgumentException> { wallet().confirmPending(1) }
+    }
+    test("mutators reject negative amounts") {
+        shouldThrow<IllegalArgumentException> { wallet().grantEnergy(-1, maxEnergy = 50) }
+        shouldThrow<IllegalArgumentException> { wallet().reserveEnergy(-1) }
+        shouldThrow<IllegalArgumentException> { wallet().addPendingPt(-1) }
+        shouldThrow<IllegalArgumentException> { wallet().addExp(-1) }
+    }
 })
