@@ -135,7 +135,10 @@ private fun CashChatAppContent() {
     // (이전엔 마이페이지만 별도 로컬 카운터를 써서 다른 화면과 잔액이 어긋나는 문제가 있었다.)
     val pointsRepository = koinInject<PointsRepository>()
     val balance by pointsRepository.balance.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { runCatching { pointsRepository.refresh() } }
+    LaunchedEffect(Unit) {
+        runCatching { pointsRepository.refresh() }
+            .onFailure { Log.e("CashChatPoints", "포인트 잔액 동기화 실패", it) }
+    }
     val points = balance.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
     var messageCount by rememberSaveable { mutableIntStateOf(0) }
 

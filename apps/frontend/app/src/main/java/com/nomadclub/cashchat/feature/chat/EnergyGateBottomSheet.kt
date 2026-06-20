@@ -110,7 +110,14 @@ fun EnergyGateBottomSheet(
                                             if (continuation.isActive) continuation.resume(rewarded)
                                         },
                                         onNotReady = {
-                                            if (continuation.isActive) continuation.resume(false)
+                                            if (continuation.isActive) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "광고를 준비 중이에요. 잠시 후 다시 시도해주세요.",
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                                continuation.resume(false)
+                                            }
                                         },
                                     )
                                 }

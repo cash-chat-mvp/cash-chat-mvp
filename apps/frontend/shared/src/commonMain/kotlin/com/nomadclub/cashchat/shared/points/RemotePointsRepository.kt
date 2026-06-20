@@ -26,7 +26,8 @@ class RemotePointsRepository(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // 일시적 오류로 기존 잔액을 0으로 날리지 않도록 무시 (다음 refresh 에서 재시도)
+            // 일시적 오류로 기존 잔액을 0으로 날리지 않도록 유지하되, 디버깅을 위해 로그는 남긴다.
+            println("RemotePointsRepository: 잔액 동기화 실패 - ${e.message}")
         }
     }
 

@@ -98,9 +98,12 @@ fun ChatScreen(
         }
     }
 
-    // 새 메시지가 추가되면(아이템 수 변화) 항상 맨 아래로 스크롤.
+    // 새 메시지가 추가되면 맨 아래로 스크롤. 단, 사용자가 과거 메시지를 보려고 위로 올린 경우
+    // 강제로 끌어내리지 않는다. (내가 방금 보낸 메시지는 항상 보이도록 예외 처리)
     LaunchedEffect(items.size) {
         if (items.isEmpty()) return@LaunchedEffect
+        val sentByMe = items.lastOrNull() is ChatItem.UserMessage
+        if (!sentByMe && !isAtBottom) return@LaunchedEffect
         if (isStreaming) listState.scrollToItem(items.lastIndex)
         else listState.animateScrollToItem(items.lastIndex)
     }
