@@ -53,7 +53,7 @@ class UserWallet(
     fun grantEnergy(amount: Long, maxEnergy: Long) {
         require(amount >= 0) { "Energy amount must be non-negative" }
         if (Math.addExact(energyAvailable, amount) > maxEnergy) throw EnergyCapExceededException()
-        energyAvailable += amount
+        energyAvailable = Math.addExact(energyAvailable, amount)
     }
     fun reserveEnergy(amount: Long = 1) {
         require(amount >= 0) { "Reserve amount must be non-negative" }

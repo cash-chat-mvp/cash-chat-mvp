@@ -16,7 +16,7 @@ class WalletController(
 ) {
     @GetMapping
     fun wallet(authentication: Authentication): WalletResponse {
-        val w = walletService.snapshot(authentication.principal as Long)
+        val w = walletService.snapshot(authentication.userId())
         return WalletResponse(
             energyAvailable = w.energyAvailable,
             energyReserved = w.energyReserved,
@@ -26,4 +26,7 @@ class WalletController(
             evolutionExp = w.evolutionExp,
         )
     }
+
+    private fun Authentication.userId(): Long =
+        principal as? Long ?: throw IllegalArgumentException("Invalid authenticated principal")
 }

@@ -91,5 +91,13 @@ class EconomyControllerTest : FunSpec() {
                 .andExpect(jsonPath("$.energyReserved").value(0))
                 .andExpect(jsonPath("$.maxEnergy").value(50))
         }
+
+        test("GET /wallet returns 404 WALLET_NOT_FOUND when the wallet is missing") {
+            whenever(walletService.snapshot(1L)).thenThrow(WalletNotInitializedException(1L))
+
+            mockMvc.perform(get("/api/v1/wallet").principal(principal))
+                .andExpect(status().isNotFound)
+                .andExpect(jsonPath("$.code").value("WALLET_NOT_FOUND"))
+        }
     }
 }

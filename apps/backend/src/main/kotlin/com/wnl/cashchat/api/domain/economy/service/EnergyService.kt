@@ -35,7 +35,7 @@ class EnergyService(
         walletLedgerRepository.findByIdempotencyKey(idempotencyKey)?.let { return it }
 
         wallet.grantEnergy(amount, economyProperties.maxEnergy)
-        energyGrantRepository.save(
+        val grant = energyGrantRepository.save(
             EnergyGrant(
                 userId = userId,
                 sourceType = sourceType,
@@ -50,7 +50,7 @@ class EnergyService(
                 type = WalletTxType.ENERGY_GRANTED,
                 delta = amount,
                 balanceAfter = wallet.energyAvailable,
-                referenceId = null,
+                referenceId = grant.id.toString(),
                 idempotencyKey = idempotencyKey,
             )
         )
