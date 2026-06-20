@@ -27,6 +27,9 @@ struct BenefitZoneScreen: View {
                 AttendanceWidgetView(vm: attendanceVM)
                     .padding(.horizontal, 16)
 
+                BannerAdView(slotName: "benefit_top")
+                    .frame(height: 50)
+
                 BenefitInfoCardView(icon: "tv.fill", title: "리워드 광고", badge: .next,
                     description: "광고 1회 시청 → +40 코인 · 하루 10회까지", dimmed: false)
                     .padding(.horizontal, 16)

@@ -110,6 +110,11 @@ fun BenefitZoneScreen(
             }
             item { AttendanceWidget(state = state, onCheckIn = store::checkIn) }
             item {
+                com.nomadclub.cashchat.ads.BannerAd(
+                    slot = com.nomadclub.cashchat.shared.ads.BannerAdSlot.BENEFIT_TOP,
+                )
+            }
+            item {
                 BenefitInfoCard(
                     icon = "📺", title = "리워드 광고", badge = BenefitBadge.NEXT,
                     description = "광고 1회 시청 → 🪙+40 코인 · 하루 10회까지",
