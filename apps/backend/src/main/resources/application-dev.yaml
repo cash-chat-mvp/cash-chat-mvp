@@ -5,12 +5,18 @@ spring:
       base-url: https://generativelanguage.googleapis.com/v1beta/openai
       chat:
         options:
-          model: gemini-3.1-flash-lite-preview
+          model: gemini-3.1-flash-lite
           max-tokens: 1024
           temperature: 0.7
 
 # O-Auth: development client registered in Google Cloud Console
 oauth:
+  apple:
+    client-id: ${APPLE_CLIENT_ID:apple-client-id}
+    team-id: ${APPLE_TEAM_ID:apple-team-id}
+    key-id: ${APPLE_KEY_ID:apple-key-id}
+    private-key: ${APPLE_PRIVATE_KEY:}
+    redirect-uri: ${APPLE_REDIRECT_URI:}
   registration:
     google-app:
       provider: google

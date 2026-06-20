@@ -11,7 +11,7 @@ data class ChatMessageResponse(
     @field:Schema(description = "Message role.", example = "USER")
     val role: String,
 
-    @field:Schema(description = "Message content.", example = "영어 공부 방법")
+    @field:Schema(description = "Message content.", example = "English study tips")
     val content: String,
 
     @field:Schema(description = "Persistence or streaming status.", example = "COMPLETED")

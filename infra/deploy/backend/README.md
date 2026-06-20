@@ -17,19 +17,34 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 - `DEPLOY_PATH`: remote directory for compose files (example: `/home/ubuntu/cash-chat`)
 - `GHCR_USERNAME`: GitHub username for pulling GHCR image on server
 - `GHCR_TOKEN`: GitHub PAT with `read:packages` scope
-- `OPENAI_API_KEY`: OpenAI API key, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `SPRING_DATASOURCE_URL`: MySQL JDBC URL, for example `jdbc:mysql://<mysql-host>:3306/cashchat?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true`
+- `SPRING_DATASOURCE_USERNAME`: MySQL username with privileges on the `cashchat` database
+- `SPRING_DATASOURCE_PASSWORD`: MySQL password
+- `GEMINI_API_KEY`: Gemini API key (used via the OpenAI-compatible endpoint for chat), required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_REDIRECT_URI`: Google OAuth redirect URI, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APPLE_CLIENT_ID`: Apple Services ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APPLE_TEAM_ID`: Apple Developer Team ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APPLE_KEY_ID`: Sign in with Apple key ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APPLE_PRIVATE_KEY`: Sign in with Apple P8 private key, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID`: Google AdMob rewarded ad unit ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 
 ## Optional GitHub Secrets
 
 - `BACKEND_SPRING_PROFILES_ACTIVE`: backend Spring profile, defaults to `prod`
+- `SPRING_DATASOURCE_DRIVER_CLASS_NAME`: JDBC driver class, defaults to `com.mysql.cj.jdbc.Driver`
+- `APPLE_REDIRECT_URI`: Apple redirect URI; native iOS Sign in with Apple can leave this empty
 - `APP_SWAGGER_ENABLED`: set to a Spring boolean true value, for example `true`, to expose Swagger in `prod`; missing or non-true values keep Swagger blocked
 
 Keep production deployments on `BACKEND_SPRING_PROFILES_ACTIVE=prod`. Use `APP_SWAGGER_ENABLED=true` only when production Swagger access is intentionally needed.
 
 Secret values are written into a Docker Compose env file as single-quoted values. Newlines and single quotes are rejected during deployment.
+Store `APPLE_PRIVATE_KEY` as one line by replacing real PEM newlines with the two-character `\n` sequence, for example:
+
+```text
+-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49...\n-----END PRIVATE KEY-----
+```
 
 ## First-time Server Setup
 
@@ -61,6 +76,12 @@ Local env values:
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID for local callback testing
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret for local callback testing
 - `GOOGLE_REDIRECT_URI`: local Google OAuth callback URI, defaults to `http://localhost:8080/api/auth/callback/google`
+- `APPLE_CLIENT_ID`: Apple Services ID for local iOS callback testing
+- `APPLE_TEAM_ID`: Apple Developer Team ID for local iOS callback testing
+- `APPLE_KEY_ID`: Sign in with Apple key ID for local iOS callback testing
+- `APPLE_PRIVATE_KEY`: escaped one-line P8 private key for local iOS callback testing
+- `APPLE_REDIRECT_URI`: optional Apple redirect URI, defaults to empty
+- `APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID`: Google AdMob rewarded ad unit ID for local SSV configuration examples
 - `APP_SWAGGER_ENABLED`: local Swagger toggle, defaults to `true`
 
 Notes:

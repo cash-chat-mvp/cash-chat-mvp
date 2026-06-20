@@ -15,8 +15,6 @@ import com.wnl.cashchat.api.domain.chat.web.exception.ChatExceptionHandler
 import com.wnl.cashchat.api.domain.chat.web.response.ChatMessageResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
-import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
-import com.wnl.cashchat.api.domain.point.web.exception.PointExceptionHandler
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import io.kotest.core.spec.style.FunSpec
@@ -49,7 +47,7 @@ import java.util.UUID
 
 @WebMvcTest(ChatController::class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(PointExceptionHandler::class, ChatExceptionHandler::class)
+@Import(ChatExceptionHandler::class)
 class ChatControllerWebMvcTest : FunSpec() {
     override fun extensions() = listOf(SpringExtension)
 
@@ -172,7 +170,7 @@ class ChatControllerWebMvcTest : FunSpec() {
             mockMvc.perform(asyncDispatch(result))
                 .andExpect(status().isOk)
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
-                .andExpect(content().string("event:message\ndata:hi there\n\n"))
+                .andExpect(content().string("event:message\ndata:hi there\n\nevent:done\ndata:[DONE]\n\n"))
 
             verify(chatService).stream(eq(1L), eq(7L), eq("hello"))
         }
@@ -218,19 +216,6 @@ class ChatControllerWebMvcTest : FunSpec() {
 
             response.contains("stream failed") shouldBe true
             response.contains("sensitive details") shouldBe false
-        }
-
-        test("chat stream endpoint returns payment required when points are insufficient") {
-            whenever(chatService.stream(1L, 7L, "hello")).thenThrow(InsufficientPointsException())
-
-            mockMvc.perform(
-                post("/api/v1/chat/stream")
-                    .principal(UsernamePasswordAuthenticationToken(1L, null))
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.TEXT_EVENT_STREAM)
-                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "message" to "hello")))
-            )
-                .andExpect(status().isPaymentRequired)
         }
 
         test("chat history endpoint returns ordered messages for authenticated user") {

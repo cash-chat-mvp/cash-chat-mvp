@@ -13,12 +13,25 @@ spring:
 
   application.name: cash-chat-api
 
-  h2.console.enabled: true
+  jpa:
+    # OSIV 비활성화: 요청 스레드에 EntityManager/DB 커넥션을 요청 전체 수명 동안 묶어두지 않는다.
+    # 커넥션은 명시적 트랜잭션 경계 안에서만 점유·반납된다. (SSE 등 장수명 응답에서 특히 중요)
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
 
   datasource:
-    driver-class-name: org.h2.Driver
-    url: jdbc:h2:mem:test
-    username: sa
+    # url/username/password 는 프로파일/.env 에서 주입된다. 여기서는 풀 동작만 튜닝한다.
+    hikari:
+      maximum-pool-size: 20
+      # 커넥션을 못 받을 때 30s(기본) 대신 5s 안에 fast-fail 시킨다 — 무응답(hang) 대신 명확한 에러.
+      connection-timeout: 5000
+      # 커넥션을 10s 이상 점유하면 누수 의심 로그를 남긴다(진단용). 운영 상시 유지 여부는 별도 판단.
+      leak-detection-threshold: 10000
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
 
 server:
   forward-headers-strategy: framework
@@ -26,20 +39,83 @@ server:
 app:
   points:
     initial-balance: ${APP_POINTS_INITIAL_BALANCE:1}
+  ads:
+    google:
+      ssv-public-keys-uri: ${APP_ADS_GOOGLE_SSV_PUBLIC_KEYS_URI:https://www.gstatic.com/admob/reward/verifier-keys.json}
+      public-key-cache-ttl: ${APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL:24h}
+      rewarded-ad-unit-id: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID:}
+    reward:
+      coin-amount: ${APP_ADS_REWARD_COIN_AMOUNT:40}
+      daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}
+      nonce-ttl: ${APP_ADS_REWARD_NONCE_TTL:10m}
+  offerwall:
+    tnk:
+      app-key: ${APP_OFFERWALL_TNK_APP_KEY:}
+      point-to-coin-ratio: ${APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO:1.0}
+      ack:
+        success-body: ${APP_OFFERWALL_TNK_ACK_SUCCESS_BODY:SUCCESS}
+  energy:
+    max-energy: 50
+    signup-bonus: 50
+    post-evolution-ratio: 0.5
+  evolution:
+    rules:
+      - from-level: 1
+        attempt-cost: 500
+        success-rate: 0.7
+      - from-level: 2
+        attempt-cost: 1200
+        success-rate: 0.5
+      - from-level: 3
+        attempt-cost: 3000
+        success-rate: 0.25
+      - from-level: 4
+        attempt-cost: 8000
+        success-rate: 0.1
+  ledger:
+    risk-rate: 0.15
+    service-rate: 0.1
+    min-profit-rate: 0.2
+    min-profit-floor: 2
+    rewards:
+      - source: AD
+        cashable-pt: 4
+        energy: 3
+  quality:
+    pool-safety-floor-centi-pt: 500000
+    premium-daily-cap-per-user: 50
+  routing:
+    meal-margin-centi-pt: 32
+    mini-delta-centi-pt: 270
+    gpt-delta-centi-pt: 1620
+    levels:
+      - level: 1
+        mini: 0.00
+        gpt: 0.00
+      - level: 2
+        mini: 0.05
+        gpt: 0.00
+      - level: 3
+        mini: 0.20
+        gpt: 0.00
+      - level: 4
+        mini: 0.35
+        gpt: 0.05
+      - level: 5
+        mini: 0.50
+        gpt: 0.10
 
-# O-Auth (Open Authorization)
 # OAuth registration is defined per profile: application-dev.yaml / application-prod.yaml
 oauth:
   provider:
     google:
       token-uri: https://oauth2.googleapis.com/token
       user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+  apple:
+    token-uri: ${APPLE_TOKEN_URI:https://appleid.apple.com/auth/token}
+    jwks-uri: ${APPLE_JWKS_URI:https://appleid.apple.com/auth/keys}
 
-
-# JWT (JSON Web Token)
 jwt:
   secret-key: ${JWT_SECRET:this-is-a-development-secret-key-at-least-32-bytes-long!!}
-  # 30 (m) = 1,800 (s) = 1,800,000 (ms)
   access-token-expiry: 1800000
-  # 14 (d) = 336 (h) = 20,160 (m) = 1,209,600 (s) = 1,209,600,000 (ms)
   refresh-token-expiry: 1209600000

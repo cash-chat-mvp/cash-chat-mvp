@@ -4,6 +4,9 @@ import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
 import com.wnl.cashchat.api.domain.auth.exception.AlreadyOAuthUserException
 import com.wnl.cashchat.api.domain.auth.exception.InvalidTokenException
 import com.wnl.cashchat.api.domain.auth.exception.OAuthException
+import com.wnl.cashchat.api.domain.auth.oauth.apple.AppleIdTokenValidator
+import com.wnl.cashchat.api.domain.auth.oauth.apple.AppleTokenClient
+import com.wnl.cashchat.api.domain.auth.oauth.apple.AppleUserInfoExtractor
 import com.wnl.cashchat.api.domain.auth.oauth.model.OAuthUserInfo
 import com.wnl.cashchat.api.domain.auth.oauth.properties.OAuthProperties
 import com.wnl.cashchat.api.domain.auth.oauth.util.OAuthUserInfoExtractor
@@ -11,13 +14,18 @@ import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.auth.persistence.entity.RefreshToken
 import com.wnl.cashchat.api.domain.auth.persistence.repository.RefreshTokenRepository
 import com.wnl.cashchat.api.domain.auth.web.response.AuthResponse
+import com.wnl.cashchat.api.domain.energy.service.EnergyService
+import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
 import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.transaction.support.TransactionTemplate
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestClient
 import org.springframework.web.client.RestClientException
@@ -34,10 +42,20 @@ class AuthService(
     private val oAuthProperties: OAuthProperties,
     private val restClient: RestClient,
     private val userPointService: UserPointService,
-    oAuthUserInfoExtractors: List<OAuthUserInfoExtractor>
+    private val evolutionService: EvolutionService,
+    private val energyService: EnergyService,
+    private val appleTokenClient: AppleTokenClient,
+    private val appleIdTokenValidator: AppleIdTokenValidator,
+    private val appleUserInfoExtractor: AppleUserInfoExtractor,
+    oAuthUserInfoExtractors: List<OAuthUserInfoExtractor>,
+    transactionManager: PlatformTransactionManager,
 ) {
 
     private val extractorMap = oAuthUserInfoExtractors.associateBy { it.providerType }
+    private val transactionTemplate = TransactionTemplate(transactionManager).apply {
+        propagationBehavior = TransactionDefinition.PROPAGATION_REQUIRES_NEW
+        timeout = 5 // 초 단위. DB 지연 시 커넥션 점유를 방지하기 위해 짧은 타임아웃 설정.
+    }
 
     @Transactional
     fun loginAsGuest(deviceToken: String): AuthResponse {
@@ -50,6 +68,8 @@ class AuthService(
         }
 
         userPointService.ensureInitialized(user)
+        evolutionService.ensureInitialized(user)
+        energyService.ensureInitialized(user)
 
         val accessToken = jwtTokenHandler.createAccessToken(user.id, user.role)
 
@@ -62,7 +82,11 @@ class AuthService(
 
     }
 
-    @Transactional
+    /**
+     * 외부 OAuth(IdP) 호출은 트랜잭션 밖에서 수행한다. 토큰 교환/유저정보 조회는 외부 네트워크
+     * 왕복이므로, 트랜잭션(=Hikari 커넥션)을 연 채로 대기하면 IdP 지연·장애 시 커넥션이 묶여
+     * 풀 고갈을 유발한다. DB 작업만 [persistLogin] 의 짧은 트랜잭션으로 처리한다.
+     */
     fun loginWithOAuth(
         registrationName: String,
         providerType: AuthProviderType,
@@ -82,10 +106,43 @@ class AuthService(
 
         val userInfo = extractor.extract(rawUserInfo)
 
-        val user = lookupOrRegisterUser(userInfo, providerType, deviceToken)
-
-        return buildAuthResponse(user)
+        return persistLogin(userInfo, providerType, deviceToken)
     }
+
+    /**
+     * Apple 토큰 교환·id_token 검증(JWKS 조회 포함)은 트랜잭션 밖에서 수행한다.
+     * 사유는 [loginWithOAuth] 와 동일 — 외부 호출 중 DB 커넥션 점유를 막기 위함.
+     */
+    fun loginWithApple(
+        authorizationCode: String,
+        identityToken: String?,
+        fullName: String?,
+        deviceToken: String?
+    ): AuthResponse {
+        val tokenResponse = appleTokenClient.exchangeAuthorizationCode(authorizationCode)
+        val idToken = tokenResponse.idToken?.takeIf { it.isNotBlank() }
+            ?: throw OAuthException("Missing id_token in Apple response")
+        val claims = appleIdTokenValidator.validate(idToken)
+        val userInfo = appleUserInfoExtractor.extract(claims, fullName)
+
+        return persistLogin(userInfo, AuthProviderType.APPLE, deviceToken)
+    }
+
+    /**
+     * 외부 호출로 확보한 [userInfo] 를 바탕으로 유저 조회/등록 및 토큰 발급을 짧은 트랜잭션으로 처리한다.
+     * (loginWithOAuth/loginWithApple 의 외부 호출과 분리된 DB 전용 경계)
+     */
+    private fun persistLogin(
+        userInfo: OAuthUserInfo,
+        providerType: AuthProviderType,
+        deviceToken: String?
+    ): AuthResponse =
+        checkNotNull(
+            transactionTemplate.execute {
+                val user = lookupOrRegisterUser(userInfo, providerType, deviceToken)
+                buildAuthResponse(user)
+            }
+        ) { "Failed to persist OAuth login: transaction returned null" }
 
     // -- Exchange Auth Code For Access Token
     // -- & Fetch User Info From Open Authentication Provider
@@ -183,6 +240,8 @@ class AuthService(
     private fun buildAuthResponse(user: User): AuthResponse {
 
         userPointService.ensureInitialized(user)
+        evolutionService.ensureInitialized(user)
+        energyService.ensureInitialized(user)
 
         val accessToken = jwtTokenHandler.createAccessToken(user.id, user.role)
         val refreshToken = generateRefreshToken(user)

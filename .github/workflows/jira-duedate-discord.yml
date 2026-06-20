@@ -19,20 +19,46 @@ jobs:
           JIRA_AUTH: ${{ secrets.JIRA_AUTH }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           JIRA_BASE_URL: "https://moneyfactoryslave.atlassian.net"
+          BOARD_ID: "1"
         run: |
           TODAY=$(date -u +%Y-%m-%d)
-          D1=$(date -u -d "+1 day" +%Y-%m-%d 2>/dev/null || date -u -v+1d +%Y-%m-%d)
+          D1=$(date -u -d "+1 day"  +%Y-%m-%d 2>/dev/null || date -u -v+1d +%Y-%m-%d)
+          D2=$(date -u -d "+2 days" +%Y-%m-%d 2>/dev/null || date -u -v+2d +%Y-%m-%d)
           D3=$(date -u -d "+3 days" +%Y-%m-%d 2>/dev/null || date -u -v+3d +%Y-%m-%d)
-          export TODAY D1 D3
-          echo "오늘: $TODAY / D-1: $D1 / D-3: $D3"
+          export TODAY D1 D2 D3
+          echo "오늘: $TODAY / D-1: $D1 / D-2: $D2 / D-3: $D3"
 
-          # ── API 호출 1: 전체 이슈 (통계용) ──
+          # ── API 호출 0: 활성 스프린트 정보 ──
+          curl -sS --fail-with-body \
+            -H "Authorization: Basic $JIRA_AUTH" \
+            -H "Content-Type: application/json" \
+            --connect-timeout 10 --max-time 30 \
+            "$JIRA_BASE_URL/rest/agile/1.0/board/$BOARD_ID/sprint?state=active" > /tmp/sprint.json || {
+              echo "::error::Jira 스프린트 조회 실패"
+              exit 1
+            }
+
+          SPRINT_ID=$(jq -r '.values[0].id // ""' /tmp/sprint.json)
+          SPRINT_NAME=$(jq -r '.values[0].name // "활성 스프린트 없음"' /tmp/sprint.json)
+          SPRINT_END=$(jq -r '.values[0].endDate // ""' /tmp/sprint.json | cut -c1-10)
+          export SPRINT_ID SPRINT_NAME SPRINT_END
+          echo "스프린트: $SPRINT_NAME (ID: $SPRINT_ID) / 종료일: $SPRINT_END"
+
+          if [ -z "$SPRINT_ID" ]; then
+            echo "활성 스프린트 없음 — 빈 결과로 알림 생성"
+            printf '{"issues":[]}\n' > /tmp/all_issues.json
+            printf '{"issues":[]}\n' > /tmp/due_issues.json
+            python3 .github/scripts/jira_notify.py
+            exit 0
+          fi
+
+          # ── API 호출 1: 현 스프린트 전체 이슈 (통계용) ──
           curl -sS --fail-with-body \
             -H "Authorization: Basic $JIRA_AUTH" \
             -H "Content-Type: application/json" \
             --connect-timeout 10 --max-time 30 \
             --get \
-            --data-urlencode "jql=project=CC ORDER BY created ASC" \
+            --data-urlencode "jql=project=CC AND sprint = $SPRINT_ID ORDER BY created ASC" \
             --data-urlencode "fields=status,labels,assignee" \
             --data-urlencode "maxResults=200" \
             "$JIRA_BASE_URL/rest/api/3/search/jql" > /tmp/all_issues.json || {
@@ -40,8 +66,8 @@ jobs:
               exit 1
             }
 
-          # ── API 호출 2: 마감 지난 이슈 + D-3 이내 이슈 (미완료만) ──
-          DUE_JQL="project=CC AND (duedate < \"$TODAY\" OR duedate in (\"$TODAY\",\"$D1\",\"$D3\")) AND statusCategory != Done ORDER BY duedate ASC"
+          # ── API 호출 2: 마감 D-3 이내 이슈 (미완료, 현 스프린트만) ──
+          DUE_JQL="project=CC AND sprint = $SPRINT_ID AND duedate <= \"$D3\" AND statusCategory != Done ORDER BY duedate ASC"
           curl -sS --fail-with-body \
             -H "Authorization: Basic $JIRA_AUTH" \
             -H "Content-Type: application/json" \

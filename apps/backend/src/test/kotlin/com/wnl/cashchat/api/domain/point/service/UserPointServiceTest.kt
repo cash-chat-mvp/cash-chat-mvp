@@ -1,7 +1,10 @@
 package com.wnl.cashchat.api.domain.point.service
 
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
+import com.wnl.cashchat.api.domain.point.persistence.entity.PointTransaction
+import com.wnl.cashchat.api.domain.point.persistence.entity.PointTransactionReason
 import com.wnl.cashchat.api.domain.point.persistence.entity.UserPoint
+import com.wnl.cashchat.api.domain.point.persistence.repository.PointTransactionRepository
 import com.wnl.cashchat.api.domain.point.persistence.repository.UserPointRepository
 import com.wnl.cashchat.api.domain.point.properties.PointProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
@@ -16,15 +19,21 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.PageImpl
+import org.springframework.data.domain.PageRequest
+import org.springframework.data.domain.Sort
 
 class UserPointServiceTest : FunSpec({
     lateinit var userPointRepository: UserPointRepository
+    lateinit var pointTransactionRepository: PointTransactionRepository
     lateinit var userPointService: UserPointService
 
     beforeTest {
         userPointRepository = mock()
+        pointTransactionRepository = mock()
         userPointService = UserPointService(
             userPointRepository = userPointRepository,
+            pointTransactionRepository = pointTransactionRepository,
             pointProperties = PointProperties(initialBalance = 3L),
         )
     }
@@ -84,5 +93,33 @@ class UserPointServiceTest : FunSpec({
         val violations = validator.validate(PointProperties(initialBalance = 0L))
 
         violations.map { it.propertyPath.toString() } shouldContain "initialBalance"
+    }
+
+    test("getBalance returns the stored balance when a point row exists") {
+        val user = User(id = 1L, role = Role.GUEST, provider = AuthProviderType.NONE, name = "Guest")
+        whenever(userPointRepository.findByUserId(1L)).thenReturn(UserPoint(user = user, balance = 1350L))
+
+        userPointService.getBalance(1L) shouldBe 1350L
+    }
+
+    test("getBalance returns zero when the point row is missing") {
+        whenever(userPointRepository.findByUserId(1L)).thenReturn(null)
+
+        userPointService.getBalance(1L) shouldBe 0L
+    }
+
+    test("getHistory delegates to the repository with the given pageable and returns the page") {
+        val pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id"))
+        val txn = PointTransaction(
+            userId = 1L,
+            delta = 100L,
+            balanceAfter = 1350L,
+            reason = PointTransactionReason.ATTENDANCE,
+            idempotencyKey = "key-1",
+        )
+        val page = PageImpl(listOf(txn), pageable, 1L)
+        whenever(pointTransactionRepository.findByUserId(1L, pageable)).thenReturn(page)
+
+        userPointService.getHistory(1L, pageable) shouldBe page
     }
 })

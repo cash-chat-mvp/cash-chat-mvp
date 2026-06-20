@@ -5,8 +5,11 @@ import com.nomadclub.cashchat.core.data.ThemePreferenceStore
 import com.nomadclub.cashchat.core.data.TokenDataStore
 import com.nomadclub.cashchat.core.network.ApiService
 import com.nomadclub.cashchat.core.network.AuthInterceptor
+import com.nomadclub.cashchat.core.network.DataStoreTokenProvider
 import com.nomadclub.cashchat.core.network.TokenAuthenticator
 import com.nomadclub.cashchat.data.repository.AuthRepository
+import com.nomadclub.cashchat.shared.core.network.TokenProvider
+import com.nomadclub.cashchat.shared.session.SessionResetter
 import com.nomadclub.cashchat.feature.auth.AuthViewModel
 import com.nomadclub.cashchat.feature.settings.SettingsViewModel
 import okhttp3.OkHttpClient
@@ -23,9 +26,14 @@ val appModule = module {
 
     single { ThemePreferenceStore(androidContext()) }
 
+    single { com.nomadclub.cashchat.core.data.CharacterPreferenceStore(androidContext()) }
+
     single { AuthInterceptor(get()) }
 
-    single { TokenAuthenticator(get(), BuildConfig.BASE_URL) }
+    // 토큰 refresh 전역 직렬화 락 (Retrofit ↔ Ktor 경로 공유)
+    single { com.nomadclub.cashchat.core.network.TokenRefreshGate() }
+
+    single { TokenAuthenticator(get(), BuildConfig.BASE_URL, get()) }
 
     single {
         val logging = HttpLoggingInterceptor().apply {
@@ -49,9 +57,21 @@ val appModule = module {
             .create(ApiService::class.java)
     }
 
-    single { AuthRepository(get(), get()) }
+    // SessionResetter는 lazy로 전달해 DI 순환(HttpClient→TokenProvider→AuthRepository→SessionResetter
+    // →PointsRepository→PointsApi→HttpClient)을 끊는다.
+    single { AuthRepository(get(), get(), get(), lazy { get<SessionResetter>() }) }
 
     viewModel { AuthViewModel(get()) }
 
     viewModel { SettingsViewModel(get()) }
+
+    viewModel { com.nomadclub.cashchat.feature.chat.ChatViewModel(get(), get(), get(), get(), get()) }
+
+    viewModel { com.nomadclub.cashchat.feature.chat.evolution.EvolutionViewModel(get(), get()) }
+
+    // shared 데이터 레이어 (CC-348)
+    single<TokenProvider> { DataStoreTokenProvider(get(), get()) }
+
+    single { com.nomadclub.cashchat.config.AppConfig.fromBuildConfig() }
+    single { com.nomadclub.cashchat.ads.RewardedAdManager(get()) }
 }

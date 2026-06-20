@@ -67,6 +67,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -101,6 +102,9 @@ dependencies {
 
     // Encrypted SharedPreferences
     implementation(libs.security.crypto)
+
+    // 채팅 마크다운 렌더링 (Material3 테마 연동)
+    implementation(libs.markdown.renderer.m3)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
