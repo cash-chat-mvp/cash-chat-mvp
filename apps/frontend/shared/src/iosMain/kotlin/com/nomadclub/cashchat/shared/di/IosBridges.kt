@@ -32,11 +32,13 @@ class KoinHelper : KoinComponent {
     private val adReward: AdRewardStore by inject()
     private val chatApiInstance: ChatApi by inject()
     private val shopApiInstance: ShopApi by inject()
+    private val offerwallApiInstance: com.nomadclub.cashchat.shared.offerwall.OfferwallApi by inject()
     private val sessionResetter: SessionResetter by inject()
 
     fun chatStore(): ChatStore = chat
     fun chatApi(): ChatApi = chatApiInstance
     fun shopApi(): ShopApi = shopApiInstance
+    fun offerwallApi(): com.nomadclub.cashchat.shared.offerwall.OfferwallApi = offerwallApiInstance
     fun attendanceStore(): AttendanceStore = attendance
     fun pointsRepository(): PointsRepository = points
     fun hudStore(): HudStore = hud

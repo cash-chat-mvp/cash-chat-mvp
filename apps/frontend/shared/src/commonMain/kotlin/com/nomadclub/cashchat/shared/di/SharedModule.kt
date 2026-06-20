@@ -41,6 +41,7 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single { AdsApi(get(), baseUrl) }
     single { PointsApi(get(), baseUrl) }
     single { AttendanceApi(get(), baseUrl) }
+    single { com.nomadclub.cashchat.shared.offerwall.OfferwallApi(get(), baseUrl) }
     // 혜택존(출석/코인) — BE GET /api/points/me 잔액을 단일 소스로 사용
     single<PointsRepository> { RemotePointsRepository(get()) }
     single { AttendanceStore(get(), get(), get()) }
