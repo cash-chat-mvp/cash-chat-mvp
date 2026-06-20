@@ -38,10 +38,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nomadclub.cashchat.shared.core.network.ApiException
+import com.nomadclub.cashchat.shared.points.PointsRepository
 import com.nomadclub.cashchat.shared.shop.InventoryDto
 import com.nomadclub.cashchat.shared.shop.ShopApi
 import com.nomadclub.cashchat.shared.shop.ShopCatalogDto
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -61,6 +63,7 @@ private val itemEmojis = mapOf(
 @Composable
 fun ShopScreen(
     shopApi: ShopApi = koinInject(),
+    pointsRepository: PointsRepository = koinInject(),
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -70,6 +73,9 @@ fun ShopScreen(
     var inventory by remember { mutableStateOf<InventoryDto?>(null) }
     var loadFailed by remember { mutableStateOf(false) }
     var purchaseTarget by remember { mutableStateOf<ShopCatalogDto.Item?>(null) }
+    // 구매 멱등키 — 구매 확인을 열 때 1회 생성하고 성공 전까지 재시도에 같은 키를 재사용해
+    // 서버가 처리 후 응답만 실패한 경우의 중복 구매/코인 차감을 방지한다.
+    var purchaseIdempotencyKey by remember { mutableStateOf<String?>(null) }
     var purchasing by remember { mutableStateOf(false) }
 
     LaunchedEffect(selectedCategory) {
@@ -77,8 +83,13 @@ fun ShopScreen(
         catalog = null
         runCatching { shopApi.getItems(selectedCategory) }
             .onSuccess { catalog = it }
-            .onFailure { loadFailed = true }
-        runCatching { shopApi.getInventory() }.onSuccess { inventory = it }
+            .onFailure { e ->
+                if (e is CancellationException) throw e
+                loadFailed = true
+            }
+        runCatching { shopApi.getInventory() }
+            .onSuccess { inventory = it }
+            .onFailure { e -> if (e is CancellationException) throw e }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -162,7 +173,13 @@ fun ShopScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            Button(onClick = { purchaseTarget = item }, enabled = !purchasing) {
+                            Button(
+                                onClick = {
+                                    purchaseTarget = item
+                                    purchaseIdempotencyKey = UUID.randomUUID().toString()
+                                },
+                                enabled = !purchasing,
+                            ) {
                                 Text("🪙 %,d".format(item.priceCoin))
                             }
                         }
@@ -184,18 +201,31 @@ fun ShopScreen(
                     onClick = {
                         purchasing = true
                         scope.launch {
+                            // 성공/명확한 거절이면 닫고 키 폐기, 일시적 네트워크 오류면 열어둔 채 같은 키로 재시도.
+                            var finished = false
                             try {
-                                val result = shopApi.purchase(item.itemCode, 1, UUID.randomUUID().toString())
+                                val key = purchaseIdempotencyKey
+                                    ?: UUID.randomUUID().toString().also { purchaseIdempotencyKey = it }
+                                val result = shopApi.purchase(item.itemCode, 1, key)
+                                finished = true
                                 inventory = InventoryDto(result.inventory.map { InventoryDto.Item(it.itemCode, it.qty) })
+                                // 구매 후 서버 잔액을 다른 화면(혜택존/마이페이지)과 동일 소스로 동기화
+                                pointsRepository.applyDelta(result.coinBalance - pointsRepository.balance.value)
                                 Toast.makeText(context, "구매 완료 · 잔액 🪙%,d".format(result.coinBalance), Toast.LENGTH_SHORT).show()
                             } catch (e: ApiException) {
+                                finished = true // 서버가 명확히 거절 — 같은 키 재시도 의미 없음
                                 val message = if (e.code == "INSUFFICIENT_COIN") "코인이 부족해요" else e.message
                                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            } catch (e: CancellationException) {
+                                throw e
                             } catch (e: Exception) {
-                                Toast.makeText(context, "구매에 실패했어요", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "구매에 실패했어요 · 다시 시도해주세요", Toast.LENGTH_SHORT).show()
                             } finally {
                                 purchasing = false
-                                purchaseTarget = null
+                                if (finished) {
+                                    purchaseTarget = null
+                                    purchaseIdempotencyKey = null
+                                }
                             }
                         }
                     },

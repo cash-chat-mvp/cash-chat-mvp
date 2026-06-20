@@ -2,7 +2,7 @@ package com.nomadclub.cashchat.shared.core.config
 
 /** BE 미구현 기능의 진입점 차단 플래그. API가 배포되면 true로 전환 + 연결 확인. */
 object FeatureFlags {
-    const val POINT_BALANCE = false        // P1-1 GET /api/points/me
+    const val POINT_BALANCE = true         // P1-1 GET /api/points/me (BE 배포 완료)
     const val POINT_TOPUP = false          // P1-2 POST /api/energy/topup
     const val ENERGY_RECOVERY = false      // P1-3 energy/me 확장
     const val CONVERSATION_EDIT = false    // P2-1 삭제·이름변경

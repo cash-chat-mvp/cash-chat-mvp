@@ -6,7 +6,9 @@ import com.nomadclub.cashchat.shared.chat.model.ConversationDto
 import com.nomadclub.cashchat.shared.chat.model.ConversationSummaryDto
 import com.nomadclub.cashchat.shared.core.network.ApiException
 import com.nomadclub.cashchat.shared.platform.currentTimeMillis
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,8 +63,12 @@ class ChatStore(
 
     private var blockedMessageId: String? = null
 
+    // 진행 중인 스트리밍 Job — 대화 전환/재시도/초기화 시 명시적으로 취소해 백그라운드 누수를 막는다.
+    private var streamJob: Job? = null
+
     @Throws(Exception::class)
     suspend fun openConversation(id: Long) {
+        streamJob?.cancel()
         conversationId = id
         val history = gateway.getMessages(id).map { dto ->
             if (dto.role == "USER") {
@@ -77,6 +83,7 @@ class ChatStore(
     }
 
     fun startNewConversation() {
+        streamJob?.cancel()
         conversationId = null
         _items.value = emptyList()
         blockedMessageId = null
@@ -85,6 +92,7 @@ class ChatStore(
 
     /** 로그아웃/세션 종료 시 다음 사용자에게 이전 대화·게이트 상태가 노출되지 않도록 초기화한다. */
     fun reset() {
+        streamJob?.cancel()
         conversationId = null
         blockedMessageId = null
         _items.value = emptyList()
@@ -99,7 +107,7 @@ class ChatStore(
         if (trimmed.isEmpty() || _isStreaming.value) return
         val messageId = "u${currentTimeMillis()}"
         _items.update { it + ChatItem.UserMessage(messageId, trimmed, ChatItem.SendStatus.PENDING) }
-        scope.launch { stream(messageId, trimmed) }
+        streamJob = scope.launch { stream(messageId, trimmed) }
     }
 
     /** 게이트에서 충전 완료 후 호출 — 막힌 메시지를 같은 대화방으로 재전송. */
@@ -110,7 +118,7 @@ class ChatStore(
         blockedMessageId = null
         _energyGateVisible.value = false
         updateUser(id) { it.copy(status = ChatItem.SendStatus.PENDING) }
-        scope.launch { stream(id, message.text) }
+        streamJob = scope.launch { stream(id, message.text) }
     }
 
     fun dismissEnergyGate() { _energyGateVisible.value = false }
@@ -126,7 +134,7 @@ class ChatStore(
         if (_isStreaming.value) return
         val last = _items.value.filterIsInstance<ChatItem.UserMessage>().lastOrNull() ?: return
         _items.update { items -> items.filterNot { it is ChatItem.AssistantMessage && it.isError } }
-        scope.launch { stream(last.id, last.text) }
+        streamJob = scope.launch { stream(last.id, last.text) }
     }
 
     private suspend fun stream(messageId: String, text: String) {
@@ -180,6 +188,9 @@ class ChatStore(
             } else {
                 updateUser(messageId) { it.copy(status = ChatItem.SendStatus.BLOCKED) }
             }
+        } catch (e: CancellationException) {
+            // 정상 취소(화면 전환/스코프 종료 등)는 에러로 마감하지 않고 그대로 전파한다.
+            throw e
         } catch (e: Exception) {
             // 네트워크 단절 등 — 부분 응답 유지 + 기존 메시지를 에러 상태로 마감 (중복 추가 금지)
             if (assistantAdded) {

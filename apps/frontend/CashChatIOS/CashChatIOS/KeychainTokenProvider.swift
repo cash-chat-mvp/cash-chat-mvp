@@ -59,15 +59,25 @@ final class KeychainTokenProvider: NSObject, TokenProvider {
         guard let url = URL(string: "\(baseUrl)/api/auth/refresh") else {
             return KotlinBoolean(bool: false)
         }
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: 10)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try? JSONSerialization.data(withJSONObject: ["refreshToken": refreshToken])
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            guard let http = response as? HTTPURLResponse else { return KotlinBoolean(bool: false) }
+            guard (200..<300).contains(http.statusCode) else {
+                // refresh token 만료/폐기(401/403)면 저장된 토큰을 비워 다음 진입을 재로그인으로 유도.
+                // 일시적 5xx/네트워크 오류로는 세션을 날리지 않는다.
+                if http.statusCode == 401 || http.statusCode == 403 {
+                    KeychainHelper.remove(forKey: "access_token")
+                    KeychainHelper.remove(forKey: "refresh_token")
+                    KeychainHelper.remove(forKey: "role")
+                }
+                return KotlinBoolean(bool: false)
+            }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let newAccess = json["accessToken"] as? String else {
                 return KotlinBoolean(bool: false)
             }
@@ -93,7 +103,7 @@ final class KeychainTokenProvider: NSObject, TokenProvider {
         guard let url = components.url else {
             return KotlinBoolean(bool: false)
         }
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: 10)
         request.httpMethod = "POST"
 
         do {

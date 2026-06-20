@@ -54,9 +54,12 @@ final class ShopViewModel: ObservableObject {
         defer { isLoading = false }
         do {
             let catalog = try await shopApi.getItems(category: code)
+            // 응답이 늦게 도착했는데 그 사이 다른 탭으로 바뀌었다면 결과를 버린다 (탭-목록 불일치 방지).
+            guard code == selectedCategory else { return }
             self.items = catalog.items.sorted { $0.displayOrder < $1.displayOrder }
             self.phase1Active = catalog.phase1Active
         } catch {
+            guard code == selectedCategory else { return }
             self.items = []
         }
     }

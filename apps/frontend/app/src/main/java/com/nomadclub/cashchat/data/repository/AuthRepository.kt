@@ -53,7 +53,13 @@ class AuthRepository(
                 apiService.loginAsGuest(tokenDataStore.getOrCreateDeviceToken())
             } else {
                 val refreshToken = tokenDataStore.getRefreshTokenBlocking()
-                    ?: error("Refresh Token 없음")
+                if (refreshToken == null) {
+                    // 회원인데 refresh token이 없으면 복구 불가 — 세션 정리 후 재인증으로 넘긴다.
+                    tokenDataStore.clearTokens()
+                    sessionResetter.reset()
+                    _reAuthRequired.tryEmit(Unit)
+                    error("Refresh Token 없음")
+                }
                 apiService.refreshToken(TokenRefreshRequest(refreshToken))
             }
             if (!response.isSuccessful) {

@@ -96,7 +96,11 @@ class TokenAuthenticator(
 
     // 호출부(authenticate)가 이미 refreshGate 락을 잡은 코루틴 안에서 실행된다.
     private suspend fun refreshMemberToken(originalRequest: Request): Request? {
-        val refreshToken = tokenDataStore.getRefreshTokenBlocking() ?: return null
+        // refresh token이 없으면 만료된 access token이 남아 401이 반복 고착되므로 세션을 정리한다.
+        val refreshToken = tokenDataStore.getRefreshTokenBlocking() ?: run {
+            tokenDataStore.clearTokens()
+            return null
+        }
         return try {
             val json = Gson().toJson(TokenRefreshRequest(refreshToken))
             val body = json.toRequestBody("application/json".toMediaType())

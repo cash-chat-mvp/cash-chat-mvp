@@ -458,13 +458,17 @@ private struct RecoveryCountdown: View {
                 let target = fmt.date(from: nextRecoverAtIso)
                     ?? ISO8601DateFormatter().date(from: nextRecoverAtIso)
                 guard let target else { return }
+                var reachedZero = false
                 while !Task.isCancelled {
                     let sec = max(Int(target.timeIntervalSinceNow), 0)
                     remain = String(format: "%d:%02d 후 ⚡", sec / 60, sec % 60)
-                    if sec == 0 { break }
+                    if sec == 0 { reachedZero = true; break }
                     try? await Task.sleep(for: .seconds(1))
                 }
-                onFinished()
+                // 0초 도달로 정상 완료된 경우에만 에너지 재조회 (화면 전환/값 변경 취소 시 호출 방지)
+                if reachedZero && !Task.isCancelled {
+                    onFinished()
+                }
             }
     }
 }

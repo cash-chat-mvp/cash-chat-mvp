@@ -41,7 +41,8 @@ fun ProductCardList(item: ChatItem.ProductCards) {
                         }
                     }
                     TextButton(
-                        onClick = { uriHandler.openUri(product.trackingUrl) },
+                        // 잘못된 형식의 URL이면 openUri가 예외를 던질 수 있어 방어한다.
+                        onClick = { runCatching { uriHandler.openUri(product.trackingUrl) } },
                         contentPadding = PaddingValues(0.dp),
                     ) { Text("쿠팡에서 보기 →") }
                     Text(

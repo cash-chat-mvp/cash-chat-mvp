@@ -14,8 +14,8 @@ import com.nomadclub.cashchat.shared.energy.EnergyApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudStore
-import com.nomadclub.cashchat.shared.points.LocalPointsRepository
 import com.nomadclub.cashchat.shared.points.PointsRepository
+import com.nomadclub.cashchat.shared.points.RemotePointsRepository
 import com.nomadclub.cashchat.shared.session.SessionResetter
 import com.nomadclub.cashchat.shared.wallet.PointsApi
 import kotlinx.coroutines.CoroutineScope
@@ -41,8 +41,8 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single { AdsApi(get(), baseUrl) }
     single { PointsApi(get(), baseUrl) }
     single { AttendanceApi(get(), baseUrl) }
-    // 혜택존(출석/코인) — BE 잔액 API 미구현 동안 LocalPointsRepository 사용
-    single<PointsRepository> { LocalPointsRepository() }
+    // 혜택존(출석/코인) — BE GET /api/points/me 잔액을 단일 소스로 사용
+    single<PointsRepository> { RemotePointsRepository(get()) }
     single { AttendanceStore(get(), get(), get()) }
     single { com.nomadclub.cashchat.shared.shop.ShopApi(get(), baseUrl) }
     single { com.nomadclub.cashchat.shared.energy.EnergyTopupApi(get(), baseUrl) }

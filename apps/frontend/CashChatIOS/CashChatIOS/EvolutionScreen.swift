@@ -10,8 +10,14 @@ final class EvolutionViewModel: ObservableObject {
     @Published var nextRate: Double? = nil
     @Published var isAttempting = false
     @Published var resultMessage: String? = nil
+    @Published var isLoaded = false
 
     private let store = KoinHelper().evolutionStore()
+
+    /// 상태 로드 완료 + 비용 정보가 있을 때만 진화 시도를 허용한다.
+    var canAttempt: Bool {
+        isLoaded && !isAttempting && !isMaxLevel && nextCost != nil
+    }
 
     func load() {
         Task { @MainActor in
@@ -24,10 +30,11 @@ final class EvolutionViewModel: ObservableObject {
         isMaxLevel = s.isMaxLevel
         nextCost = s.nextAttemptCost?.int64Value
         nextRate = s.nextSuccessRate?.doubleValue
+        isLoaded = true
     }
 
     func attempt() {
-        guard !isAttempting, !isMaxLevel else { return }
+        guard canAttempt else { return }
         isAttempting = true
         Task { @MainActor in
             defer { isAttempting = false }
@@ -65,7 +72,7 @@ struct EvolutionScreen: View {
                             .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 14)
                             .background(accent).foregroundStyle(.white).clipShape(Capsule())
                     }
-                    .disabled(vm.isAttempting)
+                    .disabled(!vm.canAttempt)
                     .padding(.horizontal, 32)
                 }
                 if let msg = vm.resultMessage {
