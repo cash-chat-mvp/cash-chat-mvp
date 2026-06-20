@@ -32,6 +32,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- TNK 오퍼월 화면. AAR이 선언하지 않으므로 앱에서 직접 선언해야 한다(미선언 시 ActivityNotFoundException).
+             TNK 액티비티는 AppCompatActivity 기반이라 AppCompat 테마가 필요하다. -->
+        <activity
+            android:name="com.tnkfactory.ad.AdWallActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.DayNight.NoActionBar" />
     </application>
 
 </manifest>
