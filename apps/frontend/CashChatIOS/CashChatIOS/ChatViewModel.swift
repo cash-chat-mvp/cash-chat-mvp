@@ -124,24 +124,28 @@ final class ChatViewModel: ObservableObject {
     func startAdReward(showAd: @escaping (_ nonce: String) async -> Bool) {
         Task { @MainActor in
             rewardPhase = .showingAd
-            var applied = false
             do {
                 let baseline = try await adRewardStore.refreshQuota().usedToday
                 let nonce = try await adRewardStore.requestNonce()
-                if await showAd(nonce) {
-                    rewardPhase = .polling
-                    applied = try await adRewardStore.awaitRewardApplied(baselineUsedToday: baseline).boolValue
+                guard await showAd(nonce) else {
+                    // 광고를 끝까지 보지 않았거나 준비 실패 → FAILED가 아니라 초기 상태로 복귀.
+                    rewardPhase = .idle
+                    return
+                }
+                rewardPhase = .polling
+                let applied = try await adRewardStore.awaitRewardApplied(baselineUsedToday: baseline).boolValue
+                try? await hudStore.refreshEnergyOnly()
+                _ = try? await adRewardStore.refreshQuota()
+                if applied {
+                    rewardPhase = .idle
+                    store.retryBlocked()
+                } else {
+                    rewardPhase = .failed
                 }
             } catch {
-                applied = false
-            }
-            try? await hudStore.refreshEnergyOnly()
-            _ = try? await adRewardStore.refreshQuota()
-            if applied {
-                rewardPhase = .idle
-                store.retryBlocked()
-            } else {
-                rewardPhase = .failed
+                // 멈춤 방지: 폴링 단계에서 실패하면 FAILED, 광고 표시 전(준비) 실패면 초기 상태로.
+                rewardPhase = (rewardPhase == .polling) ? .failed : .idle
+                try? await hudStore.refreshEnergyOnly()
             }
         }
     }

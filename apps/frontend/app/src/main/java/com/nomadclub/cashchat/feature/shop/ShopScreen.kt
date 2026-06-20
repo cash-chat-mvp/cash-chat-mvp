@@ -28,6 +28,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -77,8 +78,10 @@ fun ShopScreen(
     // 서버가 처리 후 응답만 실패한 경우의 중복 구매/코인 차감을 방지한다.
     var purchaseIdempotencyKey by remember { mutableStateOf<String?>(null) }
     var purchasing by remember { mutableStateOf(false) }
+    // 로드 실패 후 "다시 시도" 시 LaunchedEffect를 재실행하기 위한 트리거
+    var reloadTrigger by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(selectedCategory) {
+    LaunchedEffect(selectedCategory, reloadTrigger) {
         loadFailed = false
         catalog = null
         runCatching { shopApi.getItems(selectedCategory) }
@@ -137,7 +140,10 @@ fun ShopScreen(
         val currentCatalog = catalog
         when {
             loadFailed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("상점을 불러오지 못했어요")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("상점을 불러오지 못했어요")
+                    TextButton(onClick = { reloadTrigger++ }) { Text("다시 시도") }
+                }
             }
             currentCatalog == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()

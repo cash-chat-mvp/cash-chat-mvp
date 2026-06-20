@@ -73,17 +73,25 @@ class ChatViewModel(
     fun startAdReward(showAd: suspend (nonce: String) -> Boolean) {
         viewModelScope.launch {
             _rewardPhase.value = RewardPhase.SHOWING_AD
-            val result = runCatching {
-                // 광고 표시 직전의 보상 적립 횟수를 baseline 으로 잡고, 광고 후 usedToday 증가로만 적립을 판정한다.
+            // 광고 표시 직전의 보상 적립 횟수를 baseline 으로 잡고, 광고 후 usedToday 증가로만 적립을 판정한다.
+            val watched = runCatching {
                 val baselineUsed = adRewardStore.refreshQuota().usedToday
                 lastRewardBaseline = baselineUsed
                 val nonce = adRewardStore.requestNonce()
-                if (!showAd(nonce)) return@runCatching false
-                _rewardPhase.value = RewardPhase.POLLING
-                adRewardStore.awaitRewardApplied(baselineUsed)
+                showAd(nonce)
             }.getOrDefault(false)
 
-            finishRewardPolling(result)
+            // 광고를 끝까지 보지 않았거나 준비 실패 → FAILED(보상 확인 지연)가 아니라 초기 상태로 복귀.
+            if (!watched) {
+                _rewardPhase.value = RewardPhase.IDLE
+                return@launch
+            }
+
+            _rewardPhase.value = RewardPhase.POLLING
+            val applied = runCatching {
+                adRewardStore.awaitRewardApplied(lastRewardBaseline ?: 0)
+            }.getOrDefault(false)
+            finishRewardPolling(applied)
         }
     }
 

@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -88,13 +89,27 @@ fun ChatScreen(
     var showAttendance by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
-    // 새 메시지가 추가되면(아이템 수 변화) 맨 아래로 스크롤. 스트리밍 중 토큰마다 길어지는 본문은
-    // animateScrollToItem 을 매번 재시작하면 애니메이션이 끊겨 jank 가 생기므로 즉시 스크롤로 따라간다.
-    val lastAssistantLen = (items.lastOrNull() as? ChatItem.AssistantMessage)?.text?.length
-    LaunchedEffect(items.size, lastAssistantLen) {
+    // 사용자가 위로 스크롤해 과거 메시지를 읽는 중인지 판단(맨 아래 근처면 자동 추적 유지).
+    val isAtBottom by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()
+            last == null || last.index >= info.totalItemsCount - 1
+        }
+    }
+
+    // 새 메시지가 추가되면(아이템 수 변화) 항상 맨 아래로 스크롤.
+    LaunchedEffect(items.size) {
         if (items.isEmpty()) return@LaunchedEffect
         if (isStreaming) listState.scrollToItem(items.lastIndex)
         else listState.animateScrollToItem(items.lastIndex)
+    }
+    // 스트리밍 중 토큰으로 본문이 길어질 때는, 사용자가 위로 올려둔 경우 강제 스크롤하지 않는다.
+    // animateScrollToItem 을 매번 재시작하면 jank 가 생기므로 즉시 스크롤로 따라간다.
+    val lastAssistantLen = (items.lastOrNull() as? ChatItem.AssistantMessage)?.text?.length
+    LaunchedEffect(lastAssistantLen) {
+        if (items.isEmpty() || !isStreaming || !isAtBottom) return@LaunchedEffect
+        listState.scrollToItem(items.lastIndex)
     }
 
     Column(Modifier.fillMaxSize()) {

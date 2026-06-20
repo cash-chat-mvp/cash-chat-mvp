@@ -32,18 +32,22 @@ final class KeychainTokenProvider: NSObject, TokenProvider {
             lock.unlock()
             return await existing.value
         }
+        // Task 내부에서 lock을 다시 잡지 않도록(재진입 회피), Task 생성·등록만 lock 안에서 하고
+        // 결과 대기 후 Task 정리를 lock 밖→안 순서로 처리한다.
         let task = Task<KotlinBoolean, Never> { [weak self] in
             guard let self else { return KotlinBoolean(bool: false) }
-            let result = await self.performRefresh()
-            // 완료된 Task 정리 — 다음 호출은 새 갱신을 수행한다.
-            self.lock.lock()
-            self.activeRefreshTask = nil
-            self.lock.unlock()
-            return result
+            return await self.performRefresh()
         }
         activeRefreshTask = task
         lock.unlock()
-        return await task.value
+
+        let result = await task.value
+        // activeRefreshTask 는 이 Task 를 정리하기 전까지 nil 이 되지 않으므로(다른 호출은 nil 일 때만 새로 생성)
+        // 항상 안전하게 정리할 수 있다.
+        lock.lock()
+        activeRefreshTask = nil
+        lock.unlock()
+        return result
     }
 
     private func performRefresh() async -> KotlinBoolean {
