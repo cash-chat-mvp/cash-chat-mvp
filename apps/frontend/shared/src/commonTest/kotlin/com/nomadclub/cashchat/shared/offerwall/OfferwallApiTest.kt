@@ -40,6 +40,7 @@ class OfferwallApiTest {
             respond("""{"code":"UNAUTHORIZED","message":"x"}""", HttpStatusCode.Unauthorized, jsonHeaders)
         }
         val api = OfferwallApi(createCashChatHttpClient("https://api.test", NoAuth, engine), "https://api.test")
-        assertFailsWith<ApiException> { api.issueUserToken() }
+        val exception = assertFailsWith<ApiException> { api.issueUserToken() }
+        assertEquals(401, exception.httpStatus)
     }
 }
