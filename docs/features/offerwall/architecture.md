@@ -29,7 +29,7 @@
 | **앱 클라이언트** (프론트엔드, *계획*) | 백엔드에서 오퍼월 사용자 토큰을 발급받아 TNK SDK `setUserName`에 설정하고 오퍼월 화면을 노출한다. 사용자가 오퍼/미션을 완료한다. |
 | **CashChat 백엔드** | 토큰 발급 API 제공, TNK 포스트백(S2S 콜백) 검증·처리, 코인 적립, 콜백 원장 기록을 담당한다. |
 | **TNK 오퍼월** | 오퍼 목록을 클라이언트 SDK로 직접 제공하고, 전환이 확정되면 우리 백엔드 콜백으로 서버 포스트백을 전송한다. |
-| **DB 원장** | `offerwall_user_tokens`(토큰↔사용자 매핑)와 `tnk_offerwall_callbacks`(수신 콜백 전량 기록)을 보관한다. |
+| **DB 원장** | `offerwall_user_tokens`(토큰↔사용자 매핑)와 `tnk_offerwall_callbacks`(**서명 통과** 콜백 기록 — 서명 실패는 원장에 남기지 않고 로그만)을 보관한다. |
 
 ```mermaid
 flowchart LR
@@ -133,7 +133,7 @@ sequenceDiagram
 
 콜백 엔드포인트는 인증이 없는 public 엔드포인트(TNK 서버가 호출)이므로, 위조·중복·이상치 콜백을 다음 원칙으로 방어한다.
 
-- **서명 검증 우선** — `md_chk = MD5(app_key + md_user_nm + seq_id)`. **DB 쓰기보다 먼저** 검증해 미검증 요청이 원장을 오염시키지 못하게 한다. 실패 시 `warn` 로그만 남기고 미기록(AdMob SSV 패턴과 정합). `app_key`는 공유 시크릿이라, 이를 모르면 토큰·`seq_id`를 위조해도 유효한 `md_chk`를 만들 수 없다.
+- **서명 검증 우선** — `md_chk = MD5(app_key + md_user_nm + seq_id)`. **DB 쓰기보다 먼저** 검증해 미검증 요청이 원장을 오염시키지 못하게 한다. 실패 시 `warn` 로그만 남기고 미기록(AdMob SSV 패턴과 정합). `app_key`는 공유 시크릿이라, 이를 모르면 토큰·`seq_id`를 위조해도 유효한 `md_chk`를 만들 수 없다. (해시 알고리즘 MD5는 **TNK 규격상 고정값**으로 우리가 선택·교체할 수 없다. 위조 방어력은 MD5 강도가 아니라 `app_key` 비밀성에 의존하므로, app_key 노출 시 즉시 재발급이 핵심이다.)
 - **fail-closed** — `app_key`가 미설정(빈 값)이면 모든 콜백을 거절한다(앱 자체는 정상 부팅). 시크릿 누락이 fail-open(전량 통과)으로 이어지지 않게 한다.
 - **멱등성 (이중 방어선)** — `seq_id`당 1행(`UNIQUE`) + 행 락(`insertIfAbsent` + `SELECT … FOR UPDATE`)으로 동일 `seq_id` 동시·중복 콜백을 직렬화하고, PENDING 1건만 적립한다. 추가로 적립 단계에 멱등키 `tnk:offerwall:{seq_id}`를 적용해 설령 같은 키가 두 번 도달해도 1회만 적립된다. `insertIfAbsent`는 `ON DUPLICATE KEY` no-op이라 **예외를 던지지 않으므로**(상위 트랜잭션 rollback-only 방지용 의도적 설계) 삽입 성공만으로는 소유권이 정해지지 않는다 — 그래서 직렬화에 행 락이 필요하다(unique 위반 예외 캐치 방식을 의도적으로 피함).
 - **불투명 토큰** — TNK에는 내부 `userId`가 아닌 UUID 토큰을 전달하고, `offerwall_user_tokens`로 `token → userId`를 해석한다. 식별자 유출·역추적을 방지한다.
@@ -145,7 +145,7 @@ sequenceDiagram
 
 - **프론트엔드 통합** — KMM `shared/` 및 Android/iOS TNK SDK 연동, 오퍼월 화면 (계획).
 - **운영 설정** — dev/prod 콜백 URL 등록, TNK 콘솔 `app-key` 시크릿 주입.
-- **자동 취소/환수(claw-back)** — 현재는 콜백 전량 기록만 하고 자동 차감은 하지 않는다. 원장 `status`는 향후 `CANCELED` 등으로 확장 가능.
+- **자동 취소/환수(claw-back)** — 현재는 서명 통과 콜백을 원장에 기록만 하고 자동 차감은 하지 않는다. 원장 `status`는 향후 `CANCELED` 등으로 확장 가능.
 - **감사 강화** — TNK가 함께 보내는 `actn_id`·`app_nm` 등 부가 파라미터를 원장에 추가 기록(현재는 필수 4개만 사용).
 - **추가 오퍼월**(Buzzvil, AdiSON 등) 연동.
 
