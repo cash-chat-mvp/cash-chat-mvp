@@ -21,7 +21,9 @@
 
 ## 현재 상태 (조사 결과)
 
-- `AppConfig.admobBannerAdUnitId` 가 이미 존재(`BuildConfig` 경로로 flavor별 주입). **신규 키 불필요.**
+- Android `AppConfig.admobBannerAdUnitId` 가 이미 존재(`BuildConfig` 경로로 flavor별 주입). **Android 신규 키 불필요.**
+- iOS `AppConfig.swift`/`Secrets.swift` 에는 **배너 단위 ID 없음**(rewarded만 존재) → iOS는 `admobBannerAdUnitId` 키 신규 추가 필요.
+- 플래그 기구는 Firebase Remote Config가 아니라 컴파일타임 `FeatureFlags` object(`shared/.../core/config/FeatureFlags.kt`, `const val`). 배너 플래그도 여기에 맞춘다.
 - 리워드 광고용 `RewardedAdManager`(Android, SSV 포함)·`AdRewardStore`(KMM, quota/nonce/폴링)는 존재하나
   배너 인프라는 **0%**. 배너 Composable / `expect-actual` / iOS 뷰 모두 신규.
 - iOS는 GoogleMobileAds SDK 이미 벤더링됨(파리티 작업으로 빌드에 포함).
@@ -68,15 +70,18 @@ CashChatIOS/.../Ads/
   **바로 아래**, 메시지 리스트 `Box`(198) **위**에 `BannerAd(CHAT_TOP)` 삽입.
 - 혜택존: `AttendanceWidget` item(`BenefitZoneScreen.kt:111`) **바로 아래** 신규 `item { BannerAd(BENEFIT_TOP) }`.
 
-## 4. 정책 (Remote Config)
+## 4. 정책 (FeatureFlags)
 
-기존 Firebase Remote Config 인프라 사용.
+코드베이스는 Firebase Remote Config가 아닌 컴파일타임 `FeatureFlags` object를 쓴다. 이 패턴을 따른다.
 
-| 키 | 기본값 | 설명 |
-|---|---|---|
-| `banner_enabled` | `true` | 배너 전역 on/off (코드 수정 없이 끌 수 있음) |
+`shared/.../core/config/FeatureFlags.kt` 에 추가:
 
-위치별 분리 플래그(`banner_chat_enabled` 등)는 YAGNI로 보류. 운영상 필요 시 후속 추가.
+```kotlin
+const val BANNER_ADS = true   // 배너 광고 전역 on/off
+```
+
+배너 Composable/뷰는 `FeatureFlags.BANNER_ADS == false` 면 슬롯을 렌더하지 않는다.
+런타임 Remote Config 전환·위치별 분리 플래그(`banner_chat` 등)는 YAGNI로 보류(후속).
 
 ## 5. iOS 파리티
 
@@ -86,7 +91,7 @@ iOS 파리티 프로젝트 원칙에 따라 본 슬라이스에 iOS(`BannerAdVie
 ## 6. 테스트 / 검증
 
 - 개발 빌드에서 Google 테스트 배너 단위 ID 적용 확인.
-- `BannerAdSlot` enum 및 플래그 분기(`banner_enabled` false → 슬롯 미노출) commonTest 단위 테스트.
+- `BannerAdSlot` enum 및 플래그 분기(`FeatureFlags.BANNER_ADS` false → 슬롯 미노출) commonTest 단위 테스트.
 - 실패 시 슬롯 숨김(높이 0) 동작은 수동/계측 QA.
 - 레이아웃 점프 없음(placeholder) 시각 확인.
 
