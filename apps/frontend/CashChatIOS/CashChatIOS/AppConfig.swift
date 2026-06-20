@@ -6,6 +6,7 @@ enum AppConfig {
     static let apiBaseUrl: String = required(Secrets.apiBaseUrl, key: "apiBaseUrl")
     static let admobAppId: String = required(Secrets.admobAppId, key: "admobAppId")
     static let admobRewardedAdUnitId: String = required(Secrets.admobRewardedAdUnitId, key: "admobRewardedAdUnitId")
+    static let tnkAppId: String = required(Secrets.tnkAppId, key: "tnkAppId")
 
     private static func required(_ value: String, key: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
