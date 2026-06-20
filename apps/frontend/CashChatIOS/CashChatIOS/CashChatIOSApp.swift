@@ -29,8 +29,8 @@ struct CashChatIOSApp: App {
                     GIDSignIn.sharedInstance.handle(url)
                 }
                 .onAppear {
-                    // ATT(IDFA 추적) 허용 요청 — TNK 오퍼월이 단말기를 식별해 오퍼를 내려주려면 필요.
-                    TrackingAuthorization.requestIfNeeded()
+                    // 첫 실행 시 ATT(IDFA 추적) 허용 요청 — TNK 오퍼월이 단말기를 식별해 오퍼를 내려주려면 필요.
+                    TrackingAuthorization.requestAtLaunchIfNeeded()
                 }
         }
     }

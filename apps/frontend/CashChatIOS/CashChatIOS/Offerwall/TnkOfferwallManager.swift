@@ -10,17 +10,21 @@ enum TnkOfferwallManager {
     private static let offerwallApi = KoinHelper().offerwallApi()
 
     static func present(from presenter: UIViewController) {
-        Task { @MainActor in
-            do {
-                let dto = try await offerwallApi.issueUserToken()
-                TnkSession.sharedInstance()?.setUserName(dto.token)
-                let vc = AdOfferwallViewController()
-                vc.title = "오퍼월"
-                let nav = UINavigationController(rootViewController: vc)
-                nav.modalPresentationStyle = .fullScreen
-                presenter.present(nav, animated: true)
-            } catch {
-                print("TnkOfferwall: 오퍼월 진입 실패 - \(error)")
+        // ATT 미허용이면 IDFA 가 0 이라 오퍼가 비어 보인다.
+        // 허용된 경우에만 오퍼월을 열고, 거부 상태면 설정 이동 안내 알럿을 띄운다.
+        TrackingAuthorization.ensureAuthorized(from: presenter) {
+            Task { @MainActor in
+                do {
+                    let dto = try await offerwallApi.issueUserToken()
+                    TnkSession.sharedInstance()?.setUserName(dto.token)
+                    let vc = AdOfferwallViewController()
+                    vc.title = "오퍼월"
+                    let nav = UINavigationController(rootViewController: vc)
+                    nav.modalPresentationStyle = .fullScreen
+                    presenter.present(nav, animated: true)
+                } catch {
+                    print("TnkOfferwall: 오퍼월 진입 실패 - \(error)")
+                }
             }
         }
     }
