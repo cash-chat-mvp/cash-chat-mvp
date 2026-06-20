@@ -31,9 +31,8 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 
 - `BACKEND_SPRING_PROFILES_ACTIVE`: backend Spring profile, defaults to `prod`
 - `APPLE_REDIRECT_URI`: Apple redirect URI; native iOS Sign in with Apple can leave this empty
-- `APP_SWAGGER_ENABLED`: set to a Spring boolean true value, for example `true`, to expose Swagger in `prod`; missing or non-true values keep Swagger blocked
 
-Keep production deployments on `BACKEND_SPRING_PROFILES_ACTIVE=prod`. Use `APP_SWAGGER_ENABLED=true` only when production Swagger access is intentionally needed.
+Keep production deployments on `BACKEND_SPRING_PROFILES_ACTIVE=prod`. Swagger/OpenAPI is disabled in the `prod` profile and cannot be enabled on the production server.
 
 Secret values are written into a Docker Compose env file as single-quoted values. Newlines and single quotes are rejected during deployment.
 Store `APPLE_PRIVATE_KEY` as one line by replacing real PEM newlines with the two-character `\n` sequence, for example:
@@ -78,7 +77,6 @@ Local env values:
 - `APPLE_PRIVATE_KEY`: escaped one-line P8 private key for local iOS callback testing
 - `APPLE_REDIRECT_URI`: optional Apple redirect URI, defaults to empty
 - `APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID`: Google AdMob rewarded ad unit ID for local SSV configuration examples
-- `APP_SWAGGER_ENABLED`: local Swagger toggle, defaults to `true`
 
 Notes:
 
