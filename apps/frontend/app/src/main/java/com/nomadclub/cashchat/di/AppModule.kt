@@ -74,4 +74,6 @@ val appModule = module {
 
     single { com.nomadclub.cashchat.config.AppConfig.fromBuildConfig() }
     single { com.nomadclub.cashchat.ads.RewardedAdManager(get()) }
+
+    single { com.nomadclub.cashchat.offerwall.TnkOfferwallManager(get()) }
 }
