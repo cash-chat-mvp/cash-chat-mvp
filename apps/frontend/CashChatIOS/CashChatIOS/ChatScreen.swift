@@ -401,6 +401,9 @@ private struct EnergyGateSheet: View {
                 .font(.subheadline).tint(.secondary)
         }
         .padding(24)
+        // 게이트가 열릴 때 광고를 미리 로드해 둔다(Android EnergyGateBottomSheet 와 동일).
+        // 초기 preload 가 실패했더라도 여기서 다시 시도되어 버튼이 동작하게 된다.
+        .task { adManager.preload() }
     }
 
     private var watchButton: some View {

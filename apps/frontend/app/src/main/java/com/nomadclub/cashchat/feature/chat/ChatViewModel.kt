@@ -43,9 +43,9 @@ class ChatViewModel(
                 if (!monthly.todayChecked) {
                     val result = attendanceApi.checkIn()
                     _checkInResult.value = result
-                    // 혜택존/상점이 쓰는 공유 잔액에 적립 코인을 반영 (AttendanceStore.checkIn 과 동일 처리).
-                    // 이 경로는 store 를 거치지 않으므로 직접 반영하지 않으면 다른 화면 잔액이 갱신되지 않는다.
-                    pointsRepository.applyDelta(result.awardedCoin)
+                    // 체크인으로 적립된 코인을 혜택존/상점과 동일 소스에 반영한다.
+                    // 클라이언트에서 delta 를 더하면 서버와 어긋날 수 있으므로 서버 잔액으로 재동기화한다.
+                    runCatching { pointsRepository.refresh() }
                     _attendance.value = attendanceApi.getMonthly()
                 }
             }

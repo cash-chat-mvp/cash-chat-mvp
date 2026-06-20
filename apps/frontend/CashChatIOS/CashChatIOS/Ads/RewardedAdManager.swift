@@ -38,7 +38,13 @@ final class RewardedAdManager: NSObject {
         onDismissed: @escaping () -> Void,
         onNotReady: @escaping () -> Void = {}
     ) {
-        guard let ad = rewardedAd else { onNotReady(); return }
+        guard let ad = rewardedAd else {
+            // 초기 preload 가 (SDK 초기화 타이밍/네트워크 등으로) 실패해 nil 인 경우,
+            // 다음 시도를 위해 즉시 재요청을 걸어 자가 복구한다.
+            preload()
+            onNotReady()
+            return
+        }
         if let nonce {
             // customRewardText 가 SSV 콜백의 custom_data 파라미터로 전달된다(서버 nonce 검증용).
             let options = ServerSideVerificationOptions()
