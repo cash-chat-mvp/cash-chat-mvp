@@ -6,6 +6,7 @@ import com.wnl.cashchat.api.domain.economy.persistence.repository.UserWalletRepo
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
 
 @Service
@@ -16,6 +17,7 @@ class WalletService(
     fun ensureInitialized(user: User): UserWallet =
         userWalletRepository.findByUserId(user.id) ?: create(user)
 
+    @Transactional(propagation = Propagation.MANDATORY)
     fun getForUpdate(userId: Long): UserWallet =
         userWalletRepository.findByUserIdForUpdate(userId)
             ?: throw WalletNotInitializedException(userId)

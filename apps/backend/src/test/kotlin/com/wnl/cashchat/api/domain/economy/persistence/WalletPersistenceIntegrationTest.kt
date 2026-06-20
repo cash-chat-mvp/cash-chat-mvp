@@ -8,6 +8,8 @@ import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.extensions.spring.SpringExtension
+import com.wnl.cashchat.api.domain.economy.exception.WalletNotInitializedException
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -33,6 +35,18 @@ class WalletPersistenceIntegrationTest : FunSpec() {
             second.id shouldBe first.id
             userWalletRepository.count() shouldBe 1L
             userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 0L
+        }
+
+        test("snapshot throws when the wallet does not exist") {
+            shouldThrow<WalletNotInitializedException> { walletService.snapshot(999_999L) }
+        }
+
+        test("getForUpdate requires an active transaction") {
+            val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "tx"))
+            walletService.ensureInitialized(user)
+            shouldThrow<org.springframework.transaction.IllegalTransactionStateException> {
+                walletService.getForUpdate(user.id)
+            }
         }
     }
 
