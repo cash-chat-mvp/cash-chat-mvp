@@ -9,6 +9,7 @@ import com.nomadclub.cashchat.core.network.DataStoreTokenProvider
 import com.nomadclub.cashchat.core.network.TokenAuthenticator
 import com.nomadclub.cashchat.data.repository.AuthRepository
 import com.nomadclub.cashchat.shared.core.network.TokenProvider
+import com.nomadclub.cashchat.shared.session.SessionResetter
 import com.nomadclub.cashchat.feature.auth.AuthViewModel
 import com.nomadclub.cashchat.feature.settings.SettingsViewModel
 import okhttp3.OkHttpClient
@@ -56,7 +57,9 @@ val appModule = module {
             .create(ApiService::class.java)
     }
 
-    single { AuthRepository(get(), get(), get(), get()) }
+    // SessionResetter는 lazy로 전달해 DI 순환(HttpClient→TokenProvider→AuthRepository→SessionResetter
+    // →PointsRepository→PointsApi→HttpClient)을 끊는다.
+    single { AuthRepository(get(), get(), get(), lazy { get<SessionResetter>() }) }
 
     viewModel { AuthViewModel(get()) }
 

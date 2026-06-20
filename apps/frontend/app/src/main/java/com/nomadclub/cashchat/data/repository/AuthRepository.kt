@@ -16,8 +16,13 @@ class AuthRepository(
     private val apiService: ApiService,
     private val tokenDataStore: TokenDataStore,
     private val refreshGate: TokenRefreshGate,
-    private val sessionResetter: SessionResetter,
+    // 지연 주입(lazy): SessionResetter → PointsRepository → HttpClient → TokenProvider → AuthRepository
+    // 로 이어지는 DI 순환을 끊는다. reset()이 실제 호출될 때(로그아웃/재인증) 그래프가 이미
+    // 구성된 뒤 해소되므로 StackOverflow(순환 생성)가 발생하지 않는다.
+    sessionResetter: Lazy<SessionResetter>,
 ) {
+    private val sessionResetter by sessionResetter
+
     // TokenAuthenticator에서 RefreshToken도 만료된 경우 재로그인 필요를 알리는 이벤트
     private val _reAuthRequired = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val reAuthRequired = _reAuthRequired.asSharedFlow()
