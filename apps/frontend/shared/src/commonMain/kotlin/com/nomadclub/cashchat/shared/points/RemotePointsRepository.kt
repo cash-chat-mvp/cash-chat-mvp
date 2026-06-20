@@ -20,6 +20,7 @@ class RemotePointsRepository(
     private val _balance = MutableStateFlow(0L)
     override val balance: StateFlow<Long> = _balance.asStateFlow()
 
+    @Throws(Exception::class)
     override suspend fun refresh() {
         try {
             _balance.value = pointsApi.getBalance().balance
