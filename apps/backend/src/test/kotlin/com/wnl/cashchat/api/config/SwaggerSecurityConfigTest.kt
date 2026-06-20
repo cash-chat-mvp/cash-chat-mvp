@@ -11,7 +11,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 @SpringBootTest(
     properties = [
         "spring.profiles.active=prod",
-        "OPENAI_API_KEY=dummy-openai-key",
+        "GEMINI_API_KEY=dummy-gemini-key",
         "GOOGLE_CLIENT_ID=dummy-google-client-id",
         "GOOGLE_CLIENT_SECRET=dummy-google-client-secret",
         "GOOGLE_REDIRECT_URI=https://cashchat.duckdns.org/api/auth/callback/google",

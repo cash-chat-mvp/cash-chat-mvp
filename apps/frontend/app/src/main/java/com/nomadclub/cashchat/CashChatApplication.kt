@@ -3,6 +3,7 @@ package com.nomadclub.cashchat
 import android.app.Application
 import com.google.android.gms.ads.MobileAds
 import com.nomadclub.cashchat.di.appModule
+import com.nomadclub.cashchat.shared.di.sharedDataModule
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
 
@@ -11,7 +12,7 @@ class CashChatApplication : Application() {
         super.onCreate()
         startKoin {
             androidContext(this@CashChatApplication)
-            modules(appModule)
+            modules(appModule, sharedDataModule(BuildConfig.BASE_URL))
         }
         MobileAds.initialize(this)
     }

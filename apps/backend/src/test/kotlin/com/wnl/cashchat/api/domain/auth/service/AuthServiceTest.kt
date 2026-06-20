@@ -1,6 +1,7 @@
 package com.wnl.cashchat.api.domain.auth.service
 
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
+import com.wnl.cashchat.api.domain.auth.exception.InvalidTokenException
 import com.wnl.cashchat.api.domain.auth.exception.OAuthException
 import com.wnl.cashchat.api.domain.auth.oauth.apple.AppleIdTokenClaims
 import com.wnl.cashchat.api.domain.auth.oauth.apple.AppleIdTokenValidator
@@ -11,6 +12,8 @@ import com.wnl.cashchat.api.domain.auth.oauth.model.OAuthUserInfo
 import com.wnl.cashchat.api.domain.auth.oauth.properties.OAuthProperties
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.auth.persistence.repository.RefreshTokenRepository
+import com.wnl.cashchat.api.domain.energy.service.EnergyService
+import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
 import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
@@ -20,10 +23,15 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.transaction.PlatformTransactionManager
+import org.springframework.transaction.TransactionDefinition
+import org.springframework.transaction.TransactionStatus
+import org.springframework.transaction.support.SimpleTransactionStatus
 import org.springframework.web.client.RestClient
 
 class AuthServiceTest : FunSpec({
@@ -32,13 +40,18 @@ class AuthServiceTest : FunSpec({
         val refreshTokenRepository = mock<RefreshTokenRepository>()
         val jwtTokenHandler = mock<JwtTokenHandler>()
         val userPointService = mock<UserPointService>()
+        val evolutionService = mock<EvolutionService>()
+        val energyService = mock<EnergyService>()
         val authService = AuthService(
             userRepository = userRepository,
             refreshTokenRepository = refreshTokenRepository,
             jwtTokenHandler = jwtTokenHandler,
+            transactionManager = NoOpTransactionManager(),
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = evolutionService,
+            energyService = energyService,
             appleTokenClient = mock<AppleTokenClient>(),
             appleIdTokenValidator = mock<AppleIdTokenValidator>(),
             appleUserInfoExtractor = mock<AppleUserInfoExtractor>(),
@@ -64,6 +77,16 @@ class AuthServiceTest : FunSpec({
                 id == 1L && deviceToken == "device-1"
             }
         )
+        verify(evolutionService).ensureInitialized(
+            argThat<User> {
+                id == 1L && deviceToken == "device-1"
+            }
+        )
+        verify(energyService).ensureInitialized(
+            argThat<User> {
+                id == 1L && deviceToken == "device-1"
+            }
+        )
     }
 
     test("logout deletes the submitted refresh token for the caller") {
@@ -75,9 +98,12 @@ class AuthServiceTest : FunSpec({
             userRepository = userRepository,
             refreshTokenRepository = refreshTokenRepository,
             jwtTokenHandler = jwtTokenHandler,
+            transactionManager = NoOpTransactionManager(),
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = mock<EvolutionService>(),
+            energyService = mock<EnergyService>(),
             appleTokenClient = mock<AppleTokenClient>(),
             appleIdTokenValidator = mock<AppleIdTokenValidator>(),
             appleUserInfoExtractor = mock<AppleUserInfoExtractor>(),
@@ -99,9 +125,12 @@ class AuthServiceTest : FunSpec({
             userRepository = userRepository,
             refreshTokenRepository = refreshTokenRepository,
             jwtTokenHandler = jwtTokenHandler,
+            transactionManager = NoOpTransactionManager(),
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = mock<EvolutionService>(),
+            energyService = mock<EnergyService>(),
             appleTokenClient = mock<AppleTokenClient>(),
             appleIdTokenValidator = mock<AppleIdTokenValidator>(),
             appleUserInfoExtractor = mock<AppleUserInfoExtractor>(),
@@ -123,9 +152,12 @@ class AuthServiceTest : FunSpec({
             userRepository = userRepository,
             refreshTokenRepository = refreshTokenRepository,
             jwtTokenHandler = jwtTokenHandler,
+            transactionManager = NoOpTransactionManager(),
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = mock<EvolutionService>(),
+            energyService = mock<EnergyService>(),
             appleTokenClient = mock<AppleTokenClient>(),
             appleIdTokenValidator = mock<AppleIdTokenValidator>(),
             appleUserInfoExtractor = mock<AppleUserInfoExtractor>(),
@@ -143,6 +175,8 @@ class AuthServiceTest : FunSpec({
         val refreshTokenRepository = mock<RefreshTokenRepository>()
         val jwtTokenHandler = mock<JwtTokenHandler>()
         val userPointService = mock<UserPointService>()
+        val evolutionService = mock<EvolutionService>()
+        val energyService = mock<EnergyService>()
         val appleTokenClient = mock<AppleTokenClient>()
         val appleIdTokenValidator = mock<AppleIdTokenValidator>()
         val appleUserInfoExtractor = mock<AppleUserInfoExtractor>()
@@ -150,9 +184,12 @@ class AuthServiceTest : FunSpec({
             userRepository = userRepository,
             refreshTokenRepository = refreshTokenRepository,
             jwtTokenHandler = jwtTokenHandler,
+            transactionManager = NoOpTransactionManager(),
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = evolutionService,
+            energyService = energyService,
             appleTokenClient = appleTokenClient,
             appleIdTokenValidator = appleIdTokenValidator,
             appleUserInfoExtractor = appleUserInfoExtractor,
@@ -199,6 +236,8 @@ class AuthServiceTest : FunSpec({
         response.userId shouldBe 1L
         response.role shouldBe Role.MEMBER
         verify(userPointService).ensureInitialized(guest)
+        verify(evolutionService).ensureInitialized(guest)
+        verify(energyService).ensureInitialized(guest)
     }
 
     test("loginWithApple returns existing Apple user without creating duplicate") {
@@ -206,6 +245,8 @@ class AuthServiceTest : FunSpec({
         val refreshTokenRepository = mock<RefreshTokenRepository>()
         val jwtTokenHandler = mock<JwtTokenHandler>()
         val userPointService = mock<UserPointService>()
+        val evolutionService = mock<EvolutionService>()
+        val energyService = mock<EnergyService>()
         val appleTokenClient = mock<AppleTokenClient>()
         val appleIdTokenValidator = mock<AppleIdTokenValidator>()
         val appleUserInfoExtractor = mock<AppleUserInfoExtractor>()
@@ -213,9 +254,12 @@ class AuthServiceTest : FunSpec({
             userRepository = userRepository,
             refreshTokenRepository = refreshTokenRepository,
             jwtTokenHandler = jwtTokenHandler,
+            transactionManager = NoOpTransactionManager(),
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = evolutionService,
+            energyService = energyService,
             appleTokenClient = appleTokenClient,
             appleIdTokenValidator = appleIdTokenValidator,
             appleUserInfoExtractor = appleUserInfoExtractor,
@@ -257,6 +301,8 @@ class AuthServiceTest : FunSpec({
         response.userId shouldBe 2L
         response.role shouldBe Role.MEMBER
         verify(userPointService).ensureInitialized(existingUser)
+        verify(evolutionService).ensureInitialized(existingUser)
+        verify(energyService).ensureInitialized(existingUser)
     }
 
     test("loginWithApple rejects missing Apple id token before creating or upgrading user") {
@@ -264,6 +310,8 @@ class AuthServiceTest : FunSpec({
         val refreshTokenRepository = mock<RefreshTokenRepository>()
         val jwtTokenHandler = mock<JwtTokenHandler>()
         val userPointService = mock<UserPointService>()
+        val evolutionService = mock<EvolutionService>()
+        val energyService = mock<EnergyService>()
         val appleTokenClient = mock<AppleTokenClient>()
         val appleIdTokenValidator = mock<AppleIdTokenValidator>()
         val appleUserInfoExtractor = mock<AppleUserInfoExtractor>()
@@ -271,9 +319,12 @@ class AuthServiceTest : FunSpec({
             userRepository = userRepository,
             refreshTokenRepository = refreshTokenRepository,
             jwtTokenHandler = jwtTokenHandler,
+            transactionManager = NoOpTransactionManager(),
             oAuthProperties = OAuthProperties(),
             restClient = mock<RestClient>(),
             userPointService = userPointService,
+            evolutionService = evolutionService,
+            energyService = energyService,
             appleTokenClient = appleTokenClient,
             appleIdTokenValidator = appleIdTokenValidator,
             appleUserInfoExtractor = appleUserInfoExtractor,
@@ -293,5 +344,104 @@ class AuthServiceTest : FunSpec({
 
         verify(userRepository, never()).save(any())
         verify(userPointService, never()).ensureInitialized(any())
+        verify(evolutionService, never()).ensureInitialized(any())
+        verify(energyService, never()).ensureInitialized(any())
     }
-})
+
+    test("reissueToken fails fast with InvalidTokenException for an unknown refresh token") {
+        // 회귀 가드: refresh 엔드포인트는 알 수 없는 토큰에 대해 (hang 이 아니라) 즉시 예외로 끝나야 한다.
+        // 풀 고갈 시 이 경로가 무응답이 되던 장애의 victim 이었음. 로직 자체는 빠른 실패가 정상.
+        val refreshTokenRepository = mock<RefreshTokenRepository>()
+        val authService = AuthService(
+            userRepository = mock<UserRepository>(),
+            refreshTokenRepository = refreshTokenRepository,
+            jwtTokenHandler = mock<JwtTokenHandler>(),
+            transactionManager = NoOpTransactionManager(),
+            oAuthProperties = OAuthProperties(),
+            restClient = mock<RestClient>(),
+            userPointService = mock<UserPointService>(),
+            evolutionService = mock<EvolutionService>(),
+            energyService = mock<EnergyService>(),
+            appleTokenClient = mock<AppleTokenClient>(),
+            appleIdTokenValidator = mock<AppleIdTokenValidator>(),
+            appleUserInfoExtractor = mock<AppleUserInfoExtractor>(),
+            oAuthUserInfoExtractors = emptyList(),
+        )
+        whenever(refreshTokenRepository.findByTokenForUpdate("dummy-token")).thenReturn(null)
+
+        shouldThrow<InvalidTokenException> {
+            authService.reissueToken("dummy-token")
+        }
+    }
+
+    test("loginWithApple performs external Apple calls before opening a DB transaction") {
+        // 구조 가드: 외부 IdP 호출(토큰 교환 + id_token 검증/JWKS)은 트랜잭션 시작 전에 수행되어야 한다.
+        // 그렇지 않으면 외부 호출 대기 동안 DB 커넥션이 점유되어 풀 고갈을 유발한다.
+        val userRepository = mock<UserRepository>()
+        val jwtTokenHandler = mock<JwtTokenHandler>()
+        val appleTokenClient = mock<AppleTokenClient>()
+        val appleIdTokenValidator = mock<AppleIdTokenValidator>()
+        val appleUserInfoExtractor = mock<AppleUserInfoExtractor>()
+        val transactionManager = mock<PlatformTransactionManager>()
+        whenever(transactionManager.getTransaction(any())).thenReturn(SimpleTransactionStatus())
+        whenever(jwtTokenHandler.createAccessToken(any(), any())).thenReturn("access-token")
+
+        val authService = AuthService(
+            userRepository = userRepository,
+            refreshTokenRepository = mock<RefreshTokenRepository>(),
+            jwtTokenHandler = jwtTokenHandler,
+            transactionManager = transactionManager,
+            oAuthProperties = OAuthProperties(),
+            restClient = mock<RestClient>(),
+            userPointService = mock<UserPointService>(),
+            evolutionService = mock<EvolutionService>(),
+            energyService = mock<EnergyService>(),
+            appleTokenClient = appleTokenClient,
+            appleIdTokenValidator = appleIdTokenValidator,
+            appleUserInfoExtractor = appleUserInfoExtractor,
+            oAuthUserInfoExtractors = emptyList(),
+        )
+        val existingUser = User(
+            id = 7L,
+            role = Role.MEMBER,
+            provider = AuthProviderType.APPLE,
+            providerId = "apple-subject",
+            name = "Stored",
+        )
+        val appleInfo = OAuthUserInfo(
+            providerId = "apple-subject",
+            email = null,
+            name = "Apple User",
+            profileImageUrl = null,
+        )
+        whenever(appleTokenClient.exchangeAuthorizationCode("authorization-code"))
+            .thenReturn(AppleTokenResponse(idToken = "apple-id-token"))
+        whenever(appleIdTokenValidator.validate("apple-id-token"))
+            .thenReturn(AppleIdTokenClaims("apple-subject", null, null))
+        whenever(appleUserInfoExtractor.extract(AppleIdTokenClaims("apple-subject", null, null), null))
+            .thenReturn(appleInfo)
+        whenever(userRepository.findByProviderAndProviderId(AuthProviderType.APPLE, "apple-subject"))
+            .thenReturn(existingUser)
+
+        authService.loginWithApple(
+            authorizationCode = "authorization-code",
+            identityToken = null,
+            fullName = null,
+            deviceToken = null,
+        )
+
+        // 외부 Apple 토큰 교환이 트랜잭션 시작(getTransaction)보다 먼저 호출되었는지 순서 검증
+        inOrder(appleTokenClient, transactionManager) {
+            verify(appleTokenClient).exchangeAuthorizationCode("authorization-code")
+            verify(transactionManager).getTransaction(any())
+        }
+    }
+}) {
+    private class NoOpTransactionManager : PlatformTransactionManager {
+        override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
+
+        override fun commit(status: TransactionStatus) = Unit
+
+        override fun rollback(status: TransactionStatus) = Unit
+    }
+}

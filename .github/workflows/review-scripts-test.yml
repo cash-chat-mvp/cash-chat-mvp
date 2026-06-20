@@ -1,0 +1,36 @@
+name: Review Scripts Test
+
+# 리뷰 시스템 셸 스크립트 단위 테스트. (#2 회귀가 CI 미실행으로 누락됐던 것을 방지)
+on:
+  pull_request:
+    paths:
+      - ".github/scripts/review/**"
+      - ".github/actions/rpd/**"
+      - ".github/workflows/review-scripts-test.yml"
+  push:
+    branches: [dev, main]
+    paths:
+      - ".github/scripts/review/**"
+      - ".github/actions/rpd/**"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: shell unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Run review script tests
+        run: |
+          set -euo pipefail
+          cd .github/scripts/review
+          fail=0
+          for f in tests/test_*.sh; do
+            echo "── $f ──"
+            if ! bash "$f"; then fail=1; fi
+          done
+          [ "$fail" -eq 0 ] || { echo "::error::리뷰 스크립트 테스트 실패"; exit 1; }

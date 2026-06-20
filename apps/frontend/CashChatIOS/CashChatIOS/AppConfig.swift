@@ -4,6 +4,8 @@ enum AppConfig {
     static let googleIOSClientId: String = required(Secrets.googleIOSClientId, key: "googleIOSClientId")
     static let googleWebClientId: String = required(Secrets.googleWebClientId, key: "googleWebClientId")
     static let apiBaseUrl: String = required(Secrets.apiBaseUrl, key: "apiBaseUrl")
+    static let admobAppId: String = required(Secrets.admobAppId, key: "admobAppId")
+    static let admobRewardedAdUnitId: String = required(Secrets.admobRewardedAdUnitId, key: "admobRewardedAdUnitId")
 
     private static func required(_ value: String, key: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)

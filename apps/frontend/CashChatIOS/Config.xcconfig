@@ -17,5 +17,9 @@ GOOGLE_WEB_CLIENT_ID = 537767754668-enk7onppcmkhsfa1j7hupuc6jig1c0s2.apps.google
 // API 서버 기본 URL
 API_BASE_URL = https:$(SLASH)/cashchat.duckdns.org
 
+// AdMob App ID — Info.plist의 GADApplicationIdentifier로 주입 (MobileAds SDK 초기화에 사용)
+// 기본값은 Google 공식 테스트 ID. 릴리즈 시 local.xcconfig(=secrets)에서 실 ID로 오버라이드.
+ADMOB_APP_ID = ca-app-pub-3940256099942544~1458002511
+
 // local.xcconfig가 있으면 위 기본값을 오버라이드 (없어도 빌드 가능)
 #include? "local.xcconfig"

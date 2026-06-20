@@ -17,7 +17,10 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 - `DEPLOY_PATH`: remote directory for compose files (example: `/home/ubuntu/cash-chat`)
 - `GHCR_USERNAME`: GitHub username for pulling GHCR image on server
 - `GHCR_TOKEN`: GitHub PAT with `read:packages` scope
-- `OPENAI_API_KEY`: OpenAI API key, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `SPRING_DATASOURCE_URL`: MySQL JDBC URL, for example `jdbc:mysql://<mysql-host>:3306/cashchat?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true`
+- `SPRING_DATASOURCE_USERNAME`: MySQL username with privileges on the `cashchat` database
+- `SPRING_DATASOURCE_PASSWORD`: MySQL password
+- `GEMINI_API_KEY`: Gemini API key (used via the OpenAI-compatible endpoint for chat), required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_CLIENT_ID`: Google OAuth client ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_CLIENT_SECRET`: Google OAuth client secret, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `GOOGLE_REDIRECT_URI`: Google OAuth redirect URI, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
@@ -30,6 +33,7 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 ## Optional GitHub Secrets
 
 - `BACKEND_SPRING_PROFILES_ACTIVE`: backend Spring profile, defaults to `prod`
+- `SPRING_DATASOURCE_DRIVER_CLASS_NAME`: JDBC driver class, defaults to `com.mysql.cj.jdbc.Driver`
 - `APPLE_REDIRECT_URI`: Apple redirect URI; native iOS Sign in with Apple can leave this empty
 
 Keep production deployments on `BACKEND_SPRING_PROFILES_ACTIVE=prod`. Swagger/OpenAPI is disabled in the `prod` profile and cannot be enabled on the production server.

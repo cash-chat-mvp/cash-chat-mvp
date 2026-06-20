@@ -5,28 +5,20 @@ on:
     types: [opened, synchronize, reopened]
     branches: [dev]
 
-# 같은 PR에 연속 푸시 시 이전 빌드 런 취소 (자원 절약)
 concurrency:
   group: ios-build-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  build-check:
-    runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: apps/frontend/CashChatIOS
-
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.f.outputs.build }}
     steps:
-      - name: Checkout
+      - name: Checkout (scripts only)
         uses: actions/checkout@v5
-
-      # 워크플로 레벨 paths: 는 PR 누적 diff 기준이라, iOS 변경이 한 번이라도
-      # 포함된 PR은 이후 무관한 푸시(docs 등)에도 빌드가 다시 돌았다.
-      # synchronize면 '이번 푸시(before..head)'만, 그 외엔 PR 전체(base..head)를 보고 판정한다.
       - name: Detect iOS-relevant changes
-        id: filter
-        working-directory: ${{ github.workspace }}
+        id: f
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -36,31 +28,33 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          if [ "$ACTION" = "synchronize" ] && [ -n "${BEFORE:-}" ] && ! printf '%s' "$BEFORE" | grep -qE '^0+$'; then
-            RANGE="${BEFORE}...${HEAD_SHA}"
-          else
-            RANGE="${BASE_SHA}...${HEAD_SHA}"
-          fi
+          . .github/scripts/build/detect_build_changes.sh
+          RANGE="$(changed_range)"
           echo "::notice::비교 범위 $RANGE"
           FILES=$(gh api "repos/${REPO}/compare/${RANGE}" --paginate -q '.files[].filename' 2>/dev/null || true)
           printf '변경 파일:\n%s\n' "$FILES"
-          if printf '%s\n' "$FILES" | grep -qE '^apps/frontend/(CashChatIOS|shared)/'; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::iOS 관련 변경 감지 — 빌드 진행"
+          if printf '%s\n' "$FILES" | affects_ios; then
+            echo "build=true" >> "$GITHUB_OUTPUT"; echo "::notice::iOS 영향 변경 — 빌드 진행"
           else
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::iOS 관련 변경 없음 — 빌드 스킵(잡은 성공 처리)"
+            echo "build=false" >> "$GITHUB_OUTPUT"; echo "::notice::iOS 영향 없음 — 빌드 잡 스킵"
           fi
 
+  build-check:
+    needs: detect
+    if: needs.detect.outputs.build == 'true'
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/frontend/CashChatIOS
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
       - name: Set up JDK 21
-        if: steps.filter.outputs.build == 'true'
         uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
-
       - name: Cache Gradle
-        if: steps.filter.outputs.build == 'true'
         uses: actions/cache@v5
         with:
           path: |
@@ -69,18 +63,14 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('apps/frontend/**/*.gradle.kts', 'apps/frontend/gradle/libs.versions.toml') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-
       - name: Cache SPM packages
-        if: steps.filter.outputs.build == 'true'
         uses: actions/cache@v5
         with:
           path: ~/Library/Developer/Xcode/DerivedData/*/SourcePackages/checkouts
           key: ${{ runner.os }}-spm-${{ hashFiles('apps/frontend/CashChatIOS/CashChatIOS.xcodeproj/project.pbxproj') }}
           restore-keys: |
             ${{ runner.os }}-spm-
-
       - name: Create Secrets.swift
-        if: steps.filter.outputs.build == 'true'
         env:
           IOS_GOOGLE_CLIENT_ID: ${{ secrets.IOS_GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -88,15 +78,16 @@ jobs:
         run: |
           cat > CashChatIOS/Secrets.swift << EOF
           // Auto-generated for CI build check
+          // AdMob 값은 컴파일 검증용 Google 공식 테스트 ID (실 ID는 릴리즈 워크플로에서 주입)
           enum Secrets {
               static let googleIOSClientId = "$IOS_GOOGLE_CLIENT_ID"
               static let googleWebClientId = "$GOOGLE_CLIENT_ID"
               static let apiBaseUrl = "$API_SERVER_BASE_URL"
+              static let admobAppId = "ca-app-pub-3940256099942544~1458002511"
+              static let admobRewardedAdUnitId = "ca-app-pub-3940256099942544/1712485313"
           }
           EOF
-
       - name: Build iOS app (simulator, 검증용)
-        if: steps.filter.outputs.build == 'true'
         run: |
           xcodebuild \
             -project CashChatIOS.xcodeproj \
