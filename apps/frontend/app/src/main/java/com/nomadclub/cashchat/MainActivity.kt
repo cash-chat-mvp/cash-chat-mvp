@@ -45,6 +45,7 @@ import com.nomadclub.cashchat.feature.settings.SettingsViewModel
 import com.nomadclub.cashchat.shared.points.PointsRepository
 import com.nomadclub.cashchat.ui.theme.CashChatTheme
 import com.nomadclub.cashchat.ui.theme.ThemeMode
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -130,11 +131,15 @@ private fun CashChatAppContent() {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // 앱 전역 포인트 단일 소스 — 혜택존(BenefitZoneScreen)·출석(AttendanceStore)과 동일한
-    // Koin PointsRepository 를 공유한다. (이전엔 별도 로컬 상태라 탭 간 잔액이 불일치했음)
-    val pointsRepository: PointsRepository = koinInject()
-    val balance by pointsRepository.balance.collectAsState()
-    val points = balance.toInt()
+    // 포인트 잔액은 혜택존/상점과 동일한 공유 PointsRepository 를 단일 소스로 사용한다.
+    // (이전엔 마이페이지만 별도 로컬 카운터를 써서 다른 화면과 잔액이 어긋나는 문제가 있었다.)
+    val pointsRepository = koinInject<PointsRepository>()
+    val balance by pointsRepository.balance.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) {
+        runCatching { pointsRepository.refresh() }
+            .onFailure { Log.e("CashChatPoints", "포인트 잔액 동기화 실패", it) }
+    }
+    val points = balance.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
     var messageCount by rememberSaveable { mutableIntStateOf(0) }
 
     fun addPoints(value: Int) {
@@ -144,7 +149,7 @@ private fun CashChatAppContent() {
 
     fun spendPoints(value: Int): Boolean {
         if (value <= 0) return false
-        return if (pointsRepository.balance.value >= value) {
+        return if (balance >= value) {
             pointsRepository.applyDelta(-value.toLong())
             true
         } else false

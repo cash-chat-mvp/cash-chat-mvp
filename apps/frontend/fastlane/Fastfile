@@ -93,7 +93,7 @@ platform :ios do
       beta_app_description:              ENV.fetch("RELEASE_NOTES", "New build"),
       skip_waiting_for_build_processing: false,
       distribute_external:               false,
-      groups:                            ["CashChatTester"],
+      groups:                            ["CashChatPrivateTester"],
     )
   end
 end
