@@ -69,7 +69,7 @@ flowchart LR
 3. **오퍼 완료** — 사용자가 미션/광고를 완료한다(앱 설치·가입·설문 등).
 4. **서버 포스트백** — TNK가 전환을 확인하면 TNK 서버 → 백엔드로 S2S 포스트백(콜백)을 전송한다.
 5. **검증·적립** — 백엔드가 `md_chk` 서명을 검증하고 → 토큰으로 사용자를 식별한 뒤 → `pay_pnt × 환산비`를 코인으로 멱등 적립하고 → 원장에 기록한 다음 200 ack를 반환한다.
-6. **앱 반영** — 콜백은 비동기이므로 적립이 즉시 화면에 뜨지 않는다. 앱은 기존 포인트/잔액 조회 API로 새로고침하면 적립이 반영된다.
+6. **앱 반영** *(후속 의존)* — 콜백은 비동기이므로 적립이 즉시 화면에 뜨지 않는다. 앱은 포인트/잔액 조회 API로 새로고침해 적립을 반영한다. **단, 잔액 조회 API(`GET /api/points/me`)는 아직 BE 미구현이고 프론트 `PointsRepository.refresh()`도 no-op 상태다 — 이 단계는 해당 API 구현에 의존하는 후속 과제다.**
 
 ### 순차 흐름도 (Sequence Diagram)
 
@@ -109,7 +109,7 @@ sequenceDiagram
             alt pay_pnt ≤ 0
                 API->>DB: status=REJECTED_NON_POSITIVE
                 API-->>TNK: 200 ack
-            else token 미지
+            else 토큰 미존재 (알 수 없는 토큰)
                 API->>DB: status=REJECTED_UNKNOWN_USER
                 API-->>TNK: 200 ack
             else 정상
@@ -123,9 +123,9 @@ sequenceDiagram
         end
     end
 
-    Note over User,DB: 4단계 — 앱 반영 (별도 조회)
+    Note over User,DB: 4단계 — 앱 반영 (별도 조회 · 후속 의존)
     User->>FE: 잔액 새로고침
-    FE->>API: 포인트/잔액 조회 API
+    FE->>API: GET /api/points/me (BE 미구현 · 후속)
     API-->>FE: 적립 반영된 잔액
 ```
 
@@ -135,7 +135,7 @@ sequenceDiagram
 
 - **서명 검증 우선** — `md_chk = MD5(app_key + md_user_nm + seq_id)`. **DB 쓰기보다 먼저** 검증해 미검증 요청이 원장을 오염시키지 못하게 한다. 실패 시 `warn` 로그만 남기고 미기록(AdMob SSV 패턴과 정합). `app_key`는 공유 시크릿이라, 이를 모르면 토큰·`seq_id`를 위조해도 유효한 `md_chk`를 만들 수 없다.
 - **fail-closed** — `app_key`가 미설정(빈 값)이면 모든 콜백을 거절한다(앱 자체는 정상 부팅). 시크릿 누락이 fail-open(전량 통과)으로 이어지지 않게 한다.
-- **멱등성 (이중 방어선)** — `seq_id`당 1행(`UNIQUE`) + 행 락(`insertIfAbsent` + `SELECT … FOR UPDATE`)으로 동일 `seq_id` 동시·중복 콜백을 직렬화하고, PENDING 1건만 적립한다. 추가로 적립 단계에 멱등키 `tnk:offerwall:{seq_id}`를 적용해 설령 같은 키가 두 번 도달해도 1회만 적립된다.
+- **멱등성 (이중 방어선)** — `seq_id`당 1행(`UNIQUE`) + 행 락(`insertIfAbsent` + `SELECT … FOR UPDATE`)으로 동일 `seq_id` 동시·중복 콜백을 직렬화하고, PENDING 1건만 적립한다. 추가로 적립 단계에 멱등키 `tnk:offerwall:{seq_id}`를 적용해 설령 같은 키가 두 번 도달해도 1회만 적립된다. `insertIfAbsent`는 `ON DUPLICATE KEY` no-op이라 **예외를 던지지 않으므로**(상위 트랜잭션 rollback-only 방지용 의도적 설계) 삽입 성공만으로는 소유권이 정해지지 않는다 — 그래서 직렬화에 행 락이 필요하다(unique 위반 예외 캐치 방식을 의도적으로 피함).
 - **불투명 토큰** — TNK에는 내부 `userId`가 아닌 UUID 토큰을 전달하고, `offerwall_user_tokens`로 `token → userId`를 해석한다. 식별자 유출·역추적을 방지한다.
 - **이상치 방어** — `pay_pnt ≤ 0`는 적립하지 않고 거절 기록한다(음수가 차감으로 처리돼 포인트가 사라지는 사고 방지). 환산은 `BigDecimal` + `RoundingMode.FLOOR`로 계산해 부동소수 정밀도 손실을 막고, 0코인이면 불필요한 0원 트랜잭션을 생략한다.
 
@@ -145,6 +145,7 @@ sequenceDiagram
 
 - **프론트엔드 통합** — KMM `shared/` 및 Android/iOS TNK SDK 연동, 오퍼월 화면 (계획).
 - **운영 설정** — dev/prod 콜백 URL 등록, TNK 콘솔 `app-key` 시크릿 주입.
+- **잔액 조회 API 의존** — 적립 반영 확인에 쓰일 `GET /api/points/me`가 BE 미구현(프론트 `PointsRepository.refresh()`는 no-op). 동작 흐름 6단계 '앱 반영'은 이 API 구현에 의존한다.
 - **자동 취소/환수(claw-back)** — 현재는 콜백 전량 기록만 하고 자동 차감은 하지 않는다. 원장 `status`는 향후 `CANCELED` 등으로 확장 가능.
 - **감사 강화** — TNK가 함께 보내는 `actn_id`·`app_nm` 등 부가 파라미터를 원장에 추가 기록(현재는 필수 4개만 사용).
 - **추가 오퍼월**(Buzzvil, AdiSON 등) 연동.
