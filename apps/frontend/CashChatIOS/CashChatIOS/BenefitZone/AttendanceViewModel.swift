@@ -51,8 +51,8 @@ final class AttendanceViewModel: ObservableObject {
                 self.isCheckingIn = s.isCheckingIn
                 self.nextRewardCoin = s.nextReward?.coin ?? 0
                 self.nextRewardBonus = (s.nextReward?.bonusItems ?? [])
-                    .map { "📦 \($0.itemCode) \($0.quantity)개" }
-                    .joined(separator: " ")
+                    .map { "\($0.itemCode) \($0.quantity)개" }
+                    .joined(separator: " · ")
                 if let err = s.errorMessage {
                     self.toast = err
                 }
@@ -62,7 +62,7 @@ final class AttendanceViewModel: ObservableObject {
         collector.collectRewards(store: store) { [weak self] ev in
             Task { @MainActor in
                 guard let self else { return }
-                self.toast = "출석 완료! 🪙+\(ev.awardedCoin)"
+                self.toast = "출석 완료! +\(ev.awardedCoin) 코인"
             }
         }
 
@@ -124,7 +124,12 @@ struct AttendanceWidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("🔥 \(vm.streak)일 연속 출석").font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
+                HStack(spacing: 5) {
+                    Image(systemName: "flame.fill").foregroundStyle(accent)
+                    Text("\(vm.streak)일 연속 출석")
+                }
+                .font(.system(size: 15, weight: .heavy))
+                .foregroundStyle(.white)
                 Spacer()
                 Text("\(vm.month)월").font(.system(size: 12)).foregroundStyle(.white.opacity(0.8))
             }
@@ -138,9 +143,14 @@ struct AttendanceWidgetView: View {
                         ZStack {
                             Circle().fill(cell.checked ? Color.white : (cell.isToday ? accent : Color.white.opacity(0.18)))
                                 .frame(width: 30, height: 30)
-                            Text(cell.checked ? "✓" : "\(cell.dayOfMonth)")
-                                .font(.system(size: cell.checked ? 14 : 11, weight: .bold))
-                                .foregroundStyle(cell.checked ? heroStart : (cell.isToday ? Color(red:0.1,green:0.1,blue:0.16) : .white))
+                            Group {
+                                if cell.checked {
+                                    Image(systemName: "checkmark").font(.system(size: 13, weight: .bold))
+                                } else {
+                                    Text("\(cell.dayOfMonth)").font(.system(size: 11, weight: .bold))
+                                }
+                            }
+                            .foregroundStyle(cell.checked ? heroStart : (cell.isToday ? Color(red:0.1,green:0.1,blue:0.16) : .white))
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -148,13 +158,21 @@ struct AttendanceWidgetView: View {
             }
 
             // 이미 출석했다면 nextRewardCoin 은 '다음' 출석 보상이므로 라벨을 구분한다.
-            Text("🎁 \(vm.todayChecked ? "다음 보상" : "오늘 보상") 🪙+\(vm.nextRewardCoin)" + (vm.nextRewardBonus.isEmpty ? "" : "  \(vm.nextRewardBonus)"))
-                .font(.system(size: 12.5))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12).padding(.vertical, 10)
-                .background(Color.white.opacity(0.16))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            HStack(spacing: 6) {
+                Image(systemName: "gift.fill").foregroundStyle(accent)
+                (
+                    Text("\(vm.todayChecked ? "다음 보상" : "오늘 보상")  ")
+                    + Text(Image(systemName: "bitcoinsign.circle.fill"))
+                    + Text(" +\(vm.nextRewardCoin)")
+                    + Text(vm.nextRewardBonus.isEmpty ? "" : "   \(vm.nextRewardBonus)")
+                )
+            }
+            .font(.system(size: 12.5))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background(Color.white.opacity(0.16))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
 
             Button(action: { vm.checkIn() }) {
                 Text(vm.todayChecked ? "오늘 출석 완료" : "출석 도장 찍기")
@@ -179,7 +197,7 @@ struct BenefitInfoCardView: View {
         var bg: Color { self == .next ? Color(red:0.89,green:0.94,blue:1.0) : Color(red:0.94,green:0.93,blue:0.97) }
         var fg: Color { self == .next ? Color(red:0.18,green:0.44,blue:0.88) : Color(red:0.60,green:0.58,blue:0.68) }
     }
-    let icon: String
+    let icon: String   // SF Symbol 이름
     let title: String
     let badge: Badge
     let description: String
@@ -188,7 +206,10 @@ struct BenefitInfoCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
-                Text(icon).font(.system(size: 18))
+                Image(systemName: icon)
+                    .font(.system(size: 17))
+                    .foregroundStyle(Color(red: 0.36, green: 0.42, blue: 0.98))
+                    .frame(width: 24)
                 Text(title).font(.system(size: 15, weight: .bold)).foregroundStyle(Color(red:0.1,green:0.1,blue:0.16))
                 Text(badge.text).font(.system(size: 10, weight: .bold)).foregroundStyle(badge.fg)
                     .padding(.horizontal, 8).padding(.vertical, 2)

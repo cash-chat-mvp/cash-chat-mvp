@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AD0000010000000000000003 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = AD0000010000000000000002 /* GoogleMobileAds */; };
 		CC2130032F5D5C2B009F83EE /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = CC2130022F5D5C2B009F83EE /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 
@@ -58,6 +59,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CC2130032F5D5C2B009F83EE /* GoogleSignIn in Frameworks */,
+				AD0000010000000000000003 /* GoogleMobileAds in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,6 +123,7 @@
 			name = CashChatIOS;
 			packageProductDependencies = (
 				CC2130022F5D5C2B009F83EE /* GoogleSignIn */,
+				AD0000010000000000000002 /* GoogleMobileAds */,
 			);
 			productName = CashChatIOS;
 			productReference = FBEF9B8E2F5D5C2B009F83ED /* CashChatIOS.app */;
@@ -206,6 +209,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				AD0000010000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FBEF9B8F2F5D5C2B009F83ED /* Products */;
@@ -609,6 +613,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AD0000010000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.0.0;
+			};
+		};
 		CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
@@ -620,6 +632,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AD0000010000000000000002 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD0000010000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
 		CC2130022F5D5C2B009F83EE /* GoogleSignIn */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;

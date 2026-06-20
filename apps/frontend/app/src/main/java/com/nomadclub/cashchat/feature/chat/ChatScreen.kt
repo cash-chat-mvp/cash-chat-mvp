@@ -1,29 +1,16 @@
 package com.nomadclub.cashchat.feature.chat
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,23 +18,21 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Store
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,1106 +40,324 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.nomadclub.cashchat.feature.chat.models.AdInfo
-import com.nomadclub.cashchat.feature.chat.models.ChatMessage
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nomadclub.cashchat.ads.RewardedAdManager
+import com.nomadclub.cashchat.core.data.CharacterPreferenceStore
+import com.nomadclub.cashchat.feature.chat.components.AdGateCard
+import com.nomadclub.cashchat.feature.chat.components.CharacterAvatar
+import com.nomadclub.cashchat.feature.chat.components.EnergyGauge
+import com.nomadclub.cashchat.feature.chat.components.MessageBubble
+import com.nomadclub.cashchat.feature.chat.components.StatChip
+import com.nomadclub.cashchat.feature.chat.components.TypingIndicator
+import com.nomadclub.cashchat.shared.chat.model.ChatItem
+import com.nomadclub.cashchat.shared.core.config.FeatureFlags
+import kotlin.coroutines.resume
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Locale
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
-// 사용자 메시지 키워드에 따라 노출할 인라인 광고 목록 (예: "맛집" → 배달의민족)
-private val adDatabase = listOf(
-    listOf("음식", "맛집", "먹", "배달", "요리", "점심", "저녁", "밥", "치킨", "피자") to AdInfo(
-        brand = "배달의민족",
-        tagline = "지금 주문하면 3,000원 즉시 할인! 오늘 뭐 먹지?",
-        cta = "지금 주문하기",
-        emoji = "🍔",
-        bg = 0xFFFFF4E8,
-        accent = 0xFFFF6B00,
-        category = "음식·배달"
-    ),
-    listOf("여행", "휴가", "비행기", "호텔", "숙소", "관광") to AdInfo(
-        brand = "야놀자",
-        tagline = "특가 숙소 최대 50% 할인! 지금 예약하세요",
-        cta = "특가 확인하기",
-        emoji = "✈️",
-        bg = 0xFFE8F4FF,
-        accent = 0xFF0066CC,
-        category = "여행·숙박"
-    ),
-    listOf("운동", "헬스", "다이어트", "건강", "요가") to AdInfo(
-        brand = "나이키 트레이닝 클럽",
-        tagline = "무료 운동 플랜으로 오늘부터 시작하세요!",
-        cta = "무료로 시작",
-        emoji = "💪",
-        bg = 0xFFE8FFE8,
-        accent = 0xFF00AA44,
-        category = "건강·피트니스"
-    )
-)
+private val suggestedQuestions = listOf("오늘 저녁 뭐 먹을까?", "가성비 이어폰 추천해줘", "영어 공부 팁 알려줘")
 
-// 키워드에 맞는 광고가 없을 때 보여줄 기본 광고
-private val defaultAd = AdInfo(
-    brand = "CashAI Premium",
-    tagline = "광고 없이 AI와 무제한 대화! 월 990원부터",
-    cta = "업그레이드",
-    emoji = "⭐",
-    bg = 0xFFFFF8E8,
-    accent = 0xFFCC8800,
-    category = "프리미엄"
-)
-
-// "광고 보고 답변 받기" 모달에서 돌릴 리워드 광고 목록
-private val rewardAds = listOf(
-    AdInfo("삼성 갤럭시 S25", "새로운 AI 폰의 시작. 사전예약 시 Galaxy Buds 증정!", "사전예약 하기", "📱", 0xFFE8F0FF, 0xFF1428A0, "전자제품"),
-    AdInfo("스타벅스 코리아", "봄 시즌 신메뉴 출시! 앱 주문 시 별 2배 적립", "앱으로 주문", "☕", 0xFFE8F5E9, 0xFF00704A, "음료·카페"),
-    AdInfo("현대자동차 아이오닉6", "전기차 시대의 혁신. 지금 시승 신청하세요!", "시승 신청", "🚗", 0xFFFFF3E0, 0xFF002C5F, "자동차")
-)
-
-/**
- * AI 채팅 메인 화면.
- */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    points: Int,
-    messageCount: Int,
-    addPoints: (Int) -> Unit,
-    onNavigateTab: (String) -> Unit,
-    incrementMessageCount: () -> Unit
+    onOpenConversations: () -> Unit,
+    onOpenEvolution: () -> Unit,
+    viewModel: ChatViewModel = koinViewModel(),
+    adManager: RewardedAdManager = koinInject(),
+    characterStore: CharacterPreferenceStore = koinInject(),
 ) {
-    var messages by remember {
-        mutableStateOf<List<ChatMessage>>(
-            listOf(
-                ChatMessage.Text(
-                    id = "1",
-                    text = "안녕하세요! 저는 CashAI 비서예요 🤖\n무엇이든 물어보세요. 대화할수록 포인트도 쌓여요!",
-                    isUser = false
-                )
-            )
-        )
-    }
-    var inputValue by rememberSaveable { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    var chatIdle by remember { mutableStateOf(true) }
-    var showMissionReward by remember { mutableStateOf(false) }
-    var showRewardAdModal by remember { mutableStateOf(false) }
-    var pendingAIResponse by remember { mutableStateOf("") }
-    var rewardAdCount by remember { mutableIntStateOf(0) }
-    var currentRewardAd by remember { mutableStateOf(rewardAds[0]) }
-    var sentCount by remember { mutableIntStateOf(0) }
-
+    val context = LocalContext.current
+    val characterName by characterStore.name.collectAsStateWithLifecycle(initialValue = "미래")
+    val gateInfo by viewModel.chatStore.gateInfo.collectAsStateWithLifecycle()
+    val items by viewModel.chatStore.items.collectAsStateWithLifecycle()
+    val isStreaming by viewModel.chatStore.isStreaming.collectAsStateWithLifecycle()
+    val gateVisible by viewModel.chatStore.energyGateVisible.collectAsStateWithLifecycle()
+    val hud by viewModel.hudStore.state.collectAsStateWithLifecycle()
+    val attendance by viewModel.attendance.collectAsStateWithLifecycle()
+    val checkInResult by viewModel.checkInResult.collectAsStateWithLifecycle()
+    var input by remember { mutableStateOf("") }
+    var showAttendance by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val suggestions = remember {
-        listOf("오늘 점심 추천해줘", "여행 계획 짜줘", "영어 공부 방법", "다이어트 팁")
-    }
 
-    // --- 플로팅 네비게이션 바 노출 제어 로직 ---
-    var isScrollingUp by remember { mutableStateOf(true) }
-    var previousIndex by remember { mutableIntStateOf(0) }
-    var previousScrollOffset by remember { mutableIntStateOf(0) }
-
-    // 현재 리스트가 스크롤 가능한 상태인지 확인 (아이템이 화면을 꽉 채웠는지)
-    val isScrollable by remember {
+    // 사용자가 위로 스크롤해 과거 메시지를 읽는 중인지 판단(맨 아래 근처면 자동 추적 유지).
+    val isAtBottom by remember {
         derivedStateOf {
-            listState.layoutInfo.visibleItemsInfo.size < listState.layoutInfo.totalItemsCount ||
-            listState.canScrollBackward || listState.canScrollForward
+            val info = listState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()
+            last == null || last.index >= info.totalItemsCount - 1
         }
     }
 
-    // 스크롤 방향 감지
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) ->
-                if (index > previousIndex) {
-                    isScrollingUp = false
-                } else if (index < previousIndex) {
-                    isScrollingUp = true
-                } else {
-                    if (offset > previousScrollOffset + 10) {
-                        isScrollingUp = false
-                    } else if (offset < previousScrollOffset - 10) {
-                        isScrollingUp = true
-                    }
-                }
-                previousIndex = index
-                previousScrollOffset = offset
-            }
+    // 새 메시지가 추가되면 맨 아래로 스크롤. 단, 사용자가 과거 메시지를 보려고 위로 올린 경우
+    // 강제로 끌어내리지 않는다. (내가 방금 보낸 메시지는 항상 보이도록 예외 처리)
+    LaunchedEffect(items.size) {
+        if (items.isEmpty()) return@LaunchedEffect
+        val sentByMe = items.lastOrNull() is ChatItem.UserMessage
+        if (!sentByMe && !isAtBottom) return@LaunchedEffect
+        if (isStreaming) listState.scrollToItem(items.lastIndex)
+        else listState.animateScrollToItem(items.lastIndex)
+    }
+    // 스트리밍 중 토큰으로 본문이 바뀔 때는, 사용자가 위로 올려둔 경우 강제 스크롤하지 않는다.
+    // 길이가 아니라 텍스트 내용을 키로 관찰한다(같은 길이로 내용만 바뀌는 경우도 추적).
+    // animateScrollToItem 을 매번 재시작하면 jank 가 생기므로 즉시 스크롤로 따라간다.
+    val lastAssistantText = (items.lastOrNull() as? ChatItem.AssistantMessage)?.text
+    LaunchedEffect(lastAssistantText) {
+        if (items.isEmpty() || !isStreaming || !isAtBottom) return@LaunchedEffect
+        listState.scrollToItem(items.lastIndex)
     }
 
-    LaunchedEffect(messages.size, isLoading) {
-        if (messages.isNotEmpty()) {
-            delay(100)
-            listState.animateScrollToItem(messages.lastIndex + if (isLoading) 1 else 0)
-            // 새 메시지가 추가될 때 스크롤이 끝에 도달하면 잠시 네비바를 숨김 (자연스러운 연출)
-            if (isScrollable) isScrollingUp = false
-        }
-    }
-
-    LaunchedEffect(messageCount) {
-        if (messageCount > 0 && messageCount % 10 == 0) {
-            showMissionReward = true
-        }
-    }
-
-    suspend fun appendAiWithAd(text: String, response: String) {
-        delay(2000)
-        messages = messages + ChatMessage.Text(
-            id = "${System.currentTimeMillis()}-ai",
-            text = response,
-            isUser = false
-        )
-        isLoading = false
-        delay(400)
-        messages = messages + ChatMessage.InlineAd(
-            id = "${System.currentTimeMillis()}-ad",
-            ad = matchAd(text)
-        )
-    }
-
-    fun submitMessage(override: String? = null) {
-        val text = (override ?: inputValue).trim()
-        if (text.isEmpty() || isLoading) return
-
-        chatIdle = false
-        sentCount += 1
-        messages = messages + ChatMessage.Text(
-            id = System.currentTimeMillis().toString(),
-            text = text,
-            isUser = true
-        )
-        inputValue = ""
-        isLoading = true
-        incrementMessageCount()
-
-        val isRewardTurn = sentCount % 3 == 0
-        if (isRewardTurn) {
-            pendingAIResponse = generateAiResponse(text)
-        }
-
-        scope.launch {
-            if (isRewardTurn) {
-                delay(1800)
-                isLoading = false
-                messages = messages + ChatMessage.RewardPrompt(id = "${System.currentTimeMillis()}-reward")
-            } else {
-                appendAiWithAd(text, generateAiResponse(text))
-            }
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // 상단 바
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                IconButton(onClick = {}) {
-                    Icon(Icons.Default.Menu, contentDescription = "menu")
-                }
-                Text("CashAI 비서", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFFFF6B00))
-                        .clickable { onNavigateTab("shop") }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = "🪙 ${points} P",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            // 메시지 목록
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                items(messages, key = { it.id }) { message ->
-                    when (message) {
-                        is ChatMessage.Text -> TextBubble(message = message)
-                        is ChatMessage.InlineAd -> InlineAdCard(ad = message.ad)
-                        is ChatMessage.RewardPrompt -> RewardPromptCard(
-                            onWatchAd = {
-                                currentRewardAd = rewardAds[rewardAdCount % rewardAds.size]
-                                showRewardAdModal = true
-                            }
-                        )
-                    }
-                }
-                if (isLoading) {
-                    item { LoadingBubble() }
-                }
-            }
-
-            // 하단 입력 영역
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = inputValue,
-                    onValueChange = { inputValue = it },
-                    placeholder = { Text("메시지를 입력하세요...") },
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    shape = RoundedCornerShape(999.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = { submitMessage() },
-                    enabled = inputValue.isNotBlank() && !isLoading,
-                    shape = CircleShape,
-                    modifier = Modifier.size(48.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "send")
-                }
-            }
-        }
-
-        // --- 채팅 중 나타나는 플로팅 네비게이션 바 ---
-        // 조건: 아이들 상태가 아니어야 하며 (대화 중), (스크롤이 불가능한 상태이거나 OR 위로 스크롤 중이어야 함)
-        AnimatedVisibility(
-            visible = !chatIdle && (!isScrollable || isScrollingUp),
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 80.dp)
+    Column(Modifier.fillMaxSize()) {
+        // ── 슬림 톱바
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            IconButton(onClick = onOpenConversations) {
+                Icon(Icons.Filled.Forum, contentDescription = "대화 목록")
+            }
             Surface(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp)
-                    .clip(RoundedCornerShape(32.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(32.dp)),
-                color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 8.dp
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IdleNavItem(icon = Icons.AutoMirrored.Filled.Chat, label = "채팅", active = true, onClick = {})
-                    Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.Gray.copy(alpha = 0.2f)))
-                    IdleNavItem(icon = Icons.Default.CardGiftcard, label = "리워드", active = false, onClick = { onNavigateTab("rewards") })
-                    IdleNavItem(icon = Icons.Default.Store, label = "상점", active = false, onClick = { onNavigateTab("shop") })
-                    IdleNavItem(icon = Icons.Default.Person, label = "MY", active = false, onClick = { onNavigateTab("mypage") })
-                }
-            }
-        }
-
-        // 대화 시작 전 오버레이
-        if (chatIdle) {
-            IdleOverlay(
-                points = points,
-                inputValue = inputValue,
-                onInputChange = { inputValue = it },
-                onSubmit = { submitMessage() },
-                onSuggestionClick = { submitMessage(it) },
-                onNavigateTab = onNavigateTab,
-                suggestions = suggestions
-            )
-        }
-
-        // 리워드 광고 모달
-        if (showRewardAdModal) {
-            RewardAdModal(
-                ad = currentRewardAd,
-                onClose = {
-                    showRewardAdModal = false
-                    scope.launch {
-                        delay(300)
-                        messages = messages + ChatMessage.Text(
-                            id = "${System.currentTimeMillis()}-ai",
-                            text = pendingAIResponse,
-                            isUser = false
-                        )
-                    }
-                },
-                onComplete = {
-                    addPoints(30)
-                    rewardAdCount += 1
-                    showRewardAdModal = false
-                    scope.launch {
-                        delay(300)
-                        messages = messages + ChatMessage.Text(
-                            id = "${System.currentTimeMillis()}-ai",
-                            text = pendingAIResponse,
-                            isUser = false
-                        )
-                    }
-                }
-            )
-        }
-    }
-}
-
-/** 사용자/AI 텍스트 메시지 말풍선. isUser에 따라 오른쪽/왼쪽 정렬, 색상 구분 */
-@Composable
-private fun TextBubble(message: ChatMessage.Text) {
-    val scale = remember { Animatable(0.9f) }
-    val alpha = remember { Animatable(0f) }
-
-    LaunchedEffect(Unit) {
-        launch {
-            scale.animateTo(
-                targetValue = 1f,
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                    stiffness = Spring.StiffnessLow
-                )
-            )
-        }
-        launch {
-            alpha.animateTo(1f, animationSpec = tween(300))
-        }
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 4.dp)
-            .graphicsLayer {
-                scaleX = scale.value
-                scaleY = scale.value
-                this.alpha = alpha.value
-            },
-        horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
-        verticalAlignment = Alignment.Top
-    ) {
-        if (!message.isUser) {
-            Box(
-                modifier = Modifier
-                    .padding(end = 8.dp, top = 2.dp)
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF5C6BFA))
-                    .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(14.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AutoAwesome,
-                    contentDescription = "AI",
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                // 탭 시 통통 반응 후 진화 화면 이동 (스펙 §6.3)
+                CharacterAvatar(
+                    level = hud.level,
+                    energyRatio = if (hud.maxEnergy > 0) hud.energy.toFloat() / hud.maxEnergy else 1f,
+                    modifier = Modifier.padding(6.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    onTap = onOpenEvolution,
                 )
             }
-        }
-        
-        Column(horizontalAlignment = if (message.isUser) Alignment.End else Alignment.Start) {
-            Box(
-                modifier = Modifier
-                    .width(IntrinsicSize.Max)
-                    .fillMaxWidth(0.85f) // Max width constraint
-                    .clip(
-                        if (message.isUser) RoundedCornerShape(18.dp, 2.dp, 18.dp, 18.dp)
-                        else RoundedCornerShape(2.dp, 18.dp, 18.dp, 18.dp)
-                    )
-                    .background(if (message.isUser) Color(0xFF5C6BFA) else MaterialTheme.colorScheme.surface)
-                    .border(
-                        width = 1.dp,
-                        color = if (message.isUser) Color.Transparent else MaterialTheme.colorScheme.outlineVariant,
-                        shape = if (message.isUser) RoundedCornerShape(18.dp, 2.dp, 18.dp, 18.dp)
-                                else RoundedCornerShape(2.dp, 18.dp, 18.dp, 18.dp)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Text(
-                    text = message.text,
-                    color = if (message.isUser) Color.White else MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        lineHeight = 22.sp,
-                        letterSpacing = 0.sp
-                    )
-                )
-            }
-            // Timestamp
-            Text(
-                text = SimpleDateFormat("a h:mm", Locale.getDefault()).format(message.timestamp),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray.copy(alpha = 0.6f),
-                modifier = Modifier.padding(top = 4.dp, start = 2.dp, end = 2.dp)
-            )
-        }
-    }
-}
-
-/** 채팅 흐름 안에 끼워 넣는 맞춤 광고 카드. X 버튼으로 닫기 가능 */
-@Composable
-private fun InlineAdCard(ad: AdInfo) {
-    var dismissed by remember { mutableStateOf(false) }
-    if (dismissed) return
-
-    AnimatedVisibility(
-        visible = !dismissed,
-        enter = fadeIn() + slideInVertically { 50 },
-        exit = fadeOut()
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .padding(vertical = 4.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(ad.bg)),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color.Black.copy(alpha = 0.05f)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Column {
-                // Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Column(Modifier.clickable(onClick = onOpenEvolution)) {
+                Text(characterName, style = MaterialTheme.typography.titleSmall)
+                if (hud.isLoaded) {
                     Text(
-                        "💡 맞춤 광고 · ${ad.category}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.Black.copy(alpha = 0.4f),
-                        fontWeight = FontWeight.Medium
-                    )
-                    IconButton(onClick = { dismissed = true }, modifier = Modifier.size(20.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "dismiss", tint = Color.Black.copy(alpha = 0.3f))
-                    }
-                }
-
-                // Content
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color(ad.accent).copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(ad.emoji, style = MaterialTheme.typography.headlineSmall)
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(ad.brand, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            ad.tagline,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
-                        )
-                    }
-                }
-
-                // CTA Button
-                Box(modifier = Modifier.padding(14.dp)) {
-                    Button(
-                        onClick = {},
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(ad.accent),
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
-                    ) {
-                        Text("${ad.cta} →", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** "광고 보고 바로 답변 받기" 카드. 클릭 시 리워드 광고 모달 오픈 */
-@Composable
-private fun RewardPromptCard(onWatchAd: () -> Unit) {
-    AnimatedVisibility(
-        visible = true,
-        enter = fadeIn() + slideInVertically { 50 }
-    ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .padding(vertical = 4.dp),
-            shape = RoundedCornerShape(20.dp, 2.dp, 20.dp, 20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x335C6BFA)),
-            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🤔", style = MaterialTheme.typography.titleMedium)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("AI가 생각을 오래하네요...", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "복잡한 질문이라 분석에 시간이 걸리고 있어요.\n짧은 광고를 보고 오시면 바로 답변 드릴게요! 🎁",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 20.sp
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                Button(
-                    onClick = onWatchAd,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6B00)),
-                    shape = RoundedCornerShape(14.dp),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
-                ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("광고 보고 바로 답변 받기", fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(
-                        color = Color.White.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(99.dp)
-                    ) {
-                        Text(
-                            "+30P",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** AI 답변 대기 중일 때 보여주는 "답변 생성 중..." 말풍선 */
-@Composable
-private fun LoadingBubble() {
-    Row(
-        verticalAlignment = Alignment.Top,
-        modifier = Modifier.padding(bottom = 4.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(end = 8.dp, top = 2.dp)
-                .size(36.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(Color(0xFF5C6BFA)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.AutoAwesome, contentDescription = "AI", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
-        }
-        
-        Card(
-            shape = RoundedCornerShape(2.dp, 18.dp, 18.dp, 18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                // Simple dot pulsing animation
-                val dotAlpha = remember { Animatable(0.3f) }
-                LaunchedEffect(Unit) {
-                    dotAlpha.animateTo(
-                        targetValue = 1f,
-                        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                            animation = tween(600),
-                            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-                        )
+                        "Lv.${hud.level}", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                
-                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF5C6BFA).copy(alpha = dotAlpha.value)))
-                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF5C6BFA).copy(alpha = dotAlpha.value)).graphicsLayer { translationY = -2f })
-                Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF5C6BFA).copy(alpha = dotAlpha.value)))
             }
-        }
-    }
-}
-
-/** 채팅 시작 전 첫 화면: 그라데이션 배경, 입력창, 추천 문구, 하단 탭 미리보기 */
-@Composable
-private fun IdleOverlay(
-    points: Int,
-    inputValue: String,
-    onInputChange: (String) -> Unit,
-    onSubmit: () -> Unit,
-    onSuggestionClick: (String) -> Unit,
-    onNavigateTab: (String) -> Unit,
-    suggestions: List<String>
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    val isDark = colorScheme.surface.luminance() < 0.5f
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.linearGradient(
-                    colors = if (isDark)
-                        listOf(Color(0xFF13152E), Color(0xFF181520), Color(0xFF1E1512))
-                    else
-                        listOf(Color(0xFFEEF0FF), Color(0xFFF8F4FF), Color(0xFFFFF4EE)),
-                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                    end = androidx.compose.ui.geometry.Offset(1000f, 1000f)
-                )
-            )
-    ) {
-        // Points Pill
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 24.dp, end = 20.dp)
-                .clip(RoundedCornerShape(999.dp))
-                .background(Color(0xFFFF6B00))
-                .clickable { onNavigateTab("shop") }
-        ) {
-            Text(
-                "🪙 ${points} P",
-                color = Color.White,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.labelMedium
-            )
-        }
-
-        // Center Content
-        Column(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Floating Logo
-            val offsetY = remember { Animatable(0f) }
-            LaunchedEffect(Unit) {
-                offsetY.animateTo(
-                    targetValue = -10f,
-                    animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-                        animation = tween(2000, easing = androidx.compose.animation.core.EaseInOutSine),
-                        repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
-                    )
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .graphicsLayer { translationY = offsetY.value }
-                    .size(88.dp)
-                    .clip(RoundedCornerShape(32.dp))
-                    .background(Color(0xFF5C6BFA)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AutoAwesome, 
-                    contentDescription = null, 
-                    tint = Color.White, 
-                    modifier = Modifier.size(44.dp)
-                )
-            }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            Text(
-                "CashAI 비서",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.ExtraBold,
-                color = colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "궁금한 것은 무엇이든 물어보세요.\n대화할수록 포인트가 쌓여요!",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                lineHeight = 24.sp
-            )
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            // Input Box
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(colorScheme.surface.copy(alpha = 0.9f))
-                    .border(1.dp, colorScheme.outlineVariant, RoundedCornerShape(28.dp))
-                    .padding(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = inputValue,
-                    onValueChange = onInputChange,
-                    placeholder = { Text("질문을 입력해보세요...", color = Color.Gray.copy(alpha = 0.5f)) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 8.dp),
-                    maxLines = 1,
-                    colors = androidx.compose.material3.TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    )
-                )
-                Button(
-                    onClick = onSubmit,
-                    enabled = inputValue.isNotBlank(),
-                    shape = RoundedCornerShape(22.dp),
-                    modifier = Modifier.size(56.dp),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF5C6BFA),
-                        disabledContainerColor = Color(0xFF5C6BFA).copy(alpha = 0.3f)
-                    )
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, tint = Color.White)
+            Spacer(Modifier.weight(1f))
+            if (attendance != null) {
+                IconButton(onClick = { showAttendance = true }) {
+                    Icon(Icons.Filled.CalendarMonth, contentDescription = "출석 캘린더")
                 }
             }
-            
-            Spacer(modifier = Modifier.height(20.dp))
-            
-            // Suggestion Chips
-            Row(
-                modifier = Modifier.fillMaxWidth(), 
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Just showing first 3 for better layout
-                suggestions.take(3).forEach { suggestion ->
-                    Surface(
-                        onClick = { onSuggestionClick(suggestion) },
-                        shape = RoundedCornerShape(20.dp),
-                        color = colorScheme.surfaceVariant,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.outlineVariant),
-                        modifier = Modifier.padding(4.dp)
-                    ) {
-                        Text(
-                            text = suggestion,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                        )
-                    }
+            Box {
+                var showMenu by remember { mutableStateOf(false) }
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "더보기")
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("대화 내보내기") },
+                        enabled = items.isNotEmpty(),
+                        onClick = {
+                            showMenu = false
+                            shareConversation(context, items, characterName)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("공유 링크 만들기 (준비 중)") },
+                        enabled = FeatureFlags.SHARE_LINK,
+                        onClick = { showMenu = false },
+                    )
                 }
             }
-        }
-
-        // Bottom Nav (Static Preview)
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp)
-                .clip(RoundedCornerShape(32.dp))
-                .background(colorScheme.surface.copy(alpha = 0.92f))
-                .border(1.dp, colorScheme.outlineVariant, RoundedCornerShape(32.dp))
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            IdleNavItem(icon = Icons.AutoMirrored.Filled.Chat, label = "채팅", active = true, onClick = {})
-            Box(modifier = Modifier.width(1.dp).height(24.dp).background(Color.Gray.copy(alpha = 0.2f)).align(Alignment.CenterVertically))
-            IdleNavItem(icon = Icons.Default.CardGiftcard, label = "리워드", active = false, onClick = { onNavigateTab("rewards") })
-            IdleNavItem(icon = Icons.Default.Store, label = "상점", active = false, onClick = { onNavigateTab("shop") })
-            IdleNavItem(icon = Icons.Default.Person, label = "MY", active = false, onClick = { onNavigateTab("mypage") })
-        }
-    }
-}
-
-/** IdleOverlay 하단의 탭 버튼 하나 (채팅/리워드/상점/MY) */
-@Composable
-private fun IdleNavItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    active: Boolean,
-    onClick: () -> Unit
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable(onClick = onClick)) {
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(if (active) Color(0xFF5C6BFA) else Color.Transparent)
-                .size(48.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            color = if (active) Color(0xFF5C6BFA) else MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
-        )
-    }
-}
-
-/** 리워드 광고 풀스크린 모달. 일정 시간 후 건너뛰기/시청 완료 후 포인트 지급 + AI 답변 표시 */
-@Composable
-private fun RewardAdModal(
-    ad: AdInfo,
-    onComplete: () -> Unit,
-    onClose: () -> Unit
-) {
-    var progress by remember { mutableFloatStateOf(0f) }
-    var canSkip by remember { mutableStateOf(false) }
-    var phaseComplete by remember { mutableStateOf(false) }
-    val duration = 5000L
-
-    LaunchedEffect(Unit) {
-        val startedAt = System.currentTimeMillis()
-        while (!phaseComplete) {
-            val elapsed = System.currentTimeMillis() - startedAt
-            progress = (elapsed / duration.toFloat()).coerceIn(0f, 1f)
-            if (elapsed >= 3000L) canSkip = true
-            if (elapsed >= duration) phaseComplete = true
-            delay(16) // ~60fps
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.95f))
-    ) {
-        // Top Bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 48.dp, start = 16.dp, end = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("리워드 광고", color = Color.White.copy(alpha = 0.5f), style = MaterialTheme.typography.labelMedium)
-            
-            if (canSkip && !phaseComplete) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(99.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(99.dp))
-                        .clickable(onClick = onClose)
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text("건너뛰기", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = !phaseComplete,
-            enter = scaleIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.Center)
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
-            ) {
-                // Ad Creative
-                Card(
-                    shape = RoundedCornerShape(32.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(ad.bg)),
-                    modifier = Modifier.fillMaxWidth().height(400.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .background(Color(ad.accent).copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(ad.emoji, style = MaterialTheme.typography.displayLarge)
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text(
-                                    ad.brand, 
-                                    color = Color(ad.accent), 
-                                    fontWeight = FontWeight.Black,
-                                    style = MaterialTheme.typography.headlineMedium
-                                )
-                            }
-                        }
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                ad.tagline, 
-                                textAlign = TextAlign.Center, 
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1F2937)
+            // 포인트 잔액 API 부재(BE 의존성) — points가 null이면 칩 숨김
+            hud.points?.let { StatChip("🪙", "%,d".format(it)) }
+            if (hud.isLoaded) {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    StatChip("⚡", "${hud.energy}/${hud.maxEnergy}", warning = hud.energy == 0)
+                    EnergyGauge(hud.energy, hud.maxEnergy, Modifier.width(56.dp))
+                    if (FeatureFlags.ENERGY_RECOVERY) {
+                        hud.nextRecoverAt?.let { iso ->
+                            RecoveryCountdown(
+                                nextRecoverAtIso = iso,
+                                onFinished = { viewModel.refreshEnergy() },
                             )
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Button(
-                                onClick = {},
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(ad.accent)),
-                                shape = RoundedCornerShape(999.dp),
-                                modifier = Modifier.fillMaxWidth().height(50.dp)
-                            ) {
-                                Text(ad.cta, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                            }
                         }
                     }
                 }
-                
-                Spacer(modifier = Modifier.height(32.dp))
-                
-                // Progress
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+
+        // ── 메시지 리스트
+        Box(Modifier.weight(1f)) {
+            if (items.isEmpty()) {
+                Column(
+                    Modifier.fillMaxSize().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                 ) {
-                    Text("광고 시청 중...", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
-                    Text("${((1f - progress) * (duration / 1000)).toInt() + 1}초 남음", color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(Color.White.copy(alpha = 0.2f))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(progress)
-                            .fillMaxSize()
-                            .background(Color(0xFFFF6B00))
+                    CharacterAvatar(
+                        level = hud.level,
+                        energyRatio = if (hud.maxEnergy > 0) hud.energy.toFloat() / hud.maxEnergy else 1f,
+                        style = MaterialTheme.typography.displayMedium,
                     )
+                    Spacer(Modifier.height(8.dp))
+                    Text("안녕! 뭐든 물어봐요", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(16.dp))
+                    suggestedQuestions.forEach { question ->
+                        SuggestionChip(
+                            onClick = { viewModel.send(question) },
+                            label = { Text(question) },
+                            modifier = Modifier.padding(vertical = 2.dp),
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(items, key = { it.id }) { item ->
+                        if (item is ChatItem.AssistantMessage && item.gated && !item.isStreaming) {
+                            AdGateCard(
+                                fullText = item.text,
+                                teaserChars = gateInfo?.teaserChars ?: 80,
+                                rewardCoin = gateInfo?.rewardCoin ?: 30,
+                                onWatchAd = {
+                                    val activity = context as? Activity ?: return@AdGateCard
+                                    viewModel.startGateUnlock(item.id) { nonce ->
+                                        suspendCancellableCoroutine { continuation ->
+                                            // 보상은 onRewarded(=리워드 적립)에서만 확정한다.
+                                            // 광고를 끝까지 보지 않고 닫으면 unlock 하지 않는다.
+                                            var rewarded = false
+                                            adManager.show(
+                                                activity = activity,
+                                                nonce = nonce,
+                                                onRewarded = { rewarded = true },
+                                                onDismissed = {
+                                                    if (continuation.isActive) continuation.resume(rewarded)
+                                                },
+                                                onNotReady = {
+                                                    if (continuation.isActive) continuation.resume(false)
+                                                },
+                                            )
+                                        }
+                                    }
+                                },
+                            )
+                        } else {
+                            MessageBubble(item)
+                        }
+                        if (item is ChatItem.AssistantMessage && item.isError) {
+                            TextButton(onClick = { viewModel.chatStore.retryLastMessage() }) {
+                                Text("다시 시도")
+                            }
+                        }
+                    }
+                    if (isStreaming && items.lastOrNull() !is ChatItem.AssistantMessage) {
+                        item { TypingIndicator() }
+                    }
                 }
             }
         }
 
-        AnimatedVisibility(
-            visible = phaseComplete,
-            enter = scaleIn() + fadeIn(),
-            modifier = Modifier.align(Alignment.Center)
+        // ── 입력바
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFFF6B00)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.CardGiftcard, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-                Text("시청 완료! 🎉", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("리워드 포인트가 지급되었어요", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyLarge)
-                
-                Spacer(modifier = Modifier.height(32.dp))
-                
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(Color(0xFFFF6B00).copy(alpha = 0.2f))
-                        .border(1.dp, Color(0xFFFF6B00).copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                        .padding(horizontal = 40.dp, vertical = 16.dp)
-                ) {
-                    Text("+30 P", color = Color(0xFFFF6B00), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-                }
-                
-                Spacer(modifier = Modifier.height(40.dp))
-                
-                Button(
-                    onClick = onComplete, 
-                    modifier = Modifier.fillMaxWidth().height(56.dp), 
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF5C6BFA))
-                ) {
-                    Text("AI 답변 확인하기 →", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                placeholder = { Text("메시지를 입력하세요...") },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(24.dp),
+                maxLines = 4,
+            )
+            FilledIconButton(
+                onClick = { viewModel.send(input); input = "" },
+                enabled = input.isNotBlank() && !isStreaming,
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "전송")
+            }
+        }
+    }
+
+    if (gateVisible) {
+        EnergyGateBottomSheet(viewModel = viewModel)
+    }
+
+    checkInResult?.let { result ->
+        CheckInRewardDialog(result = result, onDismiss = { viewModel.dismissCheckIn() })
+    }
+
+    if (showAttendance) {
+        attendance?.let { monthly ->
+            ModalBottomSheet(onDismissRequest = { showAttendance = false }) {
+                AttendanceCalendar(monthly)
             }
         }
     }
 }
 
-/** 사용자 메시지 키워드에 맞는 광고를 adDatabase에서 찾아 반환. 없으면 defaultAd */
-private fun matchAd(userMessage: String): AdInfo {
-    val lower = userMessage.lowercase()
-    return adDatabase.firstOrNull { (keywords, _) ->
-        keywords.any { keyword -> lower.contains(keyword) }
-    }?.second ?: defaultAd
-}
-
-/** 간단한 키워드 매칭으로 AI 답변 문자열 생성 (실제 앱에서는 API 호출로 대체) */
-private fun generateAiResponse(userMessage: String): String {
-    val lower = userMessage.lowercase()
-    return when {
-        listOf("안녕", "hello", "hi", "반가").any { lower.contains(it) } ->
-            "안녕하세요! 😊 저는 CashAI 비서예요. 질문하시면 바로 답변 드릴게요. 대화하면서 포인트도 모아보세요!"
-        listOf("음식", "맛집", "먹", "배달", "메뉴", "점심", "저녁", "밥").any { lower.contains(it) } ->
-            "오늘 뭐 드실지 고민이시군요! 😋 요즘 인기 있는 메뉴는 마라탕, 스시 부리또, 감자탕 등이에요."
-        listOf("여행", "휴가", "비행기", "해외", "여행지").any { lower.contains(it) } ->
-            "여행 계획을 세우고 계시군요! ✈️ 예산과 기간을 알려주시면 맞춤 코스를 추천해 드릴게요!"
-        listOf("운동", "헬스", "다이어트", "건강").any { lower.contains(it) } ->
-            "건강 관리에 관심이 있으시군요! 💪 하루 30분 걷기만 해도 큰 효과가 있어요."
-        else -> {
-            val short = userMessage.take(20)
-            "\"${if (userMessage.length > 20) "$short..." else short}\"에 대해 답변 드릴게요! 🤖 관련 정보를 분석해보면 다양한 관점에서 살펴볼 수 있어요."
+/** 대화 전체를 텍스트로 OS 공유 시트에 전달 (FE 단독). */
+private fun shareConversation(context: android.content.Context, items: List<ChatItem>, characterName: String) {
+    val text = items.joinToString("\n") { item ->
+        when (item) {
+            is ChatItem.UserMessage -> "나: ${item.text}"
+            is ChatItem.AssistantMessage -> "$characterName: ${item.text}"
+            else -> ""
         }
     }
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(android.content.Intent.createChooser(intent, "대화 공유"))
+}
+
+/** 다음 밥 회복까지 카운트다운 (P1-3). 0 도달 시 [onFinished]로 에너지 재조회. */
+@Composable
+private fun RecoveryCountdown(nextRecoverAtIso: String, onFinished: () -> Unit) {
+    var remainText by remember { mutableStateOf("") }
+    LaunchedEffect(nextRecoverAtIso) {
+        // 서버 타임스탬프 포맷이 예상과 다르면 parse 가 던지며 화면이 크래시하므로 방어한다.
+        // java.time 미사용(desugaring 미설정으로 구버전 기기 NoClassDefFoundError 회피) — SimpleDateFormat 사용.
+        val target = runCatching { parseIsoInstantMillis(nextRecoverAtIso) }
+            .getOrElse { return@LaunchedEffect }
+        while (true) {
+            val remainSec = ((target - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
+            remainText = "%d:%02d 후 ⚡회복".format(remainSec / 60, remainSec % 60)
+            if (remainSec == 0L) break
+            delay(1000)
+        }
+        onFinished()
+    }
+    Text(
+        remainText, style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/**
+ * ISO-8601 instant 문자열을 epoch millis로 파싱. (java.time desugaring 미설정 → SimpleDateFormat)
+ * "2026-06-20T12:34:56Z", "...56.789Z", "...+09:00" 형태를 허용한다. 실패 시 예외를 던진다.
+ */
+private fun parseIsoInstantMillis(iso: String): Long {
+    val normalized = iso
+        .replace(Regex("\\.\\d+"), "")                       // 소수 초 제거
+        .replace("Z", "+0000")                                 // UTC 표기 보정
+        .replace(Regex("([+-]\\d{2}):(\\d{2})$"), "$1$2")     // +09:00 -> +0900
+    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", java.util.Locale.US)
+    return fmt.parse(normalized)?.time
+        ?: throw IllegalArgumentException("Unparseable timestamp: $iso")
 }

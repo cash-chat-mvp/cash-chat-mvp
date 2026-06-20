@@ -17,12 +17,18 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nomadclub.cashchat.feature.chat.ChatScreen
+import com.nomadclub.cashchat.feature.chat.ChatViewModel
+import com.nomadclub.cashchat.feature.chat.ConversationListScreen
+import com.nomadclub.cashchat.feature.chat.evolution.EvolutionScreen
 import com.nomadclub.cashchat.feature.mypage.MyPageScreen
+import org.koin.androidx.compose.koinViewModel
 import com.nomadclub.cashchat.feature.rewards.BenefitZoneScreen
 import com.nomadclub.cashchat.feature.settings.SettingsScreen
 import com.nomadclub.cashchat.feature.shop.ShopScreen
 
 private const val ROUTE_SETTINGS = "settings"
+private const val ROUTE_CONVERSATIONS = "chat/conversations"
+private const val ROUTE_EVOLUTION = "evolution"
 
 @Composable
 fun MainScreen(
@@ -38,9 +44,13 @@ fun MainScreen(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    val isChatScreen = currentDestination?.route == MainTab.CHAT.route
-    val isSettingsScreen = currentDestination?.route == ROUTE_SETTINGS
-    val showBottomBar = !isChatScreen && !isSettingsScreen
+    // CHAT 라우트와 대화 목록 라우트가 같은 인스턴스를 공유하도록 MainScreen 레벨에서 획득
+    val chatViewModel: ChatViewModel = koinViewModel()
+
+    // 채팅은 메인 탭이므로 하단 탭바를 노출해 리워드/상점/MY 접근을 유지한다.
+    // 설정·대화목록·진화 화면만 풀스크린(탭바 숨김)으로 처리한다.
+    val fullScreenRoutes = setOf(ROUTE_SETTINGS, ROUTE_CONVERSATIONS, ROUTE_EVOLUTION)
+    val showBottomBar = currentDestination?.route !in fullScreenRoutes
 
     Scaffold(
         bottomBar = {
@@ -76,26 +86,32 @@ fun MainScreen(
         ) {
             composable(MainTab.CHAT.route) {
                 ChatScreen(
-                    points = points,
-                    messageCount = messageCount,
-                    addPoints = addPoints,
-                    onNavigateTab = { route ->
-                        navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    incrementMessageCount = incrementMessageCount
+                    onOpenConversations = { navController.navigate(ROUTE_CONVERSATIONS) },
+                    onOpenEvolution = { navController.navigate(ROUTE_EVOLUTION) },
+                    viewModel = chatViewModel,
                 )
+            }
+            composable(ROUTE_CONVERSATIONS) {
+                ConversationListScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenConversation = { id ->
+                        chatViewModel.openConversation(id)
+                        navController.popBackStack()
+                    },
+                    onNewConversation = {
+                        chatViewModel.chatStore.startNewConversation()
+                        navController.popBackStack()
+                    },
+                )
+            }
+            composable(ROUTE_EVOLUTION) {
+                EvolutionScreen(onClose = { navController.popBackStack() })
             }
             composable(MainTab.REWARDS.route) {
                 BenefitZoneScreen()
             }
             composable(MainTab.SHOP.route) {
-                ShopScreen(points = points, spendPoints = spendPoints)
+                ShopScreen()
             }
             composable(MainTab.MY_PAGE.route) {
                 MyPageScreen(

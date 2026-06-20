@@ -1,7 +1,5 @@
 package com.nomadclub.cashchat.shared.attendance
 
-import com.nomadclub.cashchat.shared.attendance.model.BonusItem
-import com.nomadclub.cashchat.shared.attendance.model.RewardPreview
 import com.nomadclub.cashchat.shared.points.PointsRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -20,17 +18,17 @@ data class AttendanceUiState(
     val checkedDays: List<Int> = emptyList(),
     val currentStreak: Int = 0,
     val todayChecked: Boolean = false,
-    val nextReward: RewardPreview? = null,
+    val nextReward: RewardPreviewDto? = null,
     val isLoading: Boolean = false,
     val isCheckingIn: Boolean = false,
     val errorMessage: String? = null,
 )
 
 /** 출석 성공 토스트/애니메이션용 일회성 이벤트. */
-data class CheckInRewardEvent(val awardedCoin: Long, val bonusItems: List<BonusItem>)
+data class CheckInRewardEvent(val awardedCoin: Long, val bonusItems: List<BonusItemDto>)
 
 class AttendanceStore(
-    private val service: AttendanceApiService,
+    private val api: AttendanceApi,
     private val pointsRepository: PointsRepository,
     private val scope: CoroutineScope,
 ) {
@@ -44,7 +42,7 @@ class AttendanceStore(
         _state.update { it.copy(isLoading = true, errorMessage = null) }
         scope.launch {
             try {
-                val m = service.getMonthly(year, month)
+                val m = api.getMonthly(year, month)
                 _state.update {
                     it.copy(
                         year = m.year, month = m.month, checkedDays = m.checkedDays,
@@ -70,7 +68,7 @@ class AttendanceStore(
         _state.update { it.copy(isCheckingIn = true, errorMessage = null) }
         scope.launch {
             val result = try {
-                service.checkIn()
+                api.checkIn()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -94,7 +92,7 @@ class AttendanceStore(
             // 인자 없이 호출해 서버가 현재 월을 판정하게 한다(이전 _state 의 year/month 는 stale 일 수 있음).
             // best-effort: 실패해도 위 체크인 성공 상태는 유지하고 다음 loadMonthly 에서 보정한다.
             try {
-                val monthly = service.getMonthly()
+                val monthly = api.getMonthly()
                 _state.update { prev ->
                     prev.copy(
                         year = monthly.year,
