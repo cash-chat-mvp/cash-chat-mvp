@@ -69,7 +69,7 @@ flowchart LR
 3. **오퍼 완료** — 사용자가 미션/광고를 완료한다(앱 설치·가입·설문 등).
 4. **서버 포스트백** — TNK가 전환을 확인하면 TNK 서버 → 백엔드로 S2S 포스트백(콜백)을 전송한다.
 5. **검증·적립** — 백엔드가 `md_chk` 서명을 검증하고 → 토큰으로 사용자를 식별한 뒤 → `pay_pnt × 환산비`를 코인으로 멱등 적립하고 → 원장에 기록한 다음 200 ack를 반환한다.
-6. **앱 반영** — 콜백은 비동기이므로 적립이 즉시 화면에 뜨지 않는다. 앱은 잔액 조회 API `GET /api/points/me`로 새로고침해 적립을 반영한다(BE 구현 완료, 프론트 `RemotePointsRepository.refresh()`가 호출). 오퍼월 진입·SDK 연동 자체는 여전히 (계획)이지만, 잔액 반영 경로는 이미 동작한다.
+6. **앱 반영** — 콜백은 비동기이므로 적립이 즉시 화면에 뜨지 않는다. 앱은 잔액 조회 API `GET /api/points/me`로 새로고침해 반영한다. BE 엔드포인트와 프론트 `RemotePointsRepository.refresh()`(API 호출)는 **구현돼 있으나, 현재 이 `refresh()`를 호출하는 FE 트리거가 없다**(화면들은 `balance`를 구독만 함). 따라서 오퍼월 복귀 시 새 적립을 가져오려면 **복귀/on-resume 시점에 `refresh()`를 호출하는 트리거 추가가 (계획) FE 통합 항목으로 필요**하다.
 
 ### 순차 흐름도 (Sequence Diagram)
 
@@ -123,9 +123,9 @@ sequenceDiagram
         end
     end
 
-    Note over User,DB: 4단계 — 앱 반영 (별도 조회)
-    User->>FE: 잔액 새로고침
-    FE->>API: GET /api/points/me
+    Note over User,DB: 4단계 — 앱 반영 (별도 조회 · refresh 트리거는 계획)
+    User->>FE: 화면 복귀 / 잔액 새로고침
+    FE->>API: GET /api/points/me (refresh 트리거 추가 필요)
     API-->>FE: 적립 반영된 잔액
 ```
 
@@ -144,6 +144,7 @@ sequenceDiagram
 ## 5. 범위 외 & 후속 과제
 
 - **프론트엔드 통합** — KMM `shared/` 및 Android/iOS TNK SDK 연동, 오퍼월 화면 (계획).
+- **잔액 새로고침 트리거** — `GET /api/points/me`와 `RemotePointsRepository.refresh()`는 구현됐으나 호출 지점이 없다. 오퍼월 복귀/on-resume 시 `refresh()`를 호출하는 트리거 추가가 필요(현재 화면들은 잔액 구독만).
 - **운영 설정** — dev/prod 콜백 URL 등록, TNK 콘솔 `app-key` 시크릿 주입.
 - **자동 취소/환수(claw-back)** — 현재는 서명 통과 콜백을 원장에 기록만 하고 자동 차감은 하지 않는다. 원장 `status`는 향후 `CANCELED` 등으로 확장 가능.
 - **감사 강화** — TNK가 함께 보내는 `actn_id`·`app_nm` 등 부가 파라미터를 원장에 추가 기록(현재는 필수 4개만 사용).
