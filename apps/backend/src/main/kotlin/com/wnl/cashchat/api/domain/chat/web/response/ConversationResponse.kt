@@ -8,7 +8,7 @@ data class ConversationResponse(
     @field:Schema(description = "Conversation identifier.", example = "7")
     val conversationId: Long,
 
-    @field:Schema(description = "Conversation title.", example = "영어 공부 방법")
+    @field:Schema(description = "Conversation title.", example = "English study tips")
     val title: String,
 
     @field:Schema(description = "Creation timestamp.")

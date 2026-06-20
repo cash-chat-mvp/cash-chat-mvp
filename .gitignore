@@ -53,3 +53,4 @@ node_modules/
 
 # Local git worktrees
 .worktrees/
+.superpowers/

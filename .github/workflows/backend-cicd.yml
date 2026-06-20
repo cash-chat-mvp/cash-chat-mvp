@@ -92,11 +92,23 @@ jobs:
         shell: bash
         env:
           BACKEND_SPRING_PROFILES_ACTIVE: ${{ secrets.BACKEND_SPRING_PROFILES_ACTIVE }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+          APPLE_CLIENT_ID: ${{ secrets.APPLE_CLIENT_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || secrets.IOS_DEVELOPMENT_TEAM_ID }}
+          APPLE_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
+          APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
+          APPLE_REDIRECT_URI: ${{ secrets.APPLE_REDIRECT_URI }}
           APP_SWAGGER_ENABLED: ${{ secrets.APP_SWAGGER_ENABLED }}
+          APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID }}
+          APP_OFFERWALL_TNK_APP_KEY: ${{ secrets.APP_OFFERWALL_TNK_APP_KEY }}
+          APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO: ${{ secrets.APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO }}
+          SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+          SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+          SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          SPRING_DATASOURCE_DRIVER_CLASS_NAME: ${{ secrets.SPRING_DATASOURCE_DRIVER_CLASS_NAME }}
         run: |
           SPRING_PROFILE="${BACKEND_SPRING_PROFILES_ACTIVE}"
           if [ -z "${SPRING_PROFILE}" ]; then
@@ -110,15 +122,34 @@ jobs:
 
           if [ "${SPRING_PROFILE}" = "prod" ]; then
             missing_vars=()
-            if [ -z "${OPENAI_API_KEY}" ]; then missing_vars+=("OPENAI_API_KEY"); fi
+            if [ -z "${SPRING_DATASOURCE_URL}" ]; then missing_vars+=("SPRING_DATASOURCE_URL"); fi
+            if [ -z "${SPRING_DATASOURCE_USERNAME}" ]; then missing_vars+=("SPRING_DATASOURCE_USERNAME"); fi
+            if [ -z "${SPRING_DATASOURCE_PASSWORD}" ]; then missing_vars+=("SPRING_DATASOURCE_PASSWORD"); fi
+            if [ -z "${GEMINI_API_KEY}" ]; then missing_vars+=("GEMINI_API_KEY"); fi
             if [ -z "${GOOGLE_CLIENT_ID}" ]; then missing_vars+=("GOOGLE_CLIENT_ID"); fi
             if [ -z "${GOOGLE_CLIENT_SECRET}" ]; then missing_vars+=("GOOGLE_CLIENT_SECRET"); fi
             if [ -z "${GOOGLE_REDIRECT_URI}" ]; then missing_vars+=("GOOGLE_REDIRECT_URI"); fi
+            if [ -z "${APPLE_CLIENT_ID}" ]; then missing_vars+=("APPLE_CLIENT_ID"); fi
+            if [ -z "${APPLE_TEAM_ID}" ]; then missing_vars+=("APPLE_TEAM_ID"); fi
+            if [ -z "${APPLE_KEY_ID}" ]; then missing_vars+=("APPLE_KEY_ID"); fi
+            if [ -z "${APPLE_PRIVATE_KEY}" ]; then missing_vars+=("APPLE_PRIVATE_KEY"); fi
+            # APPLE_REDIRECT_URI is optional for the native iOS Sign in with Apple flow.
+            if [ -z "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID}" ]; then missing_vars+=("APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID"); fi
 
             if [ "${#missing_vars[@]}" -gt 0 ]; then
               echo "Missing required prod secrets: ${missing_vars[*]}" >&2
               exit 1
             fi
+
+            # 선택 시크릿: 미설정이어도 배포는 진행하되, TNK 오퍼월이 조용히 비활성화되지 않도록 경고로 가시성 확보.
+            if [ -z "${APP_OFFERWALL_TNK_APP_KEY}" ]; then
+              echo "::warning::APP_OFFERWALL_TNK_APP_KEY is not set — TNK offerwall callbacks will be rejected (fail-closed) until configured."
+            fi
+          fi
+
+          DATASOURCE_DRIVER="${SPRING_DATASOURCE_DRIVER_CLASS_NAME}"
+          if [ -z "${DATASOURCE_DRIVER}" ]; then
+            DATASOURCE_DRIVER="com.mysql.cj.jdbc.Driver"
           fi
 
           write_env() {
@@ -138,11 +169,23 @@ jobs:
           {
             write_env "BACKEND_IMAGE" "${{ steps.backend-image.outputs.name }}:latest"
             write_env "SPRING_PROFILES_ACTIVE" "${SPRING_PROFILE}"
-            write_env "OPENAI_API_KEY" "${OPENAI_API_KEY}"
+            write_env "SPRING_DATASOURCE_URL" "${SPRING_DATASOURCE_URL}"
+            write_env "SPRING_DATASOURCE_USERNAME" "${SPRING_DATASOURCE_USERNAME}"
+            write_env "SPRING_DATASOURCE_PASSWORD" "${SPRING_DATASOURCE_PASSWORD}"
+            write_env "SPRING_DATASOURCE_DRIVER_CLASS_NAME" "${DATASOURCE_DRIVER}"
+            write_env "GEMINI_API_KEY" "${GEMINI_API_KEY}"
             write_env "GOOGLE_CLIENT_ID" "${GOOGLE_CLIENT_ID}"
             write_env "GOOGLE_CLIENT_SECRET" "${GOOGLE_CLIENT_SECRET}"
             write_env "GOOGLE_REDIRECT_URI" "${GOOGLE_REDIRECT_URI}"
+            write_env "APPLE_CLIENT_ID" "${APPLE_CLIENT_ID}"
+            write_env "APPLE_TEAM_ID" "${APPLE_TEAM_ID}"
+            write_env "APPLE_KEY_ID" "${APPLE_KEY_ID}"
+            write_env "APPLE_PRIVATE_KEY" "${APPLE_PRIVATE_KEY}"
+            write_env "APPLE_REDIRECT_URI" "${APPLE_REDIRECT_URI}"
             write_env "APP_SWAGGER_ENABLED" "${SWAGGER_ENABLED}"
+            write_env "APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID" "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID}"
+            write_env "APP_OFFERWALL_TNK_APP_KEY" "${APP_OFFERWALL_TNK_APP_KEY}"
+            write_env "APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO" "${APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO}"
           } > infra/deploy/backend/.deploy.env
 
       - name: Upload compose files to server
@@ -165,6 +208,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           envs: GHCR_TOKEN,GHCR_USERNAME
+          command_timeout: 30m
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"

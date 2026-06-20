@@ -12,8 +12,9 @@ import com.wnl.cashchat.api.domain.chat.persistence.repository.ConversationRepos
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessage
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
-import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
-import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.chat.service.routing.ChatModelRouter
+import com.wnl.cashchat.api.domain.chat.service.routing.ModelTier
+import com.wnl.cashchat.api.domain.energy.exception.InsufficientEnergyException
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
@@ -24,6 +25,7 @@ import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -41,8 +43,8 @@ class ChatServiceTest : FunSpec() {
     private lateinit var conversationRepository: ConversationRepository
     private lateinit var chatMessageRepository: ChatMessageRepository
     private lateinit var userRepository: UserRepository
-    private lateinit var userPointService: UserPointService
     private lateinit var llmProvider: LlmProvider
+    private lateinit var chatModelRouter: ChatModelRouter
     private lateinit var chatService: ChatService
     private lateinit var savedMessages: MutableList<SavedMessageSnapshot>
     private lateinit var savedMessageEntities: MutableMap<Long, ChatMessage>
@@ -53,8 +55,8 @@ class ChatServiceTest : FunSpec() {
             conversationRepository = mock()
             chatMessageRepository = mock()
             userRepository = mock()
-            userPointService = mock()
             llmProvider = mock()
+            chatModelRouter = mock()
             savedMessages = mutableListOf()
             savedMessageEntities = mutableMapOf()
             nextMessageId = 100L
@@ -62,8 +64,8 @@ class ChatServiceTest : FunSpec() {
                 conversationRepository = conversationRepository,
                 chatMessageRepository = chatMessageRepository,
                 userRepository = userRepository,
-                userPointService = userPointService,
                 llmProvider = llmProvider,
+                chatModelRouter = chatModelRouter,
                 transactionManager = NoOpTransactionManager(),
             )
         }
@@ -156,17 +158,30 @@ class ChatServiceTest : FunSpec() {
             }
         }
 
-        test("stream rejects insufficient point balance before persisting messages") {
+        test("stream calls chatModelRouter.routeAndConsume on the normal path") {
+            val conversation = conversation(ownerId = 1L)
+
+            stubConversation(conversation)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.just("ok"))
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .expectNext("ok")
+                .verifyComplete()
+
+            verify(chatModelRouter).routeAndConsume(eq(1L), any())
+        }
+
+        test("stream does not call llmProvider when energy gate (InsufficientEnergyException) triggers") {
             val conversation = conversation(ownerId = 1L)
 
             whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
-            whenever(userPointService.hasEnoughBalance(1L)).thenReturn(false)
+            whenever(chatModelRouter.routeAndConsume(eq(1L), any()))
+                .thenThrow(InsufficientEnergyException())
 
-            shouldThrow<InsufficientPointsException> {
+            shouldThrow<InsufficientEnergyException> {
                 chatService.stream(userId = 1L, conversationId = 1L, content = "hello")
             }
 
-            verify(chatMessageRepository, never()).save(any())
             verify(llmProvider, never()).stream(any())
         }
 
@@ -204,7 +219,7 @@ class ChatServiceTest : FunSpec() {
             )
 
             whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
-            whenever(userPointService.hasEnoughBalance(1L)).thenReturn(true)
+            whenever(chatModelRouter.routeAndConsume(eq(1L), any())).thenReturn(ModelTier.NANO)
             whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(history)
             stubMessagePersistence()
             whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi there"))
@@ -351,7 +366,7 @@ class ChatServiceTest : FunSpec() {
 
     private fun stubConversation(conversation: Conversation) {
         whenever(conversationRepository.findByIdAndUserId(conversation.id, conversation.user.id)).thenReturn(conversation)
-        whenever(userPointService.hasEnoughBalance(conversation.user.id)).thenReturn(true)
+        whenever(chatModelRouter.routeAndConsume(eq(conversation.user.id), any())).thenReturn(ModelTier.NANO)
         whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.id)).thenReturn(emptyList())
         stubMessagePersistence()
     }

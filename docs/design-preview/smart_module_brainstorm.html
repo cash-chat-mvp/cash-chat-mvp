@@ -1,0 +1,347 @@
+
+<h2 class="sr-only">Cash Chat 스마트 채팅 모듈 아이디어 보드 — 주식, 가계부, 생활밀착형 기능들을 레벨 잠금 구조로 정리한 인터랙티브 카드</h2>
+
+<div style="padding: 1rem 0;">
+
+  <div style="display: flex; gap: 8px; margin-bottom: 1.5rem; flex-wrap: wrap;">
+    <button onclick="filterCards('all')" id="btn-all" style="background: var(--color-text-primary); color: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary); padding: 6px 16px; border-radius: 20px; font-size: 13px; cursor: pointer;">전체</button>
+    <button onclick="filterCards('stock')" id="btn-stock" style="padding: 6px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary);">주식</button>
+    <button onclick="filterCards('budget')" id="btn-budget" style="padding: 6px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary);">가계부</button>
+    <button onclick="filterCards('life')" id="btn-life" style="padding: 6px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary);">생활밀착</button>
+    <button onclick="filterCards('premium')" id="btn-premium" style="padding: 6px 16px; border-radius: 20px; font-size: 13px; cursor: pointer; border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary);">프리미엄 전용</button>
+  </div>
+
+  <div id="card-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
+  </div>
+</div>
+
+<script>
+const cards = [
+  {
+    id: 'portfolio',
+    cat: 'stock',
+    icon: 'ti-briefcase',
+    title: '내 포트폴리오',
+    desc: '종목·수량·평단가 입력 → 실시간 평가손익 계산',
+    level: 'Lv 2',
+    levelColor: '#178F5B',
+    levelBg: '#EAF3DE',
+    difficulty: '중',
+    api: 'KIS API / 네이버금융',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'briefing',
+    cat: 'stock',
+    icon: 'ti-news',
+    title: '오늘의 증시 브리핑',
+    desc: '코스피·코스닥 흐름 + 주요 이슈 3개 캐릭터 말투로',
+    level: '무료',
+    levelColor: '#5F5E5A',
+    levelBg: '#F1EFE8',
+    difficulty: '하',
+    api: '네이버금융 RSS',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'weekly-report',
+    cat: 'stock',
+    icon: 'ti-chart-line',
+    title: '주간 예측 리포트',
+    desc: '월요일 내 예측 입력 → 금요일 실제와 비교 분석',
+    level: 'Lv 3',
+    levelColor: '#185FA5',
+    levelBg: '#E6F1FB',
+    difficulty: '고',
+    api: 'LLM + 시세 API',
+    phase: 'Phase 2'
+  },
+  {
+    id: 'ai-opinion',
+    cat: 'stock',
+    icon: 'ti-brain',
+    title: 'AI 주식 의견 분석',
+    desc: '"삼성 살까?" 내 생각 입력 → 현재 시장흐름과 대조',
+    level: 'Lv 3',
+    levelColor: '#185FA5',
+    levelBg: '#E6F1FB',
+    difficulty: '중',
+    api: 'LLM + 뉴스 컨텍스트',
+    phase: 'Phase 2'
+  },
+  {
+    id: 'stock-diary',
+    cat: 'stock',
+    icon: 'ti-notebook',
+    title: '투자 일기',
+    desc: '매수·매도 이유 기록 → AI가 나의 투자 패턴 분석',
+    level: 'Lv 4',
+    levelColor: '#993C1D',
+    levelBg: '#FAECE7',
+    difficulty: '중',
+    api: 'LLM 분석',
+    phase: 'Phase 2'
+  },
+  {
+    id: 'realtime-alert',
+    cat: 'stock',
+    icon: 'ti-bell-ringing',
+    title: '실시간 시세 알림',
+    desc: '목표가 도달 시 푸시 알림 발송',
+    level: 'Lv 4',
+    levelColor: '#993C1D',
+    levelBg: '#FAECE7',
+    difficulty: '고',
+    api: 'KIS API WebSocket',
+    phase: 'Phase 3'
+  },
+  {
+    id: 'chat-budget',
+    cat: 'budget',
+    icon: 'ti-message-circle',
+    title: '채팅 가계부',
+    desc: '"점심 파스타 15000원" 입력 → AI 자동 분류 저장',
+    level: '무료',
+    levelColor: '#5F5E5A',
+    levelBg: '#F1EFE8',
+    difficulty: '하',
+    api: 'LLM 파싱',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'ocr',
+    cat: 'budget',
+    icon: 'ti-camera',
+    title: '영수증 OCR',
+    desc: '영수증 사진 → 아이템별 자동 가계부 등록',
+    level: 'Lv 2',
+    levelColor: '#178F5B',
+    levelBg: '#EAF3DE',
+    difficulty: '중',
+    api: 'Google ML Kit (무료)',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'monthly-report',
+    cat: 'budget',
+    icon: 'ti-chart-pie',
+    title: '월간 지출 리포트',
+    desc: '카테고리별 지출 비율·트렌드·AI 절약 팁',
+    level: '무료',
+    levelColor: '#5F5E5A',
+    levelBg: '#F1EFE8',
+    difficulty: '하',
+    api: '내부 DB',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'subscription',
+    cat: 'budget',
+    icon: 'ti-repeat',
+    title: '구독 서비스 관리',
+    desc: '넷플릭스·유튜브 등 자동결제 한눈에 정리',
+    level: 'Lv 2',
+    levelColor: '#178F5B',
+    levelBg: '#EAF3DE',
+    difficulty: '하',
+    api: '수동 입력 or 오픈뱅킹',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'savings-goal',
+    cat: 'budget',
+    icon: 'ti-target',
+    title: '저축 목표 챌린지',
+    desc: '"3개월 100만원" 설정 → 주간 체크인·EXP 보상',
+    level: 'Lv 3',
+    levelColor: '#185FA5',
+    levelBg: '#E6F1FB',
+    difficulty: '중',
+    api: '내부 DB + 캐릭터 연동',
+    phase: 'Phase 2'
+  },
+  {
+    id: 'open-banking',
+    cat: 'budget',
+    icon: 'ti-building-bank',
+    title: '오픈뱅킹 자동 연동',
+    desc: '계좌 입출금 자동으로 가져와 가계부 자동화',
+    level: 'Lv 5/구독',
+    levelColor: '#533AB7',
+    levelBg: '#EEEDFE',
+    difficulty: '최고',
+    api: '금융결제원 오픈뱅킹',
+    phase: 'Phase 3'
+  },
+  {
+    id: 'exchange-rate',
+    cat: 'life',
+    icon: 'ti-currency-dollar',
+    title: '환율 계산기',
+    desc: '"일본여행 30만엔 한국돈으로?" 즉시 답변',
+    level: '무료',
+    levelColor: '#5F5E5A',
+    levelBg: '#F1EFE8',
+    difficulty: '최하',
+    api: '한국은행 Open API',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'deposit-compare',
+    cat: 'life',
+    icon: 'ti-percentage',
+    title: '예금·적금 비교',
+    desc: '"500만원 1년 굴릴 곳" → 금리 높은 상품 추천',
+    level: 'Lv 2',
+    levelColor: '#178F5B',
+    levelBg: '#EAF3DE',
+    difficulty: '하',
+    api: '금융감독원 공시 API',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'quiz',
+    cat: 'life',
+    icon: 'ti-question-mark',
+    title: '금융 퀴즈',
+    desc: '데일리 퀴즈 맞추면 코인 보상 → 데일리 미션 연동',
+    level: '무료',
+    levelColor: '#5F5E5A',
+    levelBg: '#F1EFE8',
+    difficulty: '하',
+    api: '퀴즈 DB (LLM 자동생성)',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'tax',
+    cat: 'life',
+    icon: 'ti-receipt-tax',
+    title: '세금 계산기',
+    desc: '"연봉 4000이면 세금 얼마?" + 절세 팁',
+    level: 'Lv 3',
+    levelColor: '#185FA5',
+    levelBg: '#E6F1FB',
+    difficulty: '중',
+    api: '세율 테이블 + LLM',
+    phase: 'Phase 2'
+  },
+  {
+    id: 'travel-budget',
+    cat: 'life',
+    icon: 'ti-plane',
+    title: '여행 예산 플래너',
+    desc: '"일본 3박4일 예산 짜줘" → 일정·비용 계획 자동 생성',
+    level: 'Lv 2',
+    levelColor: '#178F5B',
+    levelBg: '#EAF3DE',
+    difficulty: '하',
+    api: '환율 API + LLM',
+    phase: 'Phase 2'
+  },
+  {
+    id: 'secondhand',
+    cat: 'life',
+    icon: 'ti-refresh',
+    title: '중고 시세 조회',
+    desc: '"아이패드 팔면 얼마?" → 당근·번개장터 시세 분석',
+    level: 'Lv 2',
+    levelColor: '#178F5B',
+    levelBg: '#EAF3DE',
+    difficulty: '중',
+    api: '당근마켓 비공식 or 크롤링',
+    phase: 'Phase 2'
+  },
+  {
+    id: 'psych-coach',
+    cat: 'life',
+    icon: 'ti-heart-handshake',
+    title: '소비 심리 코치',
+    desc: '"또 충동구매했어" → 캐릭터가 공감·패턴 분석·조언',
+    level: 'Lv 2',
+    levelColor: '#178F5B',
+    levelBg: '#EAF3DE',
+    difficulty: '하',
+    api: 'LLM + 소비 패턴 DB',
+    phase: 'Phase 1'
+  },
+  {
+    id: 'realestate',
+    cat: 'premium',
+    icon: 'ti-home',
+    title: '부동산 실거래가',
+    desc: '"강남 아파트 최근 거래가 어때?" 국토부 데이터 분석',
+    level: 'Lv 4',
+    levelColor: '#993C1D',
+    levelBg: '#FAECE7',
+    difficulty: '중',
+    api: '국토교통부 공개 API',
+    phase: 'Phase 2'
+  },
+  {
+    id: 'loan',
+    cat: 'premium',
+    icon: 'ti-calculator',
+    title: '대출 상환 계획',
+    desc: '학자금·전세대출 상환 시뮬레이션·전략 조언',
+    level: 'Lv 3',
+    levelColor: '#185FA5',
+    levelBg: '#E6F1FB',
+    difficulty: '중',
+    api: 'LLM + 금리 데이터',
+    phase: 'Phase 2'
+  },
+  {
+    id: 'health-score',
+    cat: 'premium',
+    icon: 'ti-report-analytics',
+    title: '재무 건강점수',
+    desc: '수입·지출·저축·투자 종합 → 월별 재무 건강 점수화',
+    level: 'Lv 5/구독',
+    levelColor: '#533AB7',
+    levelBg: '#EEEDFE',
+    difficulty: '고',
+    api: '내부 종합 + LLM',
+    phase: 'Phase 3'
+  }
+];
+
+let activeFilter = 'all';
+
+function filterCards(cat) {
+  activeFilter = cat;
+  document.querySelectorAll('[id^="btn-"]').forEach(b => {
+    b.style.background = 'transparent';
+    b.style.color = 'var(--color-text-primary)';
+    b.style.border = '0.5px solid var(--color-border-secondary)';
+  });
+  const btn = document.getElementById('btn-' + cat);
+  if (btn) {
+    btn.style.background = 'var(--color-text-primary)';
+    btn.style.color = 'var(--color-background-primary)';
+  }
+  renderCards();
+}
+
+function renderCards() {
+  const grid = document.getElementById('card-grid');
+  const filtered = activeFilter === 'all' ? cards : cards.filter(c => c.cat === activeFilter);
+  grid.innerHTML = filtered.map(c => `
+    <div style="background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 1rem; display: flex; flex-direction: column; gap: 8px; cursor: pointer;" onclick="sendPrompt('${c.title} 기능을 더 자세히 설계해줘 — 채팅 UX, 백엔드 구조, API 활용 방법 포함해서')">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <i class="ti ${c.icon}" style="font-size: 20px; color: var(--color-text-secondary);" aria-hidden="true"></i>
+        <span style="font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; background: ${c.levelBg}; color: ${c.levelColor};">${c.level}</span>
+      </div>
+      <div>
+        <p style="font-size: 14px; font-weight: 500; margin: 0 0 4px; color: var(--color-text-primary);">${c.title}</p>
+        <p style="font-size: 12px; color: var(--color-text-secondary); margin: 0; line-height: 1.5;">${c.desc}</p>
+      </div>
+      <div style="border-top: 0.5px solid var(--color-border-tertiary); padding-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; color: var(--color-text-tertiary);">${c.api}</span>
+        <span style="font-size: 11px; font-weight: 500; color: var(--color-text-secondary);">${c.phase}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+renderCards();
+</script>

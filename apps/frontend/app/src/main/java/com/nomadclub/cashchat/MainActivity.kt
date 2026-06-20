@@ -42,10 +42,13 @@ import com.nomadclub.cashchat.feature.auth.LoginScreen
 import com.nomadclub.cashchat.feature.main.MainScreen
 import com.nomadclub.cashchat.feature.onboarding.OnboardingScreen
 import com.nomadclub.cashchat.feature.settings.SettingsViewModel
+import com.nomadclub.cashchat.shared.points.PointsRepository
 import com.nomadclub.cashchat.ui.theme.CashChatTheme
 import com.nomadclub.cashchat.ui.theme.ThemeMode
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 /**
  * 앱 내 화면 경로(route)를 정의하는 객체.
@@ -128,19 +131,26 @@ private fun CashChatAppContent() {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // 앱 전역에서 쓰는 포인트와 대화 횟수 (다른 화면에서도 동일한 값을 참조)
-    var points by rememberSaveable { mutableIntStateOf(0) }
+    // 포인트 잔액은 혜택존/상점과 동일한 공유 PointsRepository 를 단일 소스로 사용한다.
+    // (이전엔 마이페이지만 별도 로컬 카운터를 써서 다른 화면과 잔액이 어긋나는 문제가 있었다.)
+    val pointsRepository = koinInject<PointsRepository>()
+    val balance by pointsRepository.balance.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) {
+        runCatching { pointsRepository.refresh() }
+            .onFailure { Log.e("CashChatPoints", "포인트 잔액 동기화 실패", it) }
+    }
+    val points = balance.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
     var messageCount by rememberSaveable { mutableIntStateOf(0) }
 
     fun addPoints(value: Int) {
         if (value <= 0) return
-        points += value
+        pointsRepository.applyDelta(value.toLong())
     }
 
     fun spendPoints(value: Int): Boolean {
         if (value <= 0) return false
-        return if (points >= value) {
-            points -= value
+        return if (balance >= value) {
+            pointsRepository.applyDelta(-value.toLong())
             true
         } else false
     }
