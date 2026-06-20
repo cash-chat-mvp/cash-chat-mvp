@@ -1,7 +1,5 @@
 package com.nomadclub.cashchat.feature.rewards
 
-// DEPRECATED: BenefitZoneScreen 으로 대체됨(라우팅 미사용). 후속 Phase(미션/광고 UI) 참조용으로 보존. 신규 연결 금지.
-
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn

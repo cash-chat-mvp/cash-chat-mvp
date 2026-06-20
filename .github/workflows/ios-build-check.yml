@@ -78,10 +78,13 @@ jobs:
         run: |
           cat > CashChatIOS/Secrets.swift << EOF
           // Auto-generated for CI build check
+          // AdMob 값은 컴파일 검증용 Google 공식 테스트 ID (실 ID는 릴리즈 워크플로에서 주입)
           enum Secrets {
               static let googleIOSClientId = "$IOS_GOOGLE_CLIENT_ID"
               static let googleWebClientId = "$GOOGLE_CLIENT_ID"
               static let apiBaseUrl = "$API_SERVER_BASE_URL"
+              static let admobAppId = "ca-app-pub-3940256099942544~1458002511"
+              static let admobRewardedAdUnitId = "ca-app-pub-3940256099942544/1712485313"
           }
           EOF
       - name: Build iOS app (simulator, 검증용)
