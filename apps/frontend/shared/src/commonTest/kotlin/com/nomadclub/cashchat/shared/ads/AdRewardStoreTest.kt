@@ -50,4 +50,46 @@ class AdRewardStoreTest {
         )
         assertEquals(false, store.awaitRewardApplied(baselineUsedToday = 3))
     }
+
+    @Test
+    fun `runRewardFlow - 광고 미시청이면 NOT_WATCHED 이고 폴링하지 않는다`() = runTest {
+        var fetchCalls = 0
+        val store = AdRewardStore(
+            fetchQuota = { fetchCalls++; AdRewardQuotaDto(3, 10, 7, "2026-06-11T00:00:00+09:00") },
+            issueNonce = { IssueNonceDto("n", "x") },
+            scope = this,
+            pollDelaysMillis = List(5) { 0L },
+        )
+        val outcome = store.runRewardFlow(showAd = { false })
+        assertEquals(RewardOutcome.NOT_WATCHED, outcome)
+        // baseline 조회 1회만 — awaitRewardApplied 폴링은 호출되지 않는다.
+        assertEquals(1, fetchCalls)
+    }
+
+    @Test
+    fun `runRewardFlow - 시청 후 적립 횟수가 늘면 APPLIED`() = runTest {
+        var fetchCalls = 0
+        val store = AdRewardStore(
+            fetchQuota = {
+                fetchCalls++
+                if (fetchCalls >= 2) AdRewardQuotaDto(4, 10, 6, "2026-06-11T00:00:00+09:00")
+                else AdRewardQuotaDto(3, 10, 7, "2026-06-11T00:00:00+09:00")
+            },
+            issueNonce = { IssueNonceDto("n", "x") },
+            scope = this,
+            pollDelaysMillis = List(5) { 0L },
+        )
+        assertEquals(RewardOutcome.APPLIED, store.runRewardFlow(showAd = { true }))
+    }
+
+    @Test
+    fun `runRewardFlow - 시청했으나 적립이 끝까지 안 보이면 PENDING`() = runTest {
+        val store = AdRewardStore(
+            fetchQuota = { AdRewardQuotaDto(3, 10, 7, "2026-06-11T00:00:00+09:00") },
+            issueNonce = { IssueNonceDto("n", "x") },
+            scope = this,
+            pollDelaysMillis = List(5) { 0L },
+        )
+        assertEquals(RewardOutcome.PENDING, store.runRewardFlow(showAd = { true }))
+    }
 }
