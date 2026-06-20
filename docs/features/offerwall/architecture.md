@@ -69,7 +69,7 @@ flowchart LR
 3. **오퍼 완료** — 사용자가 미션/광고를 완료한다(앱 설치·가입·설문 등).
 4. **서버 포스트백** — TNK가 전환을 확인하면 TNK 서버 → 백엔드로 S2S 포스트백(콜백)을 전송한다.
 5. **검증·적립** — 백엔드가 `md_chk` 서명을 검증하고 → 토큰으로 사용자를 식별한 뒤 → `pay_pnt × 환산비`를 코인으로 멱등 적립하고 → 원장에 기록한 다음 200 ack를 반환한다.
-6. **앱 반영** *(후속 의존)* — 콜백은 비동기이므로 적립이 즉시 화면에 뜨지 않는다. 앱은 포인트/잔액 조회 API로 새로고침해 적립을 반영한다. **단, 잔액 조회 API(`GET /api/points/me`)는 아직 BE 미구현이고 프론트 `PointsRepository.refresh()`도 no-op 상태다 — 이 단계는 해당 API 구현에 의존하는 후속 과제다.**
+6. **앱 반영** — 콜백은 비동기이므로 적립이 즉시 화면에 뜨지 않는다. 앱은 잔액 조회 API `GET /api/points/me`로 새로고침해 적립을 반영한다(BE 구현 완료, 프론트 `RemotePointsRepository.refresh()`가 호출). 오퍼월 진입·SDK 연동 자체는 여전히 (계획)이지만, 잔액 반영 경로는 이미 동작한다.
 
 ### 순차 흐름도 (Sequence Diagram)
 
@@ -123,9 +123,9 @@ sequenceDiagram
         end
     end
 
-    Note over User,DB: 4단계 — 앱 반영 (별도 조회 · 후속 의존)
+    Note over User,DB: 4단계 — 앱 반영 (별도 조회)
     User->>FE: 잔액 새로고침
-    FE->>API: GET /api/points/me (BE 미구현 · 후속)
+    FE->>API: GET /api/points/me
     API-->>FE: 적립 반영된 잔액
 ```
 
@@ -145,7 +145,6 @@ sequenceDiagram
 
 - **프론트엔드 통합** — KMM `shared/` 및 Android/iOS TNK SDK 연동, 오퍼월 화면 (계획).
 - **운영 설정** — dev/prod 콜백 URL 등록, TNK 콘솔 `app-key` 시크릿 주입.
-- **잔액 조회 API 의존** — 적립 반영 확인에 쓰일 `GET /api/points/me`가 BE 미구현(프론트 `PointsRepository.refresh()`는 no-op). 동작 흐름 6단계 '앱 반영'은 이 API 구현에 의존한다.
 - **자동 취소/환수(claw-back)** — 현재는 콜백 전량 기록만 하고 자동 차감은 하지 않는다. 원장 `status`는 향후 `CANCELED` 등으로 확장 가능.
 - **감사 강화** — TNK가 함께 보내는 `actn_id`·`app_nm` 등 부가 파라미터를 원장에 추가 기록(현재는 필수 4개만 사용).
 - **추가 오퍼월**(Buzzvil, AdiSON 등) 연동.
