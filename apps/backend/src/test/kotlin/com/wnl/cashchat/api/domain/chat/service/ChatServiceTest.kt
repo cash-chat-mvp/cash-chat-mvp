@@ -150,9 +150,10 @@ class ChatServiceTest : FunSpec() {
         test("stream rejects conversations owned by another user") {
             whenever(conversationRepository.findByIdAndUserId(1L, 99L)).thenReturn(null)
 
-            StepVerifier.create(
+            // 진입 트랜잭션은 동기 실행되므로 stream() 호출 시점에 예외가 던져진다(@ControllerAdvice 매핑용).
+            shouldThrow<ConversationNotFoundException> {
                 chatService.stream(userId = 99L, conversationId = 1L, messageId = "msg-x", content = "hello")
-            ).verifyError(ConversationNotFoundException::class.java)
+            }
         }
 
         test("stream sends only completed history plus the current user message to the provider") {
