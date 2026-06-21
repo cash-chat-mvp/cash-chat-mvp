@@ -49,6 +49,7 @@ fun BenefitZoneScreen(
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
     var showRoulette by remember { mutableStateOf(false) }
+    var showInvite by remember { mutableStateOf(false) }
 
     suspend fun refreshAll() {
         runCatching { pointsRepository.refresh() }
@@ -126,6 +127,14 @@ fun BenefitZoneScreen(
             }
             item {
                 BenefitInfoCard(
+                    icon = "🤝", title = "친구 초대", badge = BenefitBadge.NEXT,
+                    description = "친구가 가입하면 나는 코인, 친구는 에너지!",
+                    dimmed = false,
+                    onClick = { showInvite = true },
+                )
+            }
+            item {
+                BenefitInfoCard(
                     icon = "🎯", title = "데일리 미션", badge = BenefitBadge.SOON,
                     description = "매일 바뀌는 3가지 미션을 완료하고 코인 적립",
                     dimmed = true,
@@ -154,6 +163,9 @@ fun BenefitZoneScreen(
         }
         if (showRoulette) {
             RouletteDialog(onDismiss = { showRoulette = false })
+        }
+        if (showInvite) {
+            InviteDialog(onDismiss = { showInvite = false })
         }
     }
 }
