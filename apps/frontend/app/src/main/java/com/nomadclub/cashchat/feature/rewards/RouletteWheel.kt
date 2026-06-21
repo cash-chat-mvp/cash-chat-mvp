@@ -36,6 +36,14 @@ private fun labelColor(prize: RoulettePrize): Int = when (prize) {
     else -> 0xFF1B1B2A.toInt()
 }
 
+// 라벨용 Paint 는 프레임마다 재생성하면 회전 애니메이션 중 GC 부하가 크므로 한 번만 만들어 재사용한다(색만 교체).
+private val labelPaint = android.graphics.Paint().apply {
+    textSize = 34f
+    isFakeBoldText = true
+    textAlign = android.graphics.Paint.Align.CENTER
+    isAntiAlias = true
+}
+
 /**
  * 8칸 룰렛 휠. rotationDeg 만큼 회전해 그린다(상위에서 Animatable 로 제어).
  * 칸 0 의 중심이 회전 0 일 때 12시(상단 포인터)에 오도록 그린다.
@@ -82,29 +90,26 @@ fun RouletteWheel(
                     val lx = cx + (r * 0.62f) * cos(mid).toFloat()
                     val ly = cy + (r * 0.62f) * sin(mid).toFloat()
                     drawContext.canvas.nativeCanvas.apply {
-                        val paint = android.graphics.Paint().apply {
-                            color = labelColor(seg.prize)
-                            textSize = 34f
-                            isFakeBoldText = true
-                            textAlign = android.graphics.Paint.Align.CENTER
-                            isAntiAlias = true
-                        }
+                        labelPaint.color = labelColor(seg.prize)
                         save()
                         rotate(midDeg + 90f, lx, ly)
-                        drawText(labelFor(seg.prize), lx, ly + 12f, paint)
+                        drawText(labelFor(seg.prize), lx, ly + 12f, labelPaint)
                         restore()
                     }
                 }
-                val jStart = -90f - sweep / 2f
-                drawArc(
-                    color = GOLD,
-                    startAngle = jStart,
-                    sweepAngle = sweep,
-                    useCenter = true,
-                    topLeft = topLeft,
-                    size = arcSize,
-                    style = Stroke(width = 6f),
-                )
+                // 잭팟 칸 금색 테두리: 인덱스 고정이 아니라 실제 JACKPOT 칸을 찾아 그린다(Remote 가 다른 위치를 줘도 안전).
+                val jackpotIndex = segments.indexOfFirst { it.prize == RoulettePrize.JACKPOT_100 }
+                if (jackpotIndex >= 0) {
+                    drawArc(
+                        color = GOLD,
+                        startAngle = -90f - sweep / 2f + jackpotIndex * sweep,
+                        sweepAngle = sweep,
+                        useCenter = true,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = 6f),
+                    )
+                }
             }
         }
     }

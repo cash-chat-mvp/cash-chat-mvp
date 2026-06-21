@@ -39,7 +39,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import kotlin.coroutines.resume
 
-class RouletteViewModel(val store: RouletteStore) : ViewModel() {
+class RouletteViewModel(private val store: RouletteStore) : ViewModel() {
     enum class Phase { IDLE, SPINNING, AD }
     private val _phase = MutableStateFlow(Phase.IDLE)
     val phase: StateFlow<Phase> = _phase.asStateFlow()
@@ -89,10 +89,11 @@ fun RouletteDialog(
     val context = LocalContext.current
     val rotation = remember { Animatable(0f) }
     var lastResultText by remember { mutableStateOf<String?>(null) }
+    var isAnimating by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { adManager.preload(context); vm.load() }
-    LaunchedEffect(Unit) { vm.toast.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(vm) { vm.toast.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
+    LaunchedEffect(vm) {
         vm.result.collect { result ->
             val n = status?.segments?.size ?: 8
             val sweep = 360f / n
@@ -100,8 +101,10 @@ fun RouletteDialog(
             val current = rotation.value
             val normalized = current - (current % 360f)
             val target = normalized + 360f * 5 - result.segmentIndex * sweep
+            isAnimating = true
             rotation.animateTo(target, tween(2600))
             lastResultText = resultText(result)
+            isAnimating = false
         }
     }
 
@@ -129,14 +132,16 @@ fun RouletteDialog(
 
             lastResultText?.let { Text(it, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF5B5BD6)) }
 
-            val canSpin = (status?.availableSpins ?: 0) > 0 && phase == RouletteViewModel.Phase.IDLE
-            val limitReached = (status?.availableSpins ?: 0) <= 0 && (status?.adSpinsRemaining ?: 0) <= 0
-            if ((status?.availableSpins ?: 0) > 0 || limitReached) {
+            val spins = status?.availableSpins ?: 0
+            val adRemaining = status?.adSpinsRemaining ?: 0
+            val canSpin = spins > 0 && phase == RouletteViewModel.Phase.IDLE && !isAnimating
+            val limitReached = spins <= 0 && adRemaining <= 0
+            if (spins > 0 || limitReached) {
                 Button(
                     onClick = { vm.spin() },
                     enabled = canSpin,
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(if ((status?.availableSpins ?: 0) > 0) "돌리기 · 오늘 ${status?.availableSpins}회" else "내일 다시 · 자정 리셋") }
+                ) { Text(if (spins > 0) "돌리기 · 오늘 ${spins}회" else "내일 다시 · 자정 리셋") }
             } else {
                 Button(
                     onClick = {
