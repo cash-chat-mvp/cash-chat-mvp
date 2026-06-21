@@ -86,6 +86,8 @@ jobs:
               static let admobAppId = "ca-app-pub-3940256099942544~1458002511"
               static let admobRewardedAdUnitId = "ca-app-pub-3940256099942544/1712485313"
               static let admobBannerAdUnitId = "ca-app-pub-3940256099942544/2934735716"
+              static let admobInterstitialAdUnitId = "ca-app-pub-3940256099942544/4411468910"
+              static let admobNativeAdUnitId = "ca-app-pub-3940256099942544/3986624511"
               static let tnkAppId = "00000000-0000-0000-0000-000000000000"
           }
           EOF
