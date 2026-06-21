@@ -11,7 +11,8 @@ import kotlinx.coroutines.flow.update
  */
 interface PointsRepository {
     val balance: StateFlow<Long>
-    /** 서버에서 최신 잔액 동기화(준비 전에는 no-op). */
+    /** 서버에서 최신 잔액 동기화(준비 전에는 no-op). iOS 에서 호출하므로 @Throws 필수(미지정 시 예외에 앱 크래시). */
+    @Throws(Exception::class)
     suspend fun refresh()
     /** 적립 발생 시 로컬 잔액 반영(서버 동기화 전 즉시 UI 갱신용). */
     fun applyDelta(delta: Long)
@@ -23,6 +24,7 @@ interface PointsRepository {
 class LocalPointsRepository(private val initial: Long = 1250) : PointsRepository {
     private val _balance = MutableStateFlow(initial)
     override val balance: StateFlow<Long> = _balance.asStateFlow()
+    @Throws(Exception::class)
     override suspend fun refresh() { /* no-op until GET /api/points/me 구현 */ }
     override fun reset() { _balance.value = initial }
     override fun applyDelta(delta: Long) = _balance.update { current ->
