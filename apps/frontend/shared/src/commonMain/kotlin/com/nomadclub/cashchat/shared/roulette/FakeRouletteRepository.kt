@@ -11,6 +11,13 @@ class FakeRouletteRepository(
     private val random: () -> Double = { Random.nextDouble() },
 ) : RouletteRepository {
 
+    // 누적 확률 경계(서버 가중 확률 모사): 잭팟 1% / +E10 10% / +E3 70% / 나머지 꽝 19%.
+    private companion object {
+        const val P_JACKPOT = 0.01   // 1%
+        const val P_E10_CUM = 0.11   // 1 + 10%
+        const val P_E3_CUM = 0.81    // 1 + 10 + 70%
+    }
+
     // 표시용 8칸 고정 배치(스펙/BE 문서와 동일): 잭팟1·E10 2·E3 3·꽝 2.
     private val segments = listOf(
         RouletteSegment(0, RoulettePrize.JACKPOT_100),
@@ -36,11 +43,13 @@ class FakeRouletteRepository(
     override suspend fun getStatus(): RouletteStatus = status
 
     override suspend fun spin(): RouletteSpinResult {
+        // 실서버는 보유 스핀이 없으면 거부(409). 스텁도 동일하게 막아 UI 게이팅을 검증한다.
+        check(status.availableSpins > 0) { "no spin available" }
         val r = random()
         val prize = when {
-            r < 0.01 -> RoulettePrize.JACKPOT_100
-            r < 0.11 -> RoulettePrize.E10
-            r < 0.81 -> RoulettePrize.E3
+            r < P_JACKPOT -> RoulettePrize.JACKPOT_100
+            r < P_E10_CUM -> RoulettePrize.E10
+            r < P_E3_CUM -> RoulettePrize.E3
             else -> RoulettePrize.MISS
         }
         val segment = segments.first { it.prize == prize }

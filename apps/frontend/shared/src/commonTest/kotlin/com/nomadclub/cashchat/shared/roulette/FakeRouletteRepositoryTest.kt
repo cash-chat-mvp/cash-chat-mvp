@@ -3,9 +3,17 @@ package com.nomadclub.cashchat.shared.roulette
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class FakeRouletteRepositoryTest {
+
+    @Test
+    fun `spin - 보유 스핀이 없으면 예외`() = runTest {
+        val repo = FakeRouletteRepository(random = { 0.5 })
+        repo.spin() // availableSpins 1 -> 0
+        assertFailsWith<IllegalStateException> { repo.spin() }
+    }
 
     @Test
     fun `확률 경계 - 0_005 면 잭팟`() = runTest {
