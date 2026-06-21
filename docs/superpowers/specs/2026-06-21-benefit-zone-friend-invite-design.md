@@ -12,7 +12,7 @@
 
 - **방식**: 추천 코드. 각 사용자에게 고유 코드(예: `ABC123`) 부여. 딥링크 미사용.
 - **공유**: 혜택존 '친구 초대' 화면에서 내 코드 + **OS 공유시트**(Android `Intent.ACTION_SEND` / iOS `ShareLink`)로 초대 메시지 공유.
-- **입력**: 친구가 추천 코드를 입력 — **온보딩(가입 시) + 혜택존** 양쪽.
+- **입력**: 친구가 추천 코드를 **혜택존 '친구 초대' 화면에서** 입력. (온보딩/로그인 화면 입력은 제외 — 혜택존에서만)
 - **보상**(추천 성공 = 친구가 코드 입력·가입 완료 시, 서버가 결정·지급): **초대자 +코인**, **가입자 +에너지**. 금액·한도(초대 최대 N명, 1회 redeem)는 **서버 설정값**.
 - **검증(서버)**: 자기 코드 입력 금지, 1인 1회만 redeem, 신규/적격 계정만, 코드 유효성. FE는 표시·입력만.
 
@@ -44,10 +44,10 @@ Mockup: `.superpowers/brainstorm/.../invite-screen-designs.html`(A안).
 ### 4.2 Android
 - `InviteViewModel` + `InviteScreen`(다이얼로그 또는 라우트, §3 디자인). 공유는 `Intent.ACTION_SEND`. 입력→`store.redeemCode`.
 - 혜택존 진입 카드(`BenefitZoneScreen.kt`)에 '친구 초대' 카드 추가.
-- **온보딩**: `OnboardingScreen`에 선택적 "추천 코드 입력" 필드. 가입 전이므로 코드를 **pending 저장 → 가입 완료 후 적용**(스텁은 즉시 성공 모사). (별도 task, 분리)
+- 온보딩/로그인 화면 입력은 **범위 밖**(혜택존 화면에서만 입력).
 
 ### 4.3 iOS (파리티)
-- `InviteView` + VM(SwiftUI). 공유는 `ShareLink`. 혜택존 진입 카드 + 온보딩 필드.
+- `InviteView` + VM(SwiftUI). 공유는 `ShareLink`. 혜택존 진입 카드 + 초대 화면.
 - `import CashChatShared`/`import Combine`. Swift 빌드는 **에이전트가 `xcodebuild`로 직접 검증**.
 
 ## 5. BE API 계약 (요약 — 상세는 BE 요청 문서 §5)
@@ -56,14 +56,14 @@ Mockup: `.superpowers/brainstorm/.../invite-screen-designs.html`(A안).
 | GET | `/api/invite/me` | 내 추천 코드·초대 성공 수·redeem 가능 여부·보상값 |
 | POST | `/api/invite/redeem` | `{code}` → 검증(자기/중복/적격) → 초대자 코인·본인 에너지 지급 |
 
-- 온보딩 입력은 가입 토큰 발급 후 `redeem` 호출 또는 가입 페이로드에 코드 동봉 — BE 협의 항목으로 문서화.
+- 추천 코드 입력은 가입 후 혜택존에서 `redeem` 호출. (온보딩/가입 단계 입력은 이번 범위 밖)
 
 ## 6. 테스트
 - 공유: `FakeInviteRepository`/`InviteStore` — `getInviteStatus` 반환, `redeemCode` 성공/형식오류/자기코드 실패 전이, 성공 시 `onRewardChanged` 호출.
 - Android: `:app:assembleDebug`. iOS: shared 빌드 + **에이전트 `xcodebuild`**.
 
 ## 7. 범위 밖 / 인지사항
-- 온보딩 코드 입력은 가입 전이라 "pending 후 적용" — 스텁 단순화(즉시 성공), 실제 타이밍은 BE 계약 명시.
+- 추천 코드 입력은 **혜택존에서만**(가입 후 로그인 상태). 온보딩/로그인 화면 입력은 범위에서 제외.
 - 보상 금액·한도·적격 규칙은 전부 서버. FE는 표시·입력만.
 - 딥링크/초대 링크는 범위 밖(추후 필요 시 별도).
 

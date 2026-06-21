@@ -60,11 +60,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.nomadclub.cashchat.BuildConfig
-import org.koin.compose.koinInject
-import com.nomadclub.cashchat.shared.invite.InviteStore
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardCapitalization
 
 @Composable
 fun OnboardingScreen(
@@ -77,10 +72,6 @@ fun OnboardingScreen(
     var visible by remember { mutableStateOf(false) }
     val rotation = remember { Animatable(0f) }
     val context = LocalContext.current
-    val inviteStore = koinInject<InviteStore>()
-    var referral by remember { mutableStateOf("") }
-    var referralDone by remember { mutableStateOf(false) }
-    var referralSubmitting by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         visible = true
@@ -262,33 +253,6 @@ fun OnboardingScreen(
                 ) {
                     Text("게스트로 시작하기", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
-            }
-
-            if (!referralDone) {
-                OutlinedTextField(
-                    value = referral, onValueChange = { referral = it.uppercase() },
-                    singleLine = true, label = { Text("추천 코드 (선택)") },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(
-                    onClick = {
-                        if (referralSubmitting) return@TextButton
-                        val code = referral
-                        coroutineScope.launch {
-                            referralSubmitting = true
-                            val result = runCatching { inviteStore.redeem(code) }.getOrNull()
-                            val msg = when {
-                                result == null -> "잠시 후 다시 시도해주세요"
-                                result.success -> { referralDone = true; "⚡${result.awardedEnergy} 에너지 적용됐어요!" }
-                                else -> result.message ?: "코드를 확인해주세요"
-                            }
-                            referralSubmitting = false
-                            snackbarHostState.showSnackbar(msg)
-                        }
-                    },
-                    enabled = referral.isNotBlank() && !referralSubmitting,
-                ) { Text("추천 코드 적용", color = Color.White) }
             }
 
             AnimatedVisibility(

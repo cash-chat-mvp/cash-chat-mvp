@@ -210,8 +210,9 @@ Content-Type: application/json
 - 409 `SELF_REFERRAL` — 자기 코드 입력.
 - 403 `NOT_ELIGIBLE` — 적격 아님(예: 가입 후 기간 초과).
 
-### 5.3 온보딩 입력 연동 (협의)
-- 온보딩(가입 전) 코드 입력은 가입 토큰 발급 후 `POST /api/invite/redeem` 호출, 또는 **가입 페이로드에 `referralCode` 동봉** 후 서버가 가입 완료 시 적립. 방식은 BE와 협의해 확정.
+### 5.3 입력 시점
+- 추천 코드 입력은 **가입 후 혜택존 '친구 초대' 화면**에서 `POST /api/invite/redeem` 호출(로그인 상태). 온보딩/가입 단계 입력은 이번 범위 밖.
+- 적격 규칙(예: 가입 후 N일 내만 redeem 가능)은 서버가 `redeemAvailable`로 판정.
 
 ---
 
