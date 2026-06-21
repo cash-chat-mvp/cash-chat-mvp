@@ -287,31 +287,21 @@ jobs:
           ADMOB_INTERSTITIAL_AD_UNIT_ID="${ADMOB_INTERSTITIAL_AD_UNIT_ID:-ca-app-pub-3940256099942544/4411468910}"
           ADMOB_NATIVE_AD_UNIT_ID="${ADMOB_NATIVE_AD_UNIT_ID:-ca-app-pub-3940256099942544/3986624511}"
           ADMOB_REWARDED_AD_UNIT_ID="${ADMOB_REWARDED_AD_UNIT_ID:-ca-app-pub-3940256099942544/1712485313}"
-          cat > CashChatIOS/CashChatIOS/Secrets.swift << 'SWIFT_EOF'
+          # Heredoc 안에서 env 변수를 직접 주입한다 (별도 sed 치환 불필요).
+          cat > CashChatIOS/CashChatIOS/Secrets.swift << SWIFT_EOF
           // Auto-generated — do not commit
           enum Secrets {
-              static let googleIOSClientId = "IOS_GOOGLE_CLIENT_ID_PLACEHOLDER"
-              static let googleWebClientId = "GOOGLE_CLIENT_ID_PLACEHOLDER"
-              static let apiBaseUrl        = "API_SERVER_BASE_URL_PLACEHOLDER"
-              static let admobAppId        = "ADMOB_APP_ID_PLACEHOLDER"
-              static let admobBannerAdUnitId = "ADMOB_BANNER_AD_UNIT_ID_PLACEHOLDER"
-              static let admobInterstitialAdUnitId = "ADMOB_INTERSTITIAL_AD_UNIT_ID_PLACEHOLDER"
-              static let admobNativeAdUnitId = "ADMOB_NATIVE_AD_UNIT_ID_PLACEHOLDER"
-              static let admobRewardedAdUnitId = "ADMOB_REWARDED_AD_UNIT_ID_PLACEHOLDER"
-              static let tnkAppId          = "TNK_APP_ID_IOS_PLACEHOLDER"
+              static let googleIOSClientId = "${IOS_GOOGLE_CLIENT_ID}"
+              static let googleWebClientId = "${GOOGLE_CLIENT_ID}"
+              static let apiBaseUrl        = "${API_SERVER_BASE_URL}"
+              static let admobAppId        = "${ADMOB_APP_ID}"
+              static let admobBannerAdUnitId = "${ADMOB_BANNER_AD_UNIT_ID}"
+              static let admobInterstitialAdUnitId = "${ADMOB_INTERSTITIAL_AD_UNIT_ID}"
+              static let admobNativeAdUnitId = "${ADMOB_NATIVE_AD_UNIT_ID}"
+              static let admobRewardedAdUnitId = "${ADMOB_REWARDED_AD_UNIT_ID}"
+              static let tnkAppId          = "${TNK_APP_ID_IOS}"
           }
           SWIFT_EOF
-          sed -i '' \
-            -e "s|IOS_GOOGLE_CLIENT_ID_PLACEHOLDER|${IOS_GOOGLE_CLIENT_ID}|g" \
-            -e "s|GOOGLE_CLIENT_ID_PLACEHOLDER|${GOOGLE_CLIENT_ID}|g" \
-            -e "s|API_SERVER_BASE_URL_PLACEHOLDER|${API_SERVER_BASE_URL}|g" \
-            -e "s|ADMOB_APP_ID_PLACEHOLDER|${ADMOB_APP_ID}|g" \
-            -e "s|ADMOB_BANNER_AD_UNIT_ID_PLACEHOLDER|${ADMOB_BANNER_AD_UNIT_ID}|g" \
-            -e "s|ADMOB_INTERSTITIAL_AD_UNIT_ID_PLACEHOLDER|${ADMOB_INTERSTITIAL_AD_UNIT_ID}|g" \
-            -e "s|ADMOB_NATIVE_AD_UNIT_ID_PLACEHOLDER|${ADMOB_NATIVE_AD_UNIT_ID}|g" \
-            -e "s|ADMOB_REWARDED_AD_UNIT_ID_PLACEHOLDER|${ADMOB_REWARDED_AD_UNIT_ID}|g" \
-            -e "s|TNK_APP_ID_IOS_PLACEHOLDER|${TNK_APP_ID_IOS}|g" \
-            CashChatIOS/CashChatIOS/Secrets.swift
 
       - name: Create local.xcconfig
         env:
