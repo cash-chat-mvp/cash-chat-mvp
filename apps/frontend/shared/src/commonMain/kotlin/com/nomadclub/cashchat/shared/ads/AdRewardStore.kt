@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/** 혜택존 카드·채팅 게이트가 공유하는 보상 플로우 결과. */
+enum class RewardOutcome { APPLIED, PENDING, NOT_WATCHED }
+
 /**
  * 광고 보상 플로우 (스펙 §3.2):
  * quota 확인 → nonce 발급 → (UI가 AdMob 표시) → 적립 폴링.
@@ -47,5 +50,19 @@ class AdRewardStore(
             if (quota.usedToday > baselineUsedToday) return true
         }
         return false
+    }
+
+    /**
+     * 보상 플로우 한 사이클: quota baseline 확보 → nonce 발급 → 광고 표시(콜백) → 적립 폴링.
+     * 채팅 게이트와 혜택존 카드의 공통 진입점. usedToday baseline 판정으로 패시브 회복과 광고 보상을 격리한다.
+     * @param showAd nonce 를 받아 광고를 표시하고, 끝까지 시청(보상 적립 콜백)했으면 true 를 반환하는 호출자 콜백.
+     */
+    @Throws(Exception::class)
+    suspend fun runRewardFlow(showAd: suspend (nonce: String) -> Boolean): RewardOutcome {
+        val baseline = refreshQuota().usedToday
+        val nonce = requestNonce()
+        val watched = showAd(nonce)
+        if (!watched) return RewardOutcome.NOT_WATCHED
+        return if (awaitRewardApplied(baseline)) RewardOutcome.APPLIED else RewardOutcome.PENDING
     }
 }

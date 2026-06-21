@@ -114,14 +114,7 @@ fun BenefitZoneScreen(
                     slot = com.nomadclub.cashchat.shared.ads.BannerAdSlot.BENEFIT_TOP,
                 )
             }
-            item {
-                BenefitInfoCard(
-                    icon = "📺", title = "리워드 광고", badge = BenefitBadge.NEXT,
-                    description = "광고 1회 시청 → 🪙+40 코인 · 하루 10회까지",
-                    dimmed = false,
-                    onClick = { Toast.makeText(context, "곧 만나요!", Toast.LENGTH_SHORT).show() },
-                )
-            }
+            item { RewardAdCard() }
             item {
                 BenefitInfoCard(
                     icon = "🎯", title = "데일리 미션", badge = BenefitBadge.SOON,
