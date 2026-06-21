@@ -60,6 +60,7 @@ class FakeRouletteRepository(
             availableSpins = status.availableSpins + 1,
             adSpinsRemaining = status.adSpinsRemaining - 1,
         )
-        return true
+        // 인터페이스 계약대로 baseline 대비 증가 여부로 판정(스텁은 동기 적립이라 항상 +1).
+        return status.availableSpins > baselineAvailable
     }
 }
