@@ -73,9 +73,12 @@ enum TrackingAuthorization {
     }
 
     /// 테스트 단말기(TNK 콘솔) 등록용 IDFA 로그 — 허용 시 실제 값, 미허용 시 전부 0.
+    /// IDFA 원문은 개인정보이므로 릴리즈 빌드에서는 출력하지 않는다(DEBUG 전용).
     private static func logIdfa() {
+        #if DEBUG
         let status = ATTrackingManager.trackingAuthorizationStatus.rawValue
         let idfa = ASIdentifierManager.shared().advertisingIdentifier.uuidString
         print("📱 [ATT] status=\(status) IDFA=\(idfa)")
+        #endif
     }
 }

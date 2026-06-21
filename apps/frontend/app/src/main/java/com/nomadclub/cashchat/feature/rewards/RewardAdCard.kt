@@ -1,6 +1,5 @@
 package com.nomadclub.cashchat.feature.rewards
 
-import android.app.Activity
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -69,19 +68,28 @@ class BenefitRewardViewModel(
 
     /** showAd: nonce 를 받아 광고를 표시하고 끝까지 시청했으면 true 를 반환. */
     fun watchAd(showAd: suspend (nonce: String) -> Boolean) {
+        // BUSY 전환을 launch 밖(메인 스레드)에서 동기 처리 — 빠른 연속 탭이 둘 다 IDLE 을
+        // 보고 광고 플로우를 중복 시작하는 경쟁을 막는다.
         if (_phase.value != Phase.IDLE) return
+        _phase.value = Phase.BUSY
         viewModelScope.launch {
-            _phase.value = Phase.BUSY
-            val outcome = runCatching { adRewardStore.runRewardFlow(showAd) }
-                .getOrDefault(RewardOutcome.NOT_WATCHED)
-            runCatching { hudStore.refreshEnergyOnly() }
-            runCatching { adRewardStore.refreshQuota() }
-            when (outcome) {
-                RewardOutcome.APPLIED -> _toast.tryEmit("에너지를 충전했어요!")
-                RewardOutcome.PENDING -> _toast.tryEmit("보상 확인 중이에요. 잠시 후 다시 확인해주세요")
-                RewardOutcome.NOT_WATCHED -> {}
+            try {
+                val outcome = runCatching { adRewardStore.runRewardFlow(showAd) }
+                    .getOrElse {
+                        // quota/nonce/폴링 예외를 무음 처리하지 않고 사용자에게 알린다.
+                        _toast.tryEmit("잠시 후 다시 시도해주세요.")
+                        return@launch
+                    }
+                runCatching { hudStore.refreshEnergyOnly() }
+                runCatching { adRewardStore.refreshQuota() }
+                when (outcome) {
+                    RewardOutcome.APPLIED -> _toast.tryEmit("에너지를 충전했어요!")
+                    RewardOutcome.PENDING -> _toast.tryEmit("보상 확인 중이에요. 잠시 후 다시 확인해주세요")
+                    RewardOutcome.NOT_WATCHED -> {}
+                }
+            } finally {
+                _phase.value = Phase.IDLE
             }
-            _phase.value = Phase.IDLE
         }
     }
 }
@@ -121,7 +129,7 @@ fun RewardAdCard(
             .clip(RoundedCornerShape(18.dp))
             .background(gradient)
             .clickable(enabled = !limitReached && !busy) {
-                val activity = context as? Activity ?: return@clickable
+                val activity = context.findActivity() ?: return@clickable
                 vm.watchAd { nonce ->
                     suspendCancellableCoroutine { cont ->
                         var rewarded = false

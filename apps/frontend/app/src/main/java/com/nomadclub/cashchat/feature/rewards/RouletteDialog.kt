@@ -1,6 +1,5 @@
 package com.nomadclub.cashchat.feature.rewards
 
-import android.app.Activity
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -160,7 +159,7 @@ fun RouletteDialog(
                 else -> {
                     Button(
                         onClick = {
-                            val activity = context as? Activity ?: return@Button
+                            val activity = context.findActivity() ?: return@Button
                             vm.spinWithAd { nonce ->
                                 suspendCancellableCoroutine { cont ->
                                     var rewarded = false

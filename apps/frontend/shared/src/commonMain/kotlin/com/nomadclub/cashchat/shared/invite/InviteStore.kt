@@ -24,8 +24,12 @@ class InviteStore(
     suspend fun redeem(code: String): RedeemResult {
         val result = repo.redeemCode(code)
         if (result.success) {
-            onRewardChanged()
-            _status.value = repo.getInviteStatus()
+            // 적립은 이미 성공. 후처리(HUD 갱신/status 재조회) 예외가 성공 결과를
+            // 실패로 뒤집지 않도록 격리한다.
+            runCatching {
+                onRewardChanged()
+                _status.value = repo.getInviteStatus()
+            }
         }
         return result
     }

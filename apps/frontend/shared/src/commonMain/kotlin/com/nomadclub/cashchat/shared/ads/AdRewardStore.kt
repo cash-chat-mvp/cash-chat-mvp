@@ -59,7 +59,10 @@ class AdRewardStore(
      */
     @Throws(Exception::class)
     suspend fun runRewardFlow(showAd: suspend (nonce: String) -> Boolean): RewardOutcome {
-        val baseline = refreshQuota().usedToday
+        val quota = refreshQuota()
+        // 한도 소진 시 nonce 발급(서버 자원 소모) 전에 중단한다.
+        if (quota.remaining <= 0) return RewardOutcome.NOT_WATCHED
+        val baseline = quota.usedToday
         val nonce = requestNonce()
         val watched = showAd(nonce)
         if (!watched) return RewardOutcome.NOT_WATCHED

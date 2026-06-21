@@ -33,8 +33,12 @@ class RouletteStore(
     suspend fun spinWithAd(): RouletteSpinResult = finishSpin(repo.spinWithAd())
 
     private suspend fun finishSpin(result: RouletteSpinResult): RouletteSpinResult {
-        onEnergyChanged()
-        _status.value = repo.getStatus()
+        // 스핀은 이미 성공. 후처리(HUD 갱신/status 재조회) 예외가 스핀 결과를
+        // 실패로 전파하지 않도록 격리한다.
+        runCatching {
+            onEnergyChanged()
+            _status.value = repo.getStatus()
+        }
         return result
     }
 }
