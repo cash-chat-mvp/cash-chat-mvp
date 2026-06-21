@@ -23,7 +23,7 @@
 | E | **행운 룰렛** | `/api/roulette/*` (+SSV) | JWT/SSV | 🔴 **신규 필요(본 문서 §2)** |
 | F | 데일리 미션 | `/api/missions/*` | JWT | 🔴 필요 (§3) |
 | G | 오퍼월 TNK 적립 | POST `/api/offerwall/tnk/callback` | TNK 서명 | 🔴 TNK 등록 후 (§4) |
-| H | 친구 초대 | `/api/invite/*` | JWT | ⏳ 후속(슬라이스 4, §5) |
+| H | 친구 초대 | `/api/invite/me`·`/redeem` | JWT | 🔴 필요 (§5) |
 
 > FE 격리: 미구현 항목은 인터페이스(`*Repository`) 뒤 Fake/스텁으로 잠정 동작, BE 준비 시 Remote 교체(인터페이스 불변).
 
@@ -153,9 +153,66 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 5. [H·후속] 친구 초대 — `/api/invite/*` (슬라이스 4 예고)
+## 5. [H·신규] 친구 초대 — `/api/invite/*`
 
-아직 설계 전. 예상 필요: 초대 코드/링크 발급, 초대 수락·검증, 초대 보상 적립(어뷰징 방지). 슬라이스 4 착수 시 본 문서에 상세 추가.
+관련 설계: `docs/superpowers/specs/2026-06-21-benefit-zone-friend-invite-design.md`
+
+### 정책 (서버가 진실)
+- 방식: **추천 코드**(딥링크 미사용). 각 사용자에게 고유 코드 부여.
+- 추천 성공(친구가 코드 입력·가입 완료) 시: **초대자 +코인**, **가입자 +에너지**. 금액·한도(초대 최대 N명, 1인 1회 redeem)는 **서버 설정값**.
+- 검증: 자기 코드 금지, 1인 1회만, 신규/적격 계정만, 코드 유효성. 적립은 `UserPointService`(코인)·에너지 서비스 트랜잭션.
+
+### 5.1 내 초대 정보 — `GET /api/invite/me`
+```
+GET /api/invite/me
+Authorization: Bearer <accessToken>
+```
+응답 200:
+```json
+{
+  "myCode": "ABC123",
+  "invitedCount": 3,
+  "redeemAvailable": true,
+  "rewardCoin": 500,
+  "rewardEnergy": 10
+}
+```
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `myCode` | String | 내 추천 코드(공유용) |
+| `invitedCount` | Int | 내 코드로 가입한 친구 수(보상 지급된) |
+| `redeemAvailable` | Boolean | 내가 추천 코드를 입력할 수 있는지(미사용·적격 기간 내) |
+| `rewardCoin` | Int | 초대 성공 시 초대자 코인(표시용) |
+| `rewardEnergy` | Int | 추천 코드 입력 시 가입자 에너지(표시용) |
+
+### 5.2 추천 코드 입력 — `POST /api/invite/redeem`
+```
+POST /api/invite/redeem
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+
+{ "code": "XYZ789" }
+```
+처리: 코드 검증(존재·자기코드 아님·미사용·적격) → 입력자에게 에너지 지급, **코드 소유자(초대자)에게 코인 지급**(멱등: 1인 1회).
+응답 200:
+```json
+{ "success": true, "awardedEnergy": 10, "message": null }
+```
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `success` | Boolean | 적립 성공 여부 |
+| `awardedEnergy` | Int | 입력자에게 지급된 에너지 |
+| `message` | String? | 실패 사유(표시용) |
+
+에러:
+- 409 `ALREADY_REDEEMED` — 이미 추천 코드를 사용함.
+- 404 `INVALID_CODE` — 존재하지 않는 코드.
+- 409 `SELF_REFERRAL` — 자기 코드 입력.
+- 403 `NOT_ELIGIBLE` — 적격 아님(예: 가입 후 기간 초과).
+
+### 5.3 입력 시점
+- 추천 코드 입력은 **가입 후 혜택존 '친구 초대' 화면**에서 `POST /api/invite/redeem` 호출(로그인 상태). 온보딩/가입 단계 입력은 이번 범위 밖.
+- 적격 규칙(예: 가입 후 N일 내만 redeem 가능)은 서버가 `redeemAvailable`로 판정.
 
 ---
 

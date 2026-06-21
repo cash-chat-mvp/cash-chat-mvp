@@ -4,6 +4,7 @@ struct BenefitZoneScreen: View {
     @StateObject private var attendanceVM = AttendanceViewModel()
     @State private var animateIn = false
     @State private var showRoulette = false
+    @State private var showInvite = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -37,6 +38,10 @@ struct BenefitZoneScreen: View {
                     description: "하루 1회 무료 · 광고로 최대 5회 · 에너지 잭팟까지!", dimmed: false)
                     .padding(.horizontal, 16)
                     .onTapGesture { showRoulette = true }
+                BenefitInfoCardView(icon: "person.2.fill", title: "친구 초대", badge: .next,
+                    description: "친구가 가입하면 나는 코인, 친구는 에너지!", dimmed: false)
+                    .padding(.horizontal, 16)
+                    .onTapGesture { showInvite = true }
                 BenefitInfoCardView(icon: "target", title: "데일리 미션", badge: .soon,
                     description: "매일 바뀌는 3가지 미션을 완료하고 코인 적립", dimmed: true)
                     .padding(.horizontal, 16)
@@ -54,6 +59,9 @@ struct BenefitZoneScreen: View {
         .refreshable { await attendanceVM.refresh() }
         .sheet(isPresented: $showRoulette) {
             RouletteView(onClose: { showRoulette = false })
+        }
+        .sheet(isPresented: $showInvite) {
+            InviteView(onClose: { showInvite = false })
         }
         .background(Color(.systemGroupedBackground))
         .safeAreaInset(edge: .bottom) {
