@@ -51,6 +51,16 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single<ChatGateway> { ApiChatGateway(get()) }
     single { ChatStore(get(), get()) }
     single { HudStore(get(), get(), get(), get()) }
+    single<com.nomadclub.cashchat.shared.roulette.RouletteRepository> {
+        com.nomadclub.cashchat.shared.roulette.FakeRouletteRepository()
+    }
+    single {
+        val hud = get<HudStore>()
+        com.nomadclub.cashchat.shared.roulette.RouletteStore(
+            repo = get(),
+            onEnergyChanged = { hud.refreshEnergyOnly() },
+        )
+    }
     single { EvolutionStore(get()) }
     single {
         val adsApi = get<AdsApi>()
