@@ -19,6 +19,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url = uri("https://repository.tnkad.net:8443/repository/public/") }
     }
 }
 

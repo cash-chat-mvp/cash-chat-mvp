@@ -19,6 +19,8 @@ data class AppConfig(
     val admobRewardedAdUnitId: String,
     // Sentry
     val sentryDsn: String,
+    // TNK Offerwall
+    val tnkAppId: String,
 ) {
     companion object {
         fun fromBuildConfig(): AppConfig = AppConfig(
@@ -29,6 +31,7 @@ data class AppConfig(
             admobNativeAdUnitId = BuildConfig.ADMOB_NATIVE_AD_UNIT_ID,
             admobRewardedAdUnitId = BuildConfig.ADMOB_REWARDED_AD_UNIT_ID,
             sentryDsn = BuildConfig.SENTRY_DSN,
+            tnkAppId = BuildConfig.TNK_APP_ID,
         )
     }
 }

@@ -10,4 +10,5 @@ object FeatureFlags {
     const val AD_GATE = true               // P2-3 SSE gate — 수신 시 자동 렌더
     const val EVOLUTION_HISTORY = false    // P3-1 attempts 조회
     const val SHARE_LINK = false           // P3-3 공개 공유
+    const val BANNER_ADS = true            // 배너 광고 전역 on/off
 }

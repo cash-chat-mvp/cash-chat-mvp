@@ -69,9 +69,17 @@ val appModule = module {
 
     viewModel { com.nomadclub.cashchat.feature.chat.evolution.EvolutionViewModel(get(), get()) }
 
+    viewModel { com.nomadclub.cashchat.feature.rewards.BenefitRewardViewModel(get(), get()) }
+
+    viewModel { com.nomadclub.cashchat.feature.rewards.RouletteViewModel(get()) }
+
+    viewModel { com.nomadclub.cashchat.feature.rewards.InviteViewModel(get()) }
+
     // shared 데이터 레이어 (CC-348)
     single<TokenProvider> { DataStoreTokenProvider(get(), get()) }
 
     single { com.nomadclub.cashchat.config.AppConfig.fromBuildConfig() }
     single { com.nomadclub.cashchat.ads.RewardedAdManager(get()) }
+
+    single { com.nomadclub.cashchat.offerwall.TnkOfferwallManager(get()) }
 }
