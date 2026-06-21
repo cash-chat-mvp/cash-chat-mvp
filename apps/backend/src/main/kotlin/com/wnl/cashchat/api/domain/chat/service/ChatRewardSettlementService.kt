@@ -49,6 +49,8 @@ class ChatRewardSettlementService(
             ?: error("settlement $settlementId not found")
         val wallet = walletService.getForUpdate(userId)
         if (settlement.status == SettlementStatus.SETTLED) return settlement.toResult(wallet)
+        // 환불 종결된 정산은 다시 정산할 수 없다(reserved 가 이미 환불돼 consumeReserved 가 실패). 상태머신을 명시적으로 막는다.
+        check(settlement.status != SettlementStatus.REFUNDED) { "Cannot settle a refunded settlement $settlementId" }
 
         val messageId = settlement.messageId
         wallet.consumeReserved(1)

@@ -116,6 +116,26 @@ class ChatRewardSettlementServiceIntegrationTest : FunSpec() {
 
             val pool = poolRepository.findById(1L).get()
             pool.balance.compareTo(BigDecimal("0.32")) shouldBe 0
+            // 두 번째 정산이 원장을 중복 기록하지 않는다(멱등 키 가드)
+            walletLedgerRepository.count() shouldBe 5L
+        }
+
+        test("refund then settle is rejected (state machine): IllegalStateException, no double-spend") {
+            val (userId, convId, assistantMsgId) = setup()
+            energyService.grant(userId, 5, EnergySourceType.REWARDED_AD, exp, "seed:$userId")
+
+            val settlementId = chatRewardSettlementService.beginReservation(userId, convId, "m6")
+            chatRewardSettlementService.refund(userId, settlementId, null)
+
+            shouldThrow<IllegalStateException> {
+                chatRewardSettlementService.settle(userId, settlementId, assistantMsgId)
+            }
+
+            val wallet = userWalletRepository.findByUserId(userId)!!
+            wallet.energyAvailable shouldBe 5L
+            wallet.energyReserved shouldBe 0L
+            wallet.pendingCashablePt shouldBe 0L
+            settlementRepository.findById(settlementId).get().status shouldBe SettlementStatus.REFUNDED
         }
 
         test("duplicate messageId: after settle, beginReservation same messageId → RewardAlreadySettledException") {
