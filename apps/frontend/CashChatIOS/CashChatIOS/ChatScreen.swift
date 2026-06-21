@@ -25,6 +25,8 @@ struct ChatScreen: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            BannerAdView(slotName: "chat_top")
+                .frame(height: 50)
             messageList
             inputBar
         }

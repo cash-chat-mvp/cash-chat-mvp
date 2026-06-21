@@ -274,6 +274,7 @@ jobs:
           echo "ADMOB_NATIVE_AD_UNIT_ID=${{ secrets.ADMOB_NATIVE_AD_UNIT_ID }}"                       >> local.properties
           echo "ADMOB_REWARDED_AD_UNIT_ID=${{ secrets.ADMOB_REWARDED_AD_UNIT_ID }}"                   >> local.properties
           echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}"                                                 >> local.properties
+          echo "TNK_APP_ID=${{ secrets.TNK_APP_ID_ANDROID }}"                                         >> local.properties
 
       - name: Write Firebase Service Account
         env:

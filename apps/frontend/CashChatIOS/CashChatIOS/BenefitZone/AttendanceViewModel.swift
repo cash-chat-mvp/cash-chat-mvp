@@ -74,6 +74,13 @@ final class AttendanceViewModel: ObservableObject {
         }
     }
 
+    /// 당겨서 새로고침 / 화면 복귀(scenePhase active) 시 잔액과 출석을 함께 갱신.
+    /// 오퍼월 적립은 서버에서 비동기로 이뤄지므로 복귀 시 재조회로 새 코인을 반영한다.
+    func refresh() async {
+        store.loadMonthly(year: nil, month: nil)
+        try? await points.refresh()
+    }
+
     func checkIn() {
         store.checkIn()
     }

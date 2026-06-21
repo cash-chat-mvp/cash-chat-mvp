@@ -1,0 +1,11 @@
+framework module TnkRwdSdk2 {
+  umbrella header "TnkRwdSdk2.h"
+  export *
+
+  module * { export * }
+}
+
+module TnkRwdSdk2.Swift {
+  header "TnkRwdSdk2-Swift.h"
+  requires objc
+}
