@@ -66,6 +66,7 @@ final class RewardAdCardViewModel: ObservableObject {
 
 struct RewardAdCardView: View {
     @StateObject private var vm = RewardAdCardViewModel()
+    var onToast: (String) -> Void = { _ in }
 
     private var limitReached: Bool { vm.remaining == 0 }
 
@@ -120,5 +121,10 @@ struct RewardAdCardView: View {
         .contentShape(Rectangle())
         .onTapGesture { if !limitReached && !vm.busy { vm.watchAd() } }
         .onAppear { vm.onAppear() }
+        .onChange(of: vm.toast) { _, newValue in
+            guard let newValue else { return }
+            onToast(newValue)
+            vm.toast = nil
+        }
     }
 }

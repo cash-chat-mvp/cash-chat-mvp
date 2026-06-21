@@ -30,8 +30,7 @@ struct BenefitZoneScreen: View {
                 BannerAdView(slotName: "benefit_top")
                     .frame(height: 50)
 
-                BenefitInfoCardView(icon: "tv.fill", title: "리워드 광고", badge: .next,
-                    description: "광고 1회 시청 → +40 코인 · 하루 10회까지", dimmed: false)
+                RewardAdCardView(onToast: { attendanceVM.toast = $0 })
                     .padding(.horizontal, 16)
                 BenefitInfoCardView(icon: "target", title: "데일리 미션", badge: .soon,
                     description: "매일 바뀌는 3가지 미션을 완료하고 코인 적립", dimmed: true)
