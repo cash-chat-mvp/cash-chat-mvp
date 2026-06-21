@@ -80,6 +80,11 @@ class EconomyControllerTest : FunSpec() {
 
         test("GET /economy/me returns 404 WALLET_NOT_FOUND when the wallet is missing") {
             whenever(walletService.snapshot(1L)).thenThrow(WalletNotInitializedException(1L))
+            // snapshot 이 먼저 throw 하므로 quotaOf 는 도달하지 않지만, 호출 순서가 바뀌어도
+            // 404 가 유지되도록(그리고 null 반환 NPE 를 피하도록) 명시적으로 스텁을 둔다.
+            whenever(adRewardService.quotaOf(eq(1L), any())).thenReturn(
+                AdRewardQuota(usedToday = 0, dailyLimit = 10, remaining = 10, resetAtKst = Instant.parse("2026-06-22T15:00:00Z"))
+            )
 
             mockMvc.perform(get("/api/v1/economy/me").principal(principal))
                 .andExpect(status().isNotFound)
