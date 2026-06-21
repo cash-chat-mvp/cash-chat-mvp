@@ -43,4 +43,15 @@ class RouletteStoreTest {
         assertTrue(credited)
         assertEquals(1, store.status.value?.availableSpins)
     }
+
+    @Test
+    fun `prepareAdSpin + creditAdSpin - iOS 경로로도 크레딧 적립되어 status 갱신`() = runTest {
+        val store = RouletteStore(FakeRouletteRepository(random = { 0.5 }), onEnergyChanged = {})
+        store.spin() // availableSpins 0
+        val baseline = store.status.value?.availableSpins ?: 0
+        store.prepareAdSpin() // nonce 발급(스텁)
+        val credited = store.creditAdSpin(baseline)
+        assertTrue(credited)
+        assertEquals(1, store.status.value?.availableSpins)
+    }
 }

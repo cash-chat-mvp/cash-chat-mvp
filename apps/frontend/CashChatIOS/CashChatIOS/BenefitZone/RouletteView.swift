@@ -51,13 +51,16 @@ final class RouletteViewModel: ObservableObject {
         Task { @MainActor in
             defer { busy = false }
             guard let s = status else { return }
-            let baseline = Int(s.availableSpins)
+            let baseline = s.availableSpins
+
+            // nonce 발급(서버 검증용) 후 광고 표시.
+            guard let nonce = try? await store.prepareAdSpin() else { return }
 
             var notReady = false
             let watched: Bool = await withCheckedContinuation { cont in
                 var rewarded = false
                 adManager.show(
-                    nonce: "roulette-ad",
+                    nonce: nonce,
                     onRewarded: { _ in rewarded = true },
                     onDismissed: { cont.resume(returning: rewarded) },
                     onNotReady: { notReady = true; cont.resume(returning: false) }
@@ -69,9 +72,8 @@ final class RouletteViewModel: ObservableObject {
                 return
             }
 
-            // 스텁: 광고 시청 후 갱신된 상태로 스핀 크레딧 반영 여부 확인
-            let newStatus = try? await store.refresh()
-            let credited = Int(newStatus?.availableSpins ?? 0) > baseline
+            // 스핀 크레딧 적립(baseline 대비 증가 판정 + status 갱신).
+            let credited = (try? await store.creditAdSpin(baselineAvailable: baseline))?.boolValue ?? false
             if credited { toast = "스핀 1회가 충전됐어요!" }
         }
     }

@@ -28,14 +28,27 @@ class RouletteStore(
         return result
     }
 
-    /** 광고 시청 → 스핀 크레딧 적립. showAd 는 nonce 로 광고를 띄우고 끝까지 봤으면 true. */
+    /**
+     * 광고 시청 → 스핀 크레딧 적립. showAd 는 nonce 로 광고를 띄우고 끝까지 봤으면 true.
+     * (Android 용. iOS 는 suspend-lambda 파라미터를 Swift 클로저로 못 넘기므로 prepareAdSpin/creditAdSpin 을 직접 호출한다.)
+     */
     @Throws(Exception::class)
     suspend fun watchAdForSpin(showAd: suspend (nonce: String) -> Boolean): Boolean {
         val baseline = repo.getStatus().availableSpins
-        val nonce = repo.requestAdSpinNonce()
+        val nonce = prepareAdSpin()
         val watched = showAd(nonce)
         if (!watched) return false
-        val credited = repo.awaitSpinCredited(baseline)
+        return creditAdSpin(baseline)
+    }
+
+    /** 광고 추가 스핀용 nonce 발급(iOS 가 광고 표시 전에 호출). */
+    @Throws(Exception::class)
+    suspend fun prepareAdSpin(): String = repo.requestAdSpinNonce()
+
+    /** 광고 시청 후 스핀 크레딧 적립 판정 + status 갱신. baseline 대비 availableSpins 증가 시 true. */
+    @Throws(Exception::class)
+    suspend fun creditAdSpin(baselineAvailable: Int): Boolean {
+        val credited = repo.awaitSpinCredited(baselineAvailable)
         _status.value = repo.getStatus()
         return credited
     }
