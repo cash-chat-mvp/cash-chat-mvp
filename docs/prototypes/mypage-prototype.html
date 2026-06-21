@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>마이페이지 구성안 · 프로토타입 v2</title>
+<style>
+  :root {
+    --indigo: #5C6BFA;
+    --indigo-dark: #4A5AE8;
+    --orange: #FF6B00;
+    --orange-light: #FF8C3A;
+    --green: #16A34A;
+    --bg: #F2F3F7;
+    --surface: #FFFFFF;
+    --surface-variant: #EEF0F6;
+    --on-surface: #1A1B25;
+    --on-variant: #8A8FA3;
+    --outline: #E4E6EF;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Pretendard", -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #20222E;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 32px 16px; color: var(--on-surface); gap: 16px;
+  }
+  .page-title { color: #C9CCDA; font-size: 13px; letter-spacing: 0.3px; }
+  .page-title b { color: #fff; }
+
+  .phone {
+    width: 390px; max-width: 100%; background: var(--bg);
+    border-radius: 40px; overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,0.55);
+    position: relative; border: 10px solid #0C0D12;
+  }
+  .statusbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 26px 6px; font-size: 14px; font-weight: 700;
+    background: var(--indigo); color: #fff;
+  }
+  .statusbar .right { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .battery { background:#fff; color:var(--indigo); border-radius:5px; padding:1px 5px; font-size:11px; font-weight:800;}
+
+  .scroll { height: 770px; overflow-y: auto; scrollbar-width: none; }
+  .scroll::-webkit-scrollbar { display: none; }
+
+  /* Thin profile header */
+  .header {
+    background: linear-gradient(135deg, var(--indigo), var(--indigo-dark));
+    padding: 14px 22px 20px; border-radius: 0 0 24px 24px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .avatar {
+    width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center; font-size: 26px; flex:0 0 auto;
+  }
+  .header .name { color: #fff; font-size: 18px; font-weight: 800; }
+  .header .email { color: var(--orange-light); font-size: 12px; font-weight: 600; margin-top: 2px; display:flex; align-items:center; gap:6px;}
+  .chip { background: rgba(255,255,255,0.22); color:#fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 8px; }
+  .header .edit { margin-left:auto; color:rgba(255,255,255,0.85); font-size:18px; }
+
+  .body-pad { padding: 0 18px; }
+  .sec-label { font-size: 13px; font-weight: 800; color: var(--on-variant); margin: 20px 4px 10px; display:flex; align-items:center; gap:7px;}
+  .sec-label .tag { font-size:16px; }
+  .card { background: var(--surface); border-radius: 20px; box-shadow: 0 1px 2px rgba(20,20,40,0.05); }
+
+  /* ── 육성 cluster ── */
+  .char-card { padding: 18px; }
+  .char-top { display: flex; align-items: center; gap: 14px; }
+  .char-emoji {
+    width: 64px; height: 64px; border-radius: 18px;
+    background: linear-gradient(135deg, #EEF0FF, #E3E7FF);
+    display: flex; align-items: center; justify-content: center; font-size: 36px; flex:0 0 auto;
+  }
+  .char-info { flex: 1; }
+  .char-lv { color: var(--on-surface); font-size: 17px; font-weight: 800; display:flex; align-items:center; gap:8px; }
+  .lv-badge { background: var(--indigo); color:#fff; font-size: 11px; font-weight: 900; padding: 2px 9px; border-radius: 99px; }
+  .char-sub { color: var(--on-variant); font-size: 12px; font-weight: 500; margin-top: 3px; }
+  .energy-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .energy-label { color: var(--indigo); font-size: 11px; font-weight: 800; }
+  .gauge { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-variant); overflow: hidden; }
+  .gauge > span { display: block; height: 100%; width: 62%; background: linear-gradient(90deg, var(--indigo), var(--indigo-dark)); border-radius: 99px; }
+  .energy-val { color: var(--on-surface); font-size: 11px; font-weight: 800; }
+
+  .mat-block { margin-top: 16px; }
+  .mat-label { font-size: 12px; font-weight: 700; color: var(--on-variant); margin: 0 2px 8px; }
+  .items { display:flex; gap: 10px; overflow-x:auto; padding-bottom: 4px; scrollbar-width:none;}
+  .items::-webkit-scrollbar{ display:none;}
+  .item {
+    flex: 0 0 auto; width: 72px; height: 82px; border-radius: 16px; background: var(--surface-variant);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;
+  }
+  .item .ico { font-size: 24px; }
+  .item .nm { font-size: 11px; font-weight: 700; color: var(--on-surface); }
+  .item .qty { font-size: 11px; font-weight: 800; color: var(--indigo); }
+
+  .evo-line {
+    margin-top: 16px; display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-variant); border-radius: 14px; padding: 11px 14px;
+  }
+  .evo-line .cost { color: var(--on-surface); font-size: 13px; font-weight: 700; }
+  .evo-line .cost b { color: var(--orange); }
+  .evo-line .rate { color: var(--on-variant); font-size: 12px; font-weight:600; }
+  .cta {
+    margin-top: 14px; width: 100%; border: none; border-radius: 14px; padding: 14px;
+    background: linear-gradient(135deg, var(--indigo), var(--indigo-dark)); color: #fff;
+    font-size: 15px; font-weight: 800; cursor: pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .cta:active { transform: scale(0.99); }
+
+  /* ── 포인트·교환 cluster ── */
+  .points { padding: 18px 20px; }
+  .points .lbl { color: var(--on-variant); font-size: 13px; font-weight: 700; }
+  .points .amt { color: var(--on-surface); font-size: 28px; font-weight: 900; margin-top:2px;}
+  .points .amt span { font-size: 16px; }
+  .points .meta { color: var(--on-variant); font-size: 12px; font-weight: 600; margin-top: 8px; }
+  .points .meta b { color: var(--green); }
+  .ledger-btn {
+    margin-top: 14px; width: 100%; border: 1px solid var(--outline); background: var(--surface-variant);
+    border-radius: 13px; padding: 12px; font-size: 13px; font-weight: 800; color: var(--indigo);
+    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .voucher {
+    margin-top: 12px; padding: 16px 18px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;
+  }
+  .voucher .l { display:flex; align-items:center; gap: 12px; }
+  .voucher .l .g {
+    width: 40px; height:40px; border-radius:12px; background: var(--surface-variant);
+    display:flex; align-items:center; justify-content:center; font-size:20px;
+  }
+  .voucher .l .t { font-size: 15px; font-weight: 700; color: var(--on-surface);}
+  .voucher .l .s { font-size: 12px; color: var(--on-variant); font-weight:500; margin-top:2px;}
+  .soon { background:#E0E3EE; color:#9095A8; font-size:11px; font-weight:800; padding:3px 9px; border-radius:99px;}
+
+  /* ── 메뉴 ── */
+  .row {
+    display:flex; align-items:center; gap: 14px; padding: 16px 18px; background: var(--surface);
+    border-radius: 16px; margin-bottom: 10px; cursor:pointer; box-shadow: 0 1px 2px rgba(20,20,40,0.04);
+  }
+  .row:active { background: #FAFBFE; }
+  .row .ricon {
+    width: 38px; height: 38px; border-radius: 11px; background: var(--surface-variant);
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto; font-size:18px;
+  }
+  .row .rlabel { flex:1; font-size: 15px; font-weight: 700; color: var(--on-surface); }
+  .row .rright { display:flex; align-items:center; gap: 8px; }
+  .badge-n { background: var(--orange); color:#fff; font-size:11px; font-weight:900; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center;}
+  .chev { color: #C2C6D6; font-size:18px;}
+
+  /* small support links */
+  .support {
+    display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap;
+    margin: 18px 4px 6px; color: var(--on-variant); font-size: 12px; font-weight:600;
+  }
+  .support a { color: var(--on-variant); text-decoration:none; }
+  .support .dot { opacity:0.4; }
+
+  .divider { height:1px; background: var(--outline); margin: 16px 4px; }
+  .account-actions { display:flex; align-items:center; justify-content: space-between; padding: 0 6px;}
+  .logout {
+    flex:1; border: 1px solid var(--outline); background: transparent; color: var(--on-variant);
+    border-radius: 14px; padding: 14px; font-size: 14px; font-weight: 800; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .withdraw { color: var(--on-variant); font-size: 12px; font-weight: 600; text-decoration: underline; padding: 0 14px; cursor:pointer; opacity:0.7;}
+  .footer { text-align:center; padding: 26px 0 22px; color: var(--on-variant); }
+  .footer .v { font-size: 12px; font-weight: 700; }
+  .footer .c { font-size: 11px; opacity: 0.6; margin-top: 3px; }
+
+  .nav {
+    position: sticky; bottom: 0; display:flex; background: var(--surface);
+    border-top: 1px solid var(--outline); padding: 8px 6px 12px;
+  }
+  .nav .tab { flex:1; display:flex; flex-direction:column; align-items:center; gap: 4px; color: var(--on-variant); font-size: 11px; font-weight: 700; }
+  .nav .tab.active { color: var(--orange); }
+  .nav .tab .ti { font-size: 20px; }
+
+  .note { color:#9DA1B3; font-size: 12px; max-width: 390px; line-height: 1.6; }
+  .note b { color:#fff; }
+  .legend { display:inline-block; background:#2C2F3E; color:#C9CCDA; font-size:11px; padding:2px 7px; border-radius:6px; }
+</style>
+</head>
+<body>
+  <div class="page-title"><b>마이페이지 구성안 v2</b> — 기능(경제 루프)별 재구성</div>
+
+  <div class="phone">
+    <div class="statusbar">
+      <span>4:20</span>
+      <span class="right">●●●● LTE <span class="battery">98</span></span>
+    </div>
+
+    <div class="scroll">
+
+      <!-- Thin profile header -->
+      <div class="header">
+        <div class="avatar">👤</div>
+        <div>
+          <div class="name">홍길동님</div>
+          <div class="email">gildong@kakao.com <span class="chip">Google</span></div>
+        </div>
+        <div class="edit">›</div>
+      </div>
+
+      <!-- ── 육성 cluster (캐릭터 + 강화재료) ── -->
+      <div class="body-pad">
+        <div class="sec-label"><span class="tag">🐣</span> 육성</div>
+        <div class="card char-card">
+          <div class="char-top">
+            <div class="char-emoji">🐣</div>
+            <div class="char-info">
+              <div class="char-lv">나의 캐릭터 <span class="lv-badge">Lv.3</span></div>
+              <div class="char-sub">조금만 더 키우면 다음 단계로 진화해요!</div>
+              <div class="energy-row">
+                <span class="energy-label">⚡에너지</span>
+                <span class="gauge"><span></span></span>
+                <span class="energy-val">62/100</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mat-block">
+            <div class="mat-label">보유 강화재료</div>
+            <div class="items">
+              <div class="item"><span class="ico">🧪</span><span class="nm">강화재료</span><span class="qty">×4</span></div>
+              <div class="item"><span class="ico">🚀</span><span class="nm">부스터</span><span class="qty">×1</span></div>
+              <div class="item"><span class="ico">🛡️</span><span class="nm">보호권</span><span class="qty">×2</span></div>
+              <div class="item"><span class="ico">✨</span><span class="nm">행운부적</span><span class="qty">×1</span></div>
+            </div>
+          </div>
+
+          <div class="evo-line">
+            <span class="cost">다음 진화 <b>1,200P</b></span>
+            <span class="rate">성공 확률 65%</span>
+          </div>
+          <button class="cta">진화하러 가기 →</button>
+        </div>
+      </div>
+
+      <!-- ── 포인트·교환 cluster (포인트 + 기프티콘/교환권) ── -->
+      <div class="body-pad">
+        <div class="sec-label"><span class="tag">💰</span> 포인트 · 교환</div>
+        <div class="card points">
+          <span class="lbl">보유 포인트</span>
+          <div class="amt">1,250 <span>P</span></div>
+          <div class="meta">이번 달 적립 <b>+3,400P</b> · 누적 획득 15,750P</div>
+          <button class="ledger-btn">🕘 적립 · 사용 내역 보기 →</button>
+        </div>
+
+        <div class="card voucher">
+          <div class="l">
+            <div class="g">🎁</div>
+            <div>
+              <div class="t">기프티콘 · 교환권 보관함</div>
+              <div class="s">포인트로 교환한 상품을 모아봐요</div>
+            </div>
+          </div>
+          <span class="soon">준비중</span>
+        </div>
+      </div>
+
+      <!-- ── 메뉴 ── -->
+      <div class="body-pad">
+        <div class="sec-label"><span class="tag">⚙️</span> 메뉴</div>
+        <div class="row">
+          <div class="ricon">🔔</div><div class="rlabel">공지사항</div>
+          <div class="rright"><span class="badge-n">N</span><span class="chev">›</span></div>
+        </div>
+        <div class="row">
+          <div class="ricon">🎉</div><div class="rlabel">친구 초대 · 이벤트 코드</div>
+          <div class="rright"><span class="soon">준비중</span><span class="chev">›</span></div>
+        </div>
+        <div class="row">
+          <div class="ricon">🛠️</div><div class="rlabel">설정 <span style="font-size:12px;font-weight:500;color:var(--on-variant)">· 알림</span></div>
+          <div class="rright"><span class="chev">›</span></div>
+        </div>
+
+        <!-- low-frequency support: small links -->
+        <div class="support">
+          <a>고객센터</a><span class="dot">·</span>
+          <a>이용약관</a><span class="dot">·</span>
+          <a>개인정보처리방침</a>
+        </div>
+
+        <div class="divider"></div>
+        <div class="account-actions">
+          <button class="logout">⎋ 로그아웃</button>
+          <span class="withdraw">회원탈퇴</span>
+        </div>
+
+        <div class="footer">
+          <div class="v">Cash Chat v1.0.0</div>
+          <div class="c">© 2026 wildNomadLab. All rights reserved.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="nav">
+      <div class="tab"><span class="ti">💬</span>채팅</div>
+      <div class="tab"><span class="ti">🎁</span>리워드</div>
+      <div class="tab"><span class="ti">🛍️</span>상점</div>
+      <div class="tab active"><span class="ti">👤</span>마이페이지</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <span class="legend">v2 변경점</span> &nbsp;
+    프로필은 헤더에 얇게 · 캐릭터는 <b>[육성]</b> 묶음으로 내려 강화재료와 결합 ·
+    포인트와 기프티콘/교환권을 <b>[포인트·교환]</b> 한 묶음으로 ·
+    알림은 <b>설정</b> 안으로 흡수 · 고객센터·약관·개인정보는 하단 <b>작은 링크</b>로 비중 축소.
+    <br />“준비중” = 백엔드 미구현(기프티콘 VOUCHER·친구초대). 수치는 목 데이터.
+  </div>
+</body>
+</html>

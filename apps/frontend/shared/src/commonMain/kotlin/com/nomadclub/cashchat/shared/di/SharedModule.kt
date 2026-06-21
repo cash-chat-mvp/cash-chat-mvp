@@ -41,6 +41,7 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single { AdsApi(get(), baseUrl) }
     single { PointsApi(get(), baseUrl) }
     single { AttendanceApi(get(), baseUrl) }
+    single { com.nomadclub.cashchat.shared.offerwall.OfferwallApi(get(), baseUrl) }
     // 혜택존(출석/코인) — BE GET /api/points/me 잔액을 단일 소스로 사용
     single<PointsRepository> { RemotePointsRepository(get()) }
     single { AttendanceStore(get(), get(), get()) }
@@ -50,6 +51,26 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single<ChatGateway> { ApiChatGateway(get()) }
     single { ChatStore(get(), get()) }
     single { HudStore(get(), get(), get(), get()) }
+    single<com.nomadclub.cashchat.shared.roulette.RouletteRepository> {
+        com.nomadclub.cashchat.shared.roulette.FakeRouletteRepository()
+    }
+    single {
+        val hud = get<HudStore>()
+        com.nomadclub.cashchat.shared.roulette.RouletteStore(
+            repo = get(),
+            onEnergyChanged = { hud.refreshEnergyOnly() },
+        )
+    }
+    single<com.nomadclub.cashchat.shared.invite.InviteRepository> {
+        com.nomadclub.cashchat.shared.invite.FakeInviteRepository()
+    }
+    single {
+        val hud = get<HudStore>()
+        com.nomadclub.cashchat.shared.invite.InviteStore(
+            repo = get(),
+            onRewardChanged = { hud.refreshEnergyOnly() },
+        )
+    }
     single { EvolutionStore(get()) }
     single {
         val adsApi = get<AdsApi>()

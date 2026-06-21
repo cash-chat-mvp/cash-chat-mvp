@@ -275,6 +275,7 @@ jobs:
           API_SERVER_BASE_URL:  ${{ secrets.API_SERVER_BASE_URL }}
           ADMOB_APP_ID:         ${{ secrets.ADMOB_APP_ID }}
           ADMOB_REWARDED_AD_UNIT_ID: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID }}
+          TNK_APP_ID_IOS:       ${{ secrets.TNK_APP_ID_IOS }}
         run: |
           # AdMob 실 ID 시크릿이 없으면 Google 공식 테스트 ID로 폴백 (빌드 실패 방지)
           ADMOB_APP_ID="${ADMOB_APP_ID:-ca-app-pub-3940256099942544~1458002511}"
@@ -287,6 +288,7 @@ jobs:
               static let apiBaseUrl        = "API_SERVER_BASE_URL_PLACEHOLDER"
               static let admobAppId        = "ADMOB_APP_ID_PLACEHOLDER"
               static let admobRewardedAdUnitId = "ADMOB_REWARDED_AD_UNIT_ID_PLACEHOLDER"
+              static let tnkAppId          = "TNK_APP_ID_IOS_PLACEHOLDER"
           }
           SWIFT_EOF
           sed -i '' \
@@ -295,6 +297,7 @@ jobs:
             -e "s|API_SERVER_BASE_URL_PLACEHOLDER|${API_SERVER_BASE_URL}|g" \
             -e "s|ADMOB_APP_ID_PLACEHOLDER|${ADMOB_APP_ID}|g" \
             -e "s|ADMOB_REWARDED_AD_UNIT_ID_PLACEHOLDER|${ADMOB_REWARDED_AD_UNIT_ID}|g" \
+            -e "s|TNK_APP_ID_IOS_PLACEHOLDER|${TNK_APP_ID_IOS}|g" \
             CashChatIOS/CashChatIOS/Secrets.swift
 
       - name: Create local.xcconfig
