@@ -67,11 +67,16 @@ fun RouletteWheel(
             val r = d / 2f
 
             rotate(rotationDeg, pivot = Offset(cx, cy)) {
-                segments.forEachIndexed { i, seg ->
-                    val start = -90f - sweep / 2f + i * sweep
+                segments.forEach { seg ->
+                    // 각도는 리스트 위치가 아니라 seg.index 를 단일 기준으로 삼는다.
+                    // 정지 회전이 result.segmentIndex 로 계산되므로, 서버가 segments 를
+                    // index 와 다른 순서로 내려줘도 칸 위치가 어긋나지 않는다.
+                    val slot = seg.index
+                    if (slot !in 0 until n) return@forEach
+                    val start = -90f - sweep / 2f + slot * sweep
                     drawArc(
                         color = if (seg.prize == RoulettePrize.JACKPOT_100) CREAM
-                                else if (i % 2 == 0) CREAM else WHITEISH,
+                                else if (slot % 2 == 0) CREAM else WHITEISH,
                         startAngle = start,
                         sweepAngle = sweep,
                         useCenter = true,
@@ -97,12 +102,12 @@ fun RouletteWheel(
                         restore()
                     }
                 }
-                // 잭팟 칸 금색 테두리: 인덱스 고정이 아니라 실제 JACKPOT 칸을 찾아 그린다(Remote 가 다른 위치를 줘도 안전).
-                val jackpotIndex = segments.indexOfFirst { it.prize == RoulettePrize.JACKPOT_100 }
-                if (jackpotIndex >= 0) {
+                // 잭팟 칸 금색 테두리: 리스트 위치가 아니라 실제 JACKPOT 칸의 seg.index 로 그린다(Remote 가 다른 위치를 줘도 안전).
+                val jackpotSlot = segments.firstOrNull { it.prize == RoulettePrize.JACKPOT_100 }?.index ?: -1
+                if (jackpotSlot in 0 until n) {
                     drawArc(
                         color = GOLD,
-                        startAngle = -90f - sweep / 2f + jackpotIndex * sweep,
+                        startAngle = -90f - sweep / 2f + jackpotSlot * sweep,
                         sweepAngle = sweep,
                         useCenter = true,
                         topLeft = topLeft,

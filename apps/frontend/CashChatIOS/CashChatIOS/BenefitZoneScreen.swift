@@ -3,9 +3,15 @@ import SwiftUI
 struct BenefitZoneScreen: View {
     @StateObject private var attendanceVM = AttendanceViewModel()
     @State private var animateIn = false
-    @State private var showRoulette = false
-    @State private var showInvite = false
+    // 같은 뷰 체인에 .sheet(isPresented:) 를 두 개 붙이면 SwiftUI 가 마지막 하나만
+    // 표시하므로(룰렛 시트가 안 열림), 단일 .sheet(item:) 로 통합한다.
+    @State private var activeSheet: BenefitSheet?
     @Environment(\.scenePhase) private var scenePhase
+
+    private enum BenefitSheet: Int, Identifiable {
+        case roulette, invite
+        var id: Int { rawValue }
+    }
 
     var body: some View {
         ScrollView {
@@ -37,11 +43,11 @@ struct BenefitZoneScreen: View {
                 BenefitInfoCardView(icon: "die.face.5.fill", title: "행운 룰렛", badge: .next,
                     description: "하루 1회 무료 · 광고로 최대 5회 · 에너지 잭팟까지!", dimmed: false)
                     .padding(.horizontal, 16)
-                    .onTapGesture { showRoulette = true }
+                    .onTapGesture { activeSheet = .roulette }
                 BenefitInfoCardView(icon: "person.2.fill", title: "친구 초대", badge: .next,
                     description: "친구가 가입하면 나는 코인, 친구는 에너지!", dimmed: false)
                     .padding(.horizontal, 16)
-                    .onTapGesture { showInvite = true }
+                    .onTapGesture { activeSheet = .invite }
                 BenefitInfoCardView(icon: "target", title: "데일리 미션", badge: .soon,
                     description: "매일 바뀌는 3가지 미션을 완료하고 코인 적립", dimmed: true)
                     .padding(.horizontal, 16)
@@ -57,11 +63,11 @@ struct BenefitZoneScreen: View {
             .padding(.bottom, 16)
         }
         .refreshable { await attendanceVM.refresh() }
-        .sheet(isPresented: $showRoulette) {
-            RouletteView(onClose: { showRoulette = false })
-        }
-        .sheet(isPresented: $showInvite) {
-            InviteView(onClose: { showInvite = false })
+        .sheet(item: $activeSheet) { sheet in
+            switch sheet {
+            case .roulette: RouletteView(onClose: { activeSheet = nil })
+            case .invite: InviteView(onClose: { activeSheet = nil })
+            }
         }
         .background(Color(.systemGroupedBackground))
         .safeAreaInset(edge: .bottom) {
