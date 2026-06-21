@@ -1,9 +1,11 @@
 package com.wnl.cashchat.api.domain.economy.properties
 
+import jakarta.validation.constraints.DecimalMin
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.PositiveOrZero
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.validation.annotation.Validated
+import java.math.BigDecimal
 
 @Validated
 @ConfigurationProperties(prefix = "app.economy")
@@ -23,4 +25,5 @@ data class EconomyProperties(
     val evolutionEnabled: Boolean = true,
     val cashoutEnabled: Boolean = true,
     val premiumRoutingEnabled: Boolean = true,
+    @field:DecimalMin("0.0") val sharedPoolMarginPerChat: BigDecimal = BigDecimal.ZERO,
 )

@@ -4,6 +4,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import jakarta.validation.Validation
+import java.math.BigDecimal
 
 class EconomyPropertiesTest : FunSpec({
     test("defaults match spec operating parameters") {
@@ -18,6 +19,7 @@ class EconomyPropertiesTest : FunSpec({
         p.attendanceEnergyExpirationDays shouldBe 7L
         p.rewardChatEnabled shouldBe true
         p.evolutionEnabled shouldBe true
+        p.sharedPoolMarginPerChat.compareTo(BigDecimal.ZERO) shouldBe 0
     }
 
     test("rejects non-positive maxEnergy") {
