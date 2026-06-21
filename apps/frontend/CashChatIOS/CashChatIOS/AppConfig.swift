@@ -7,6 +7,8 @@ enum AppConfig {
     static let admobAppId: String = required(Secrets.admobAppId, key: "admobAppId")
     static let admobRewardedAdUnitId: String = required(Secrets.admobRewardedAdUnitId, key: "admobRewardedAdUnitId")
     static let admobBannerAdUnitId: String = required(Secrets.admobBannerAdUnitId, key: "admobBannerAdUnitId")
+    static let admobInterstitialAdUnitId: String = required(Secrets.admobInterstitialAdUnitId, key: "admobInterstitialAdUnitId")
+    static let admobNativeAdUnitId: String = required(Secrets.admobNativeAdUnitId, key: "admobNativeAdUnitId")
     static let tnkAppId: String = required(Secrets.tnkAppId, key: "tnkAppId")
 
     private static func required(_ value: String, key: String) -> String {
