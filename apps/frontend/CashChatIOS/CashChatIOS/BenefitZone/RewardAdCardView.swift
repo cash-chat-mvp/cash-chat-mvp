@@ -1,5 +1,5 @@
 import SwiftUI
-import shared
+import CashChatShared
 
 /// 혜택존 리워드 광고 카드 상태 홀더. 채팅 경로와 무관하게 독립 동작.
 /// runRewardFlow(showAd:) 의 showAd 파라미터는 KotlinSuspendFunction1 프로토콜이라
