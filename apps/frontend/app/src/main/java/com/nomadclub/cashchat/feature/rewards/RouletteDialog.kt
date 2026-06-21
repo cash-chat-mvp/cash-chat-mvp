@@ -51,25 +51,33 @@ class RouletteViewModel(private val store: RouletteStore) : ViewModel() {
 
     fun load() { viewModelScope.launch { runCatching { store.refresh() } } }
 
+    /** 무료 첫 스핀. */
     fun spin() {
         if (_phase.value != Phase.IDLE) return
         val s = store.status.value ?: return
-        if (s.availableSpins <= 0) { _toast.tryEmit("스핀이 없어요. 광고를 보고 채워보세요"); return }
+        if (!s.freeSpinAvailable) return
         viewModelScope.launch {
             _phase.value = Phase.SPINNING
             val result = runCatching { store.spin() }.getOrNull()
-            if (result != null) _result.tryEmit(result)
-            else _toast.tryEmit("스핀에 실패했어요")
+            if (result != null) _result.tryEmit(result) else _toast.tryEmit("스핀에 실패했어요")
             _phase.value = Phase.IDLE
         }
     }
 
-    fun watchAdForSpin(showAd: suspend (nonce: String) -> Boolean) {
+    /** 광고 게이트 스핀: 광고 시청 → 끝까지 봤으면 즉시 스핀. */
+    fun spinWithAd(showAd: suspend (nonce: String) -> Boolean) {
         if (_phase.value != Phase.IDLE) return
+        val s = store.status.value ?: return
+        if (s.remaining <= 0) { _toast.tryEmit("오늘 룰렛을 다 돌렸어요. 자정에 리셋돼요"); return }
         viewModelScope.launch {
             _phase.value = Phase.AD
-            val credited = runCatching { store.watchAdForSpin(showAd) }.getOrDefault(false)
-            if (credited) _toast.tryEmit("스핀 1회가 충전됐어요!")
+            val nonce = runCatching { store.prepareAdSpin() }.getOrNull()
+            if (nonce == null) { _phase.value = Phase.IDLE; return@launch }
+            val watched = runCatching { showAd(nonce) }.getOrDefault(false)
+            if (!watched) { _phase.value = Phase.IDLE; return@launch }
+            _phase.value = Phase.SPINNING
+            val result = runCatching { store.spinWithAd() }.getOrNull()
+            if (result != null) _result.tryEmit(result) else _toast.tryEmit("스핀에 실패했어요")
             _phase.value = Phase.IDLE
         }
     }
@@ -116,8 +124,11 @@ fun RouletteDialog(
         ) {
             Text("행운 룰렛", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF1B1B2A))
             status?.let {
-                Text("오늘 ${it.availableSpins}회 가능 · 광고로 +${it.adSpinsRemaining}",
-                    fontSize = 12.sp, color = Color(0xFF6B6979))
+                Text(
+                    if (it.freeSpinAvailable) "오늘 ${it.remaining}회 · 첫 회 무료!"
+                    else "오늘 ${it.remaining}회 남음 · 광고 보고 돌리기",
+                    fontSize = 12.sp, color = Color(0xFF6B6979),
+                )
             }
 
             Box(contentAlignment = Alignment.TopCenter) {
@@ -132,41 +143,46 @@ fun RouletteDialog(
 
             lastResultText?.let { Text(it, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF5B5BD6)) }
 
-            val spins = status?.availableSpins ?: 0
-            val adRemaining = status?.adSpinsRemaining ?: 0
-            val canSpin = spins > 0 && phase == RouletteViewModel.Phase.IDLE && !isAnimating
-            val limitReached = spins <= 0 && adRemaining <= 0
-            if (spins > 0 || limitReached) {
-                Button(
-                    onClick = { vm.spin() },
-                    enabled = canSpin,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(if (spins > 0) "돌리기 · 오늘 ${spins}회" else "내일 다시 · 자정 리셋") }
-            } else {
-                Button(
-                    onClick = {
-                        val activity = context as? Activity ?: return@Button
-                        vm.watchAdForSpin { nonce ->
-                            suspendCancellableCoroutine { cont ->
-                                var rewarded = false
-                                adManager.show(
-                                    activity = activity,
-                                    nonce = nonce,
-                                    onRewarded = { rewarded = true },
-                                    onDismissed = { if (cont.isActive) cont.resume(rewarded) },
-                                    onNotReady = {
-                                        if (cont.isActive) {
-                                            Toast.makeText(context, "광고를 준비 중이에요. 잠시 후 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
-                                            cont.resume(false)
-                                        }
-                                    },
-                                )
+            val remaining = status?.remaining ?: 0
+            val freeAvailable = status?.freeSpinAvailable ?: false
+            val idle = phase == RouletteViewModel.Phase.IDLE && !isAnimating
+            when {
+                remaining <= 0 -> {
+                    Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
+                        Text("내일 다시 · 자정 리셋")
+                    }
+                }
+                freeAvailable -> {
+                    Button(onClick = { vm.spin() }, enabled = idle, modifier = Modifier.fillMaxWidth()) {
+                        Text("돌리기 (무료)")
+                    }
+                }
+                else -> {
+                    Button(
+                        onClick = {
+                            val activity = context as? Activity ?: return@Button
+                            vm.spinWithAd { nonce ->
+                                suspendCancellableCoroutine { cont ->
+                                    var rewarded = false
+                                    adManager.show(
+                                        activity = activity,
+                                        nonce = nonce,
+                                        onRewarded = { rewarded = true },
+                                        onDismissed = { if (cont.isActive) cont.resume(rewarded) },
+                                        onNotReady = {
+                                            if (cont.isActive) {
+                                                Toast.makeText(context, "광고를 준비 중이에요. 잠시 후 다시 시도해주세요.", Toast.LENGTH_SHORT).show()
+                                                cont.resume(false)
+                                            }
+                                        },
+                                    )
+                                }
                             }
-                        }
-                    },
-                    enabled = phase == RouletteViewModel.Phase.IDLE && !isAnimating,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("광고 보고 한 번 더") }
+                        },
+                        enabled = idle,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("광고 보고 돌리기") }
+                }
             }
 
             Text("닫기", color = Color(0xFF9A95AD), fontSize = 13.sp,

@@ -21,38 +21,40 @@ final class RouletteViewModel: ObservableObject {
     }
     func onDisappear() { collector.cancel() }
 
+    /// 무료 첫 스핀.
     func spin() {
-        guard !busy, let s = status, Int(s.availableSpins) > 0 else {
-            if Int(status?.availableSpins ?? 0) == 0 { toast = "스핀이 없어요. 광고를 보고 채워보세요" }
+        guard !busy, let s = status, s.freeSpinAvailable else { return }
+        busy = true
+        Task { @MainActor in
+            defer { busy = false }
+            guard let result = try? await store.spin() else { toast = "스핀에 실패했어요"; return }
+            animate(result)
+        }
+    }
+
+    /// 당첨 칸이 상단 포인터에 멈추도록 휠을 회전시키고 결과 문구를 표시.
+    private func animate(_ result: RouletteSpinResult) {
+        let segmentCount = status?.segments.count ?? 8
+        let sweep = 360.0 / Double(segmentCount)
+        let target = 360.0 * 5 - Double(result.segmentIndex) * sweep
+        withAnimation(.easeOut(duration: 2.6)) {
+            rotation = rotation - rotation.truncatingRemainder(dividingBy: 360) + target
+        }
+        resultText = Int(result.awardedEnergy) > 0
+            ? "⚡\(Int(result.awardedEnergy)) 에너지 획득!"
+            : "아쉽지만 꽝! 다시 도전해요"
+    }
+
+    /// 광고 게이트 스핀: 광고를 보고 끝까지 시청하면 즉시 스핀.
+    /// KMP suspend-lambda 파라미터는 Swift 클로저로 못 넘기므로 prepareAdSpin → 광고 → spinWithAd 를 직접 호출한다.
+    func spinWithAd() {
+        guard !busy, let s = status, Int(s.remaining) > 0 else {
+            if Int(status?.remaining ?? 0) == 0 { toast = "오늘 룰렛을 다 돌렸어요. 자정에 리셋돼요" }
             return
         }
         busy = true
         Task { @MainActor in
             defer { busy = false }
-            guard let result = try? await store.spin() else { toast = "스핀에 실패했어요"; return }
-            let segmentCount = status?.segments.count ?? 8
-            let sweep = 360.0 / Double(segmentCount)
-            let target = 360.0 * 5 - Double(result.segmentIndex) * sweep
-            withAnimation(.easeOut(duration: 2.6)) {
-                rotation = rotation - rotation.truncatingRemainder(dividingBy: 360) + target
-            }
-            resultText = Int(result.awardedEnergy) > 0
-                ? "⚡\(Int(result.awardedEnergy)) 에너지 획득!"
-                : "아쉽지만 꽝! 다시 도전해요"
-        }
-    }
-
-    /// 광고 시청 → 스핀 크레딧 적립.
-    /// KMP watchAdForSpin(showAd:) 는 suspend 람다 파라미터를 KotlinSuspendFunction1 로 export 하여
-    /// Swift async 클로저를 직접 전달할 수 없으므로, RewardAdCardView 와 동일하게 개별 단계를 직접 호출한다.
-    func watchAdForSpin() {
-        guard !busy else { return }
-        busy = true
-        Task { @MainActor in
-            defer { busy = false }
-            guard let s = status else { return }
-            let baseline = s.availableSpins
-
             // nonce 발급(서버 검증용) 후 광고 표시.
             guard let nonce = try? await store.prepareAdSpin() else { return }
 
@@ -66,15 +68,14 @@ final class RouletteViewModel: ObservableObject {
                     onNotReady: { notReady = true; cont.resume(returning: false) }
                 )
             }
-
             guard watched else {
                 if notReady { toast = "광고를 준비 중이에요. 잠시 후 다시 시도해주세요" }
                 return
             }
 
-            // 스핀 크레딧 적립(baseline 대비 증가 판정 + status 갱신).
-            let credited = (try? await store.creditAdSpin(baselineAvailable: baseline))?.boolValue ?? false
-            if credited { toast = "스핀 1회가 충전됐어요!" }
+            // 광고 시청 완료 → 즉시 스핀.
+            guard let result = try? await store.spinWithAd() else { toast = "스핀에 실패했어요"; return }
+            animate(result)
         }
     }
 }
@@ -88,7 +89,8 @@ struct RouletteView: View {
         VStack(spacing: 14) {
             Text("행운 룰렛").font(.system(size: 20, weight: .heavy))
             if let s = vm.status {
-                Text("오늘 \(Int(s.availableSpins))회 가능 · 광고로 +\(Int(s.adSpinsRemaining))")
+                Text(s.freeSpinAvailable ? "오늘 \(Int(s.remaining))회 · 첫 회 무료!"
+                                         : "오늘 \(Int(s.remaining))회 남음 · 광고 보고 돌리기")
                     .font(.system(size: 12)).foregroundStyle(.secondary)
             }
             ZStack(alignment: .top) {
@@ -102,17 +104,17 @@ struct RouletteView: View {
             }
             if let r = vm.resultText { Text(r).font(.system(size: 15, weight: .bold)).foregroundStyle(indigo) }
 
-            let canSpin = Int(vm.status?.availableSpins ?? 0) > 0
-            let canWatchAd = Int(vm.status?.adSpinsRemaining ?? 0) > 0
-            if canSpin || !canWatchAd {
-                Button(action: { vm.spin() }) {
-                    Text(canSpin ? "돌리기 · 오늘 \(Int(vm.status?.availableSpins ?? 0))회" : "내일 다시 · 자정 리셋")
-                        .frame(maxWidth: .infinity)
-                }.buttonStyle(.borderedProminent).disabled(!canSpin || vm.busy)
+            let remaining = Int(vm.status?.remaining ?? 0)
+            let freeAvailable = vm.status?.freeSpinAvailable ?? false
+            if remaining <= 0 {
+                Button(action: {}) { Text("내일 다시 · 자정 리셋").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent).disabled(true)
+            } else if freeAvailable {
+                Button(action: { vm.spin() }) { Text("돌리기 (무료)").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent).disabled(vm.busy)
             } else {
-                Button(action: { vm.watchAdForSpin() }) {
-                    Text("광고 보고 한 번 더").frame(maxWidth: .infinity)
-                }.buttonStyle(.borderedProminent).disabled(vm.busy)
+                Button(action: { vm.spinWithAd() }) { Text("광고 보고 돌리기").frame(maxWidth: .infinity) }
+                    .buttonStyle(.borderedProminent).disabled(vm.busy)
             }
             Button("닫기") { onClose() }.foregroundStyle(.secondary).font(.system(size: 13))
         }

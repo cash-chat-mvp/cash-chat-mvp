@@ -3,7 +3,6 @@ package com.nomadclub.cashchat.shared.roulette
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import kotlin.test.assertFalse
 
 class RouletteStoreTest {
@@ -14,44 +13,30 @@ class RouletteStoreTest {
         assertEquals(null, store.status.value)
         store.refresh()
         assertEquals(5, store.status.value?.dailyLimit)
+        assertEquals(true, store.status.value?.freeSpinAvailable)
     }
 
     @Test
-    fun `spin 은 결과를 반환하고 에너지 변경 콜백을 호출한다`() = runTest {
+    fun `spin(무료) 은 결과 반환·에너지 콜백·status 갱신`() = runTest {
         var energyRefreshed = 0
         val store = RouletteStore(FakeRouletteRepository(random = { 0.005 }), onEnergyChanged = { energyRefreshed++ })
         val result = store.spin()
         assertEquals(RoulettePrize.JACKPOT_100, result.prize)
         assertEquals(1, energyRefreshed)
-        assertEquals(0, store.status.value?.availableSpins)
+        assertFalse(store.status.value?.freeSpinAvailable ?: true)
+        assertEquals(4, store.status.value?.remaining)
     }
 
     @Test
-    fun `watchAdForSpin - 미시청이면 false, 크레딧 없음`() = runTest {
-        val store = RouletteStore(FakeRouletteRepository(random = { 0.5 }), onEnergyChanged = {})
-        store.spin() // availableSpins 0
-        val credited = store.watchAdForSpin(showAd = { false })
-        assertFalse(credited)
-        assertEquals(0, store.status.value?.availableSpins)
-    }
-
-    @Test
-    fun `watchAdForSpin - 시청하면 크레딧 적립되어 true`() = runTest {
-        val store = RouletteStore(FakeRouletteRepository(random = { 0.5 }), onEnergyChanged = {})
-        store.spin() // availableSpins 0, adSpinsRemaining 4
-        val credited = store.watchAdForSpin(showAd = { true })
-        assertTrue(credited)
-        assertEquals(1, store.status.value?.availableSpins)
-    }
-
-    @Test
-    fun `prepareAdSpin + creditAdSpin - iOS 경로로도 크레딧 적립되어 status 갱신`() = runTest {
-        val store = RouletteStore(FakeRouletteRepository(random = { 0.5 }), onEnergyChanged = {})
-        store.spin() // availableSpins 0
-        val baseline = store.status.value?.availableSpins ?: 0
+    fun `prepareAdSpin + spinWithAd - 광고 게이트 스핀이 결과 반환·status 갱신`() = runTest {
+        var energyRefreshed = 0
+        val store = RouletteStore(FakeRouletteRepository(random = { 0.5 }), onEnergyChanged = { energyRefreshed++ })
+        store.spin() // 무료 소진
         store.prepareAdSpin() // nonce 발급(스텁)
-        val credited = store.creditAdSpin(baseline)
-        assertTrue(credited)
-        assertEquals(1, store.status.value?.availableSpins)
+        val result = store.spinWithAd()
+        assertEquals(RoulettePrize.E3, result.prize)
+        assertEquals(2, energyRefreshed)
+        assertEquals(2, store.status.value?.spinsUsedToday)
+        assertEquals(3, store.status.value?.remaining)
     }
 }

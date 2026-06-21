@@ -37,7 +37,8 @@
 - 하루 **총 5회** 스핀 = **무료 1 + 광고 4**. 총량·무료수는 **서버 설정값**(추후 변경 가능).
 - 상품(전부 **에너지**), **가중 확률(서버 제어)**: ⚡100 **1%** / ⚡10 **10%** / ⚡3 **70%** / 꽝(0) **19%**.
 - 당첨 결정·에너지 지급은 **서버에서만**. 클라이언트는 결과를 표시(휠 애니메이션)만.
-- 광고 추가 스핀: 리워드 광고 1편 시청 = **스핀 크레딧 +1**(에너지 직접 지급 아님 — C의 에너지 리워드와 다른 보상 타입). SSV 검증 필수.
+- **스핀 정책**: 하루 **첫 1회는 무료**(광고 없이), **2회차부터는 매 스핀마다 광고를 봐야** 돌릴 수 있다. 광고 = 매 스핀의 게이트이며 "크레딧 적립" 개념은 없다. 광고를 끝까지 보면 그 즉시 1회 스핀.
+- 광고 검증: nonce 발급 → 광고 customData=nonce → AdMob SSV로 서버가 검증 → 검증된 nonce로 스핀(spin-with-ad). 에너지 직접 지급 아님(스핀의 추첨 결과로 에너지 지급).
 
 ### 2.1 룰렛 상태 조회 — `GET /api/roulette/status`
 ```
@@ -51,8 +52,7 @@ Authorization: Bearer <accessToken>
   "dailyLimit": 5,
   "spinsUsedToday": 0,
   "freeSpinAvailable": true,
-  "availableSpins": 1,
-  "adSpinsRemaining": 4,
+  "remaining": 5,
   "resetAtKst": "2026-06-22T00:00:00+09:00",
   "segments": [
     { "index": 0, "prize": "JACKPOT_100", "energy": 100 },
@@ -70,33 +70,42 @@ Authorization: Bearer <accessToken>
 |---|---|---|
 | `dailyLimit` | Int | 하루 총 스핀 상한(예: 5) |
 | `spinsUsedToday` | Int | 오늘 수행한 스핀 수 |
-| `freeSpinAvailable` | Boolean | 무료 1회 미사용 여부 |
-| `availableSpins` | Int | 지금 즉시 돌릴 수 있는 스핀 수(무료 미사용분 + 적립 크레딧) |
-| `adSpinsRemaining` | Int | 오늘 광고로 더 얻을 수 있는 스핀 수(= dailyLimit − spinsUsedToday − availableSpins, 음수 불가) |
+| `freeSpinAvailable` | Boolean | 하루 첫 무료 스핀 미사용 여부(true 면 `spin`, false 면 `spin-with-ad`) |
+| `remaining` | Int | 오늘 더 돌릴 수 있는 횟수(= dailyLimit − spinsUsedToday, 음수 불가). 0 이면 한도 도달 |
 | `resetAtKst` | String | 자정 리셋 시각(KST) |
 | `segments[]` | Array | 휠 표시용 칸. `index`는 0-based 고정, `prize`∈`JACKPOT_100·E10·E3·MISS`, `energy`는 지급 에너지 |
 
-비고: `segments`는 표시용 고정 배치(확률과 무관). 당첨은 §2.3 `spin`이 서버 확률로 정하고 일치하는 `segmentIndex`를 돌려준다.
+비고: `segments`는 표시용 고정 배치(확률과 무관). 당첨은 spin 류 API가 서버 확률로 정하고 일치하는 `segmentIndex`를 돌려준다.
 
-### 2.2 광고 추가 스핀용 nonce — `POST /api/roulette/issue-nonce`
-```
-POST /api/roulette/issue-nonce
-Authorization: Bearer <accessToken>
-```
-응답 200:
-```json
-{ "nonce": "…", "expiresAt": "2026-06-21T12:34:56+09:00" }
-```
-- FE는 nonce를 AdMob `customData`(SSV)로 넣어 리워드 광고를 노출한다.
-- 에러: 409 `AD_SPINS_EXHAUSTED` — 오늘 광고 스핀 한도 도달(`adSpinsRemaining == 0`).
-
-### 2.3 스핀 — `POST /api/roulette/spin`
+### 2.2 무료 첫 스핀 — `POST /api/roulette/spin`
 ```
 POST /api/roulette/spin
 Authorization: Bearer <accessToken>
 ```
-처리: `availableSpins ≥ 1` 확인 → 서버 가중 확률로 상품 결정 → 에너지 지급(>0일 때) → `spinsUsedToday += 1`, `availableSpins -= 1`.
-응답 200:
+처리: `freeSpinAvailable == true` 확인 → 서버 가중 확률로 상품 결정 → 에너지 지급(>0일 때) → `spinsUsedToday += 1`, `freeSpinAvailable = false`.
+응답 200: §2.4 공통 스핀 응답.
+에러:
+- 409 `FREE_SPIN_USED` — 오늘 무료 스핀을 이미 사용(이후엔 `spin-with-ad` 사용).
+- 409 `DAILY_LIMIT_REACHED` — `remaining == 0`.
+
+### 2.3 광고 게이트 스핀 — `POST /api/roulette/issue-nonce` → `POST /api/roulette/spin-with-ad`
+2회차부터의 스핀. nonce 발급 → 광고(customData=nonce) → SSV 검증 → 검증된 nonce로 스핀.
+
+**(a) nonce 발급** `POST /api/roulette/issue-nonce`
+응답 200: `{ "nonce": "…", "expiresAt": "2026-06-21T12:34:56+09:00" }`
+- FE는 nonce를 AdMob `customData`(SSV)로 넣어 리워드 광고를 노출.
+- 에러: 409 `DAILY_LIMIT_REACHED` — `remaining == 0`.
+
+**(b) 광고 시청 후 스핀** `POST /api/roulette/spin-with-ad`
+요청 바디: `{ "nonce": "…" }`
+처리: 해당 nonce가 **AdMob SSV로 검증 완료**됐는지 확인 → 가중 확률 추첨 → 에너지 지급 → `spinsUsedToday += 1`. nonce는 1회용(멱등).
+응답 200: §2.4 공통 스핀 응답.
+에러:
+- 403 `AD_NOT_VERIFIED` — 해당 nonce의 SSV 콜백 미수신/검증 실패. (SSV 지연 가능 — 서버가 짧게 대기하거나 FE가 잠시 후 재시도)
+- 409 `NONCE_ALREADY_USED` — 이미 사용된 nonce.
+- 409 `DAILY_LIMIT_REACHED` — `remaining == 0`.
+
+### 2.4 공통 스핀 응답(`spin`·`spin-with-ad`)
 ```json
 {
   "prize": "E3",
@@ -111,14 +120,6 @@ Authorization: Bearer <accessToken>
 | `segmentIndex` | Int | 당첨 상품과 일치하는 표시 칸 인덱스(FE가 이 칸으로 휠 정지) |
 | `awardedEnergy` | Int | 지급된 에너지(꽝=0) |
 | `status` | Object | 갱신된 룰렛 상태(클라 재조회 절약) |
-
-에러:
-- 409 `NO_SPIN_AVAILABLE` — `availableSpins == 0`(무료 소진 + 크레딧 0).
-- 409 `DAILY_LIMIT_REACHED` — `spinsUsedToday >= dailyLimit`.
-
-### 2.4 광고 SSV 적립 (서버-투-서버) — 스핀 크레딧 +1
-- AdMob SSV 콜백 → 서버가 nonce 검증 후 **스핀 크레딧 +1**(에너지 아님). `transactionId`/nonce 기준 **멱등**, `dailyLimit` 초과분은 적립 거부.
-- FE는 광고 종료 후 `GET /api/roulette/status`를 폴링해 `availableSpins` 증가를 확인(리워드 카드 `awaitRewardApplied`의 `usedToday` 폴링과 동일 구조, 기준만 `availableSpins`).
 
 ### 2.5 확률·구성 협의
 - 확률 테이블·상품 구성은 서버 설정(Remote Config 또는 DB)로 두어 코드 수정 없이 조정 가능하게 권장.
