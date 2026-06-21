@@ -1,7 +1,9 @@
 package com.wnl.cashchat.api.domain.chat.web.controller
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.wnl.cashchat.api.common.web.response.ErrorResponse
 import com.wnl.cashchat.api.domain.chat.service.ChatService
+import com.wnl.cashchat.api.domain.chat.service.ChatStreamEvent
 import com.wnl.cashchat.api.domain.chat.web.request.CreateConversationRequest
 import com.wnl.cashchat.api.domain.chat.web.request.ChatStreamRequest
 import com.wnl.cashchat.api.domain.chat.web.response.ChatHistoryResponse
@@ -39,6 +41,7 @@ import java.util.UUID
 @Tag(name = "Chat", description = "Chat conversation and streaming endpoints")
 class ChatController(
     private val chatService: ChatService,
+    private val objectMapper: ObjectMapper,
 ) {
 
     @PostMapping("/conversations")
@@ -265,7 +268,6 @@ class ChatController(
         )
         @Valid @RequestBody request: ChatStreamRequest,
     ): Flux<ServerSentEvent<String>> {
-        // TODO(Task 6): map ChatStreamEvent subtypes to typed SSE events; for now pass text through as plain strings
         return chatService.stream(
             userId = authentication.userId(),
             conversationId = request.conversationId!!,
@@ -273,23 +275,25 @@ class ChatController(
             content = request.message,
         )
             .map { event ->
-                val text = when (event) {
-                    is com.wnl.cashchat.api.domain.chat.service.ChatStreamEvent.Delta -> event.text
-                    else -> ""
+                when (event) {
+                    is ChatStreamEvent.Meta -> sse("meta", objectMapper.writeValueAsString(event))
+                    is ChatStreamEvent.Delta -> sse("delta", objectMapper.writeValueAsString(mapOf("text" to event.text)))
+                    is ChatStreamEvent.RewardSettled -> sse("reward_settled", objectMapper.writeValueAsString(event.result))
+                    is ChatStreamEvent.Done -> sse("done", objectMapper.writeValueAsString(mapOf("finishReason" to event.finishReason)))
                 }
-                ServerSentEvent.builder<String>(text).event(MESSAGE_EVENT).build()
             }
-            .filter { it.data()?.isNotEmpty() == true }
             .onErrorResume {
-                Flux.just(ServerSentEvent.builder<String>(STREAM_FAILED_MESSAGE).event(ERROR_EVENT).build())
+                Flux.just(sse(ERROR_EVENT, STREAM_FAILED_MESSAGE))
             }
     }
 
     companion object {
-        private const val MESSAGE_EVENT = "message"
         private const val ERROR_EVENT = "error"
         private const val STREAM_FAILED_MESSAGE = "stream failed"
     }
+
+    private fun sse(event: String, data: String): ServerSentEvent<String> =
+        ServerSentEvent.builder<String>(data).event(event).build()
 
     private fun Authentication.userId(): Long =
         principal as? Long ?: throw IllegalArgumentException("Invalid authenticated principal")

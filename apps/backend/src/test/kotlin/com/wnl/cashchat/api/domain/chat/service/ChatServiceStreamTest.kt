@@ -15,6 +15,7 @@ import com.wnl.cashchat.api.domain.economy.properties.EconomyProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
@@ -60,10 +61,10 @@ class ChatServiceStreamTest : FunSpec() {
             val conversation = conversation(ownerId = 1L)
             whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
 
-            StepVerifier.create(
+            // Entry is now synchronous: exception throws at call time, not inside the Flux
+            shouldThrow<FeatureDisabledException> {
                 chatService.stream(userId = 1L, conversationId = 1L, messageId = "msg-001", content = "hello")
-            )
-                .verifyError(FeatureDisabledException::class.java)
+            }
 
             verify(settlementService, never()).beginReservation(any(), any(), any())
             verify(llmProvider, never()).stream(any())
@@ -134,10 +135,10 @@ class ChatServiceStreamTest : FunSpec() {
 
             whenever(conversationRepository.findByIdAndUserId(1L, 99L)).thenReturn(null)
 
-            StepVerifier.create(
+            // Entry is now synchronous: exception throws at call time, not inside the Flux
+            shouldThrow<ConversationNotFoundException> {
                 chatService.stream(userId = 99L, conversationId = 1L, messageId = "msg-001", content = "hello")
-            )
-                .verifyError(ConversationNotFoundException::class.java)
+            }
         }
     }
 

@@ -15,9 +15,12 @@ import com.wnl.cashchat.api.domain.chat.web.exception.ChatExceptionHandler
 import com.wnl.cashchat.api.domain.chat.web.response.ChatMessageResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
+import com.wnl.cashchat.api.domain.chat.exception.RewardAlreadySettledException
+import com.wnl.cashchat.api.domain.chat.persistence.entity.SettlementStatus
 import com.wnl.cashchat.api.domain.chat.service.ChatStreamEvent
-import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
-import com.wnl.cashchat.api.domain.point.web.exception.PointExceptionHandler
+import com.wnl.cashchat.api.domain.chat.service.SettlementResult
+import com.wnl.cashchat.api.domain.economy.exception.EnergyInsufficientException
+import com.wnl.cashchat.api.domain.economy.exception.FeatureDisabledException
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import io.kotest.core.spec.style.FunSpec
@@ -50,7 +53,7 @@ import java.util.UUID
 
 @WebMvcTest(ChatController::class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(PointExceptionHandler::class, ChatExceptionHandler::class)
+@Import(ChatExceptionHandler::class)
 class ChatControllerWebMvcTest : FunSpec() {
     override fun extensions() = listOf(SpringExtension)
 
@@ -157,26 +160,52 @@ class ChatControllerWebMvcTest : FunSpec() {
                 .andExpect(jsonPath("$.code").value("CONVERSATION_NOT_FOUND"))
         }
 
-        test("chat stream endpoint returns text event stream for authenticated user") {
-            whenever(chatService.stream(eq(1L), eq(7L), any(), eq("hello")))
-                .thenReturn(Flux.just(ChatStreamEvent.Delta("hi there")))
+        test("chat stream endpoint returns typed SSE events for authenticated user") {
+            val settlementResult = SettlementResult(
+                messageId = "msg_1",
+                status = SettlementStatus.SETTLED,
+                energyDelta = -1L,
+                pendingPtDelta = 1L,
+                evolutionExpDelta = 1L,
+                energyBalance = 9L,
+                pendingCashablePt = 1L,
+                evolutionExp = 1L,
+                settledAt = Instant.parse("2026-06-21T00:00:00Z"),
+            )
+            whenever(chatService.stream(eq(1L), eq(7L), eq("msg_1"), eq("hi")))
+                .thenReturn(
+                    Flux.just(
+                        ChatStreamEvent.Meta("msg_1", 1L),
+                        ChatStreamEvent.Delta("A"),
+                        ChatStreamEvent.RewardSettled(settlementResult),
+                        ChatStreamEvent.Done("STOP"),
+                    )
+                )
 
             val result = mockMvc.perform(
                 post("/api/v1/chat/stream")
                     .principal(UsernamePasswordAuthenticationToken(1L, null))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.TEXT_EVENT_STREAM)
-                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg-001", "message" to "hello")))
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg_1", "message" to "hi")))
             )
                 .andExpect(request().asyncStarted())
                 .andReturn()
 
-            mockMvc.perform(asyncDispatch(result))
+            val body = mockMvc.perform(asyncDispatch(result))
                 .andExpect(status().isOk)
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
-                .andExpect(content().string("event:message\ndata:hi there\n\n"))
+                .andReturn()
+                .response
+                .contentAsString
 
-            verify(chatService).stream(eq(1L), eq(7L), any(), eq("hello"))
+            body.contains("event:meta") shouldBe true
+            body.contains("event:delta") shouldBe true
+            body.contains("\"A\"") shouldBe true
+            body.contains("event:reward_settled") shouldBe true
+            body.contains("event:done") shouldBe true
+
+            verify(chatService).stream(eq(1L), eq(7L), eq("msg_1"), eq("hi"))
         }
 
         test("chat stream endpoint rejects a missing conversation id") {
@@ -199,8 +228,8 @@ class ChatControllerWebMvcTest : FunSpec() {
                 .andExpect(status().isBadRequest)
         }
 
-        test("chat stream endpoint sends a generic error message") {
-            whenever(chatService.stream(eq(1L), eq(7L), any(), eq("hello")))
+        test("chat stream endpoint sends a generic error SSE frame for mid-stream errors") {
+            whenever(chatService.stream(eq(1L), eq(7L), eq("msg_1"), eq("hello")))
                 .thenReturn(Flux.error(IllegalStateException("sensitive details")))
 
             val result = mockMvc.perform(
@@ -208,7 +237,7 @@ class ChatControllerWebMvcTest : FunSpec() {
                     .principal(UsernamePasswordAuthenticationToken(1L, null))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.TEXT_EVENT_STREAM)
-                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg-001", "message" to "hello")))
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg_1", "message" to "hello")))
             )
                 .andExpect(request().asyncStarted())
                 .andReturn()
@@ -223,18 +252,46 @@ class ChatControllerWebMvcTest : FunSpec() {
             response.contains("sensitive details") shouldBe false
         }
 
-        test("chat stream endpoint returns payment required when points are insufficient") {
-            whenever(chatService.stream(eq(1L), eq(7L), any(), eq("hello")))
-                .thenThrow(InsufficientPointsException())
+        test("chat stream endpoint returns 422 when energy is insufficient") {
+            whenever(chatService.stream(eq(1L), eq(7L), eq("msg_1"), eq("hello")))
+                .thenThrow(EnergyInsufficientException())
 
             mockMvc.perform(
                 post("/api/v1/chat/stream")
                     .principal(UsernamePasswordAuthenticationToken(1L, null))
                     .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.TEXT_EVENT_STREAM)
-                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg-001", "message" to "hello")))
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg_1", "message" to "hello")))
             )
-                .andExpect(status().isPaymentRequired)
+                .andExpect(status().isUnprocessableEntity)
+                .andExpect(jsonPath("$.code").value("ENERGY_INSUFFICIENT"))
+        }
+
+        test("chat stream endpoint returns 503 when feature is disabled") {
+            whenever(chatService.stream(eq(1L), eq(7L), eq("msg_1"), eq("hello")))
+                .thenThrow(FeatureDisabledException("REWARD_CHAT_ENABLED"))
+
+            mockMvc.perform(
+                post("/api/v1/chat/stream")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg_1", "message" to "hello")))
+            )
+                .andExpect(status().isServiceUnavailable)
+                .andExpect(jsonPath("$.code").value("FEATURE_DISABLED"))
+        }
+
+        test("chat stream endpoint returns 409 when reward already settled") {
+            whenever(chatService.stream(eq(1L), eq(7L), eq("msg_1"), eq("hello")))
+                .thenThrow(RewardAlreadySettledException("msg_1"))
+
+            mockMvc.perform(
+                post("/api/v1/chat/stream")
+                    .principal(UsernamePasswordAuthenticationToken(1L, null))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg_1", "message" to "hello")))
+            )
+                .andExpect(status().isConflict)
+                .andExpect(jsonPath("$.code").value("REWARD_ALREADY_SETTLED"))
         }
 
         test("chat history endpoint returns ordered messages for authenticated user") {

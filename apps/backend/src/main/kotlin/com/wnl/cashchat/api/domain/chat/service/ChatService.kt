@@ -90,59 +90,60 @@ class ChatService(
      * and refunding on failure or cancellation.
      */
     fun stream(userId: Long, conversationId: Long, messageId: String, content: String): Flux<ChatStreamEvent> {
-        return Flux.defer {
-            val ctx = transactionTemplate.execute {
-                if (!economyProperties.rewardChatEnabled) throw FeatureDisabledException("REWARD_CHAT_ENABLED")
-                val conversation = conversationRepository.findByIdAndUserId(conversationId, userId)
-                    ?: throw ConversationNotFoundException(conversationId)
+        // Entry transaction runs SYNCHRONOUSLY so that validation failures (FeatureDisabledException,
+        // ConversationNotFoundException, EnergyInsufficientException, RewardAlreadySettledException)
+        // are thrown before the Flux is returned, enabling @RestControllerAdvice HTTP status mapping.
+        val ctx = transactionTemplate.execute {
+            if (!economyProperties.rewardChatEnabled) throw FeatureDisabledException("REWARD_CHAT_ENABLED")
+            val conversation = conversationRepository.findByIdAndUserId(conversationId, userId)
+                ?: throw ConversationNotFoundException(conversationId)
 
-                val userMessage = chatMessageRepository.save(
-                    ChatMessage(
-                        conversation = conversation,
-                        role = MessageRole.USER,
-                        content = content,
-                        status = MessageStatus.COMPLETED,
-                    )
+            val userMessage = chatMessageRepository.save(
+                ChatMessage(
+                    conversation = conversation,
+                    role = MessageRole.USER,
+                    content = content,
+                    status = MessageStatus.COMPLETED,
                 )
-                conversation.updatedAt = Instant.now()
-                conversationRepository.save(conversation)
+            )
+            conversation.updatedAt = Instant.now()
+            conversationRepository.save(conversation)
 
-                val history = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
-                val providerMessages = history
-                    .filter { it.status == MessageStatus.COMPLETED && it.id != userMessage.id }
-                    .map { it.toProviderMessage() } + userMessage.toProviderMessage()
+            val history = chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversationId)
+            val providerMessages = history
+                .filter { it.status == MessageStatus.COMPLETED && it.id != userMessage.id }
+                .map { it.toProviderMessage() } + userMessage.toProviderMessage()
 
-                val assistant = chatMessageRepository.save(
-                    ChatMessage(
-                        conversation = conversation,
-                        role = MessageRole.ASSISTANT,
-                        content = "",
-                        status = MessageStatus.STREAMING,
-                    )
+            val assistant = chatMessageRepository.save(
+                ChatMessage(
+                    conversation = conversation,
+                    role = MessageRole.ASSISTANT,
+                    content = "",
+                    status = MessageStatus.STREAMING,
                 )
-                require(assistant.id > 0) { "Assistant message id must be assigned" }
+            )
+            require(assistant.id > 0) { "Assistant message id must be assigned" }
 
-                val settlementId = settlementService.beginReservation(userId, conversationId, messageId)
-                StreamContext(assistant.id, settlementId, providerMessages)
-            } ?: error("Failed to initialize chat stream")
+            val settlementId = settlementService.beginReservation(userId, conversationId, messageId)
+            StreamContext(assistant.id, settlementId, providerMessages)
+        } ?: error("Failed to initialize chat stream")
 
-            val buffer = StringBuilder()
+        val buffer = StringBuilder()
 
-            Flux.concat(
-                Flux.just(ChatStreamEvent.Meta(messageId, 1L) as ChatStreamEvent),
-                llmProvider.stream(ctx.providerMessages)
-                    .doOnNext { buffer.append(it) }
-                    .map { ChatStreamEvent.Delta(it) as ChatStreamEvent },
-                Flux.defer {
-                    Flux.just(ChatStreamEvent.RewardSettled(persistAndSettle(userId, ctx, buffer.toString())) as ChatStreamEvent)
-                },
-                Flux.just(ChatStreamEvent.Done("STOP") as ChatStreamEvent),
-            ).onErrorResume { e ->
-                failAndRefund(userId, ctx, buffer.toString())
-                Flux.error(e)
-            }.doFinally { signal ->
-                if (signal == SignalType.CANCEL) failAndRefund(userId, ctx, buffer.toString())
-            }
+        return Flux.concat(
+            Flux.just(ChatStreamEvent.Meta(messageId, 1L) as ChatStreamEvent),
+            llmProvider.stream(ctx.providerMessages)
+                .doOnNext { buffer.append(it) }
+                .map { ChatStreamEvent.Delta(it) as ChatStreamEvent },
+            Flux.defer {
+                Flux.just(ChatStreamEvent.RewardSettled(persistAndSettle(userId, ctx, buffer.toString())) as ChatStreamEvent)
+            },
+            Flux.just(ChatStreamEvent.Done("STOP") as ChatStreamEvent),
+        ).onErrorResume { e ->
+            failAndRefund(userId, ctx, buffer.toString())
+            Flux.error(e)
+        }.doFinally { signal ->
+            if (signal == SignalType.CANCEL) failAndRefund(userId, ctx, buffer.toString())
         }
     }
 
