@@ -6,28 +6,31 @@ import com.wnl.cashchat.api.domain.attendance.persistence.entity.AttendanceLog
 import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceLogRepository
 import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceRewardBonusRepository
 import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceRewardRepository
-import com.wnl.cashchat.api.domain.point.persistence.entity.PointTransactionReason
-import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.economy.persistence.entity.EnergySourceType
+import com.wnl.cashchat.api.domain.economy.properties.EconomyProperties
+import com.wnl.cashchat.api.domain.economy.service.EnergyService
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.DateTimeException
 import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * 일일 출석 도장과 누적 일차 보상.
  *
- * checkIn 은 단일 @Transactional 안에서 출석 로그 INSERT 와 코인 적립(recordTransaction)을 함께 수행해
- * "도장만 찍히고 코인 없음" 같은 부분 성공을 차단한다. 코인 적립의 멱등성/동시성은 BE-1 recordTransaction 이 보장한다.
+ * checkIn 은 단일 @Transactional 안에서 출석 로그 INSERT 와 Energy 적립(energyService.grant)을 함께 수행해
+ * "도장만 찍히고 에너지 없음" 같은 부분 성공을 차단한다. 적립의 멱등성/동시성은 energyService.grant 가 보장한다.
  *
- * 전제: 인증된 사용자는 회원가입 시 UserPointService.ensureInitialized 로 user_points 행이 생성돼 있다.
+ * 지갑은 grant 호출 시 lazy bootstrap(insertIfAbsent)으로 자동 생성되므로 사전 초기화 불필요.
  */
 @Service
 class AttendanceService(
     private val attendanceLogRepository: AttendanceLogRepository,
     private val attendanceRewardRepository: AttendanceRewardRepository,
     private val attendanceRewardBonusRepository: AttendanceRewardBonusRepository,
-    private val userPointService: UserPointService,
+    private val energyService: EnergyService,
+    private val economyProperties: EconomyProperties,
 ) {
     @Transactional
     fun checkIn(userId: Long, today: LocalDate): CheckInResult {
@@ -60,15 +63,16 @@ class AttendanceService(
             throw e
         }
 
-        userPointService.recordTransaction(
+        energyService.grant(
             userId = userId,
-            delta = reward.coin,
-            reason = PointTransactionReason.ATTENDANCE,
+            amount = economyProperties.attendanceEnergyReward,
+            sourceType = EnergySourceType.ATTENDANCE_AD,
+            expiresAt = today.plusDays(economyProperties.attendanceEnergyExpirationDays).atStartOfDay(KST).toInstant(),
             idempotencyKey = "attendance:$userId:$today",
         )
 
         return CheckInResult(
-            awardedCoin = reward.coin,
+            awardedEnergy = economyProperties.attendanceEnergyReward,
             streakDayCount = streak,
             bonusItems = reward.bonusItems,
             nextReward = rewardView(streak + 1),
@@ -139,5 +143,6 @@ class AttendanceService(
     private companion object {
         private const val BASE_DAY_COUNT = 0
         private const val ATTENDANCE_UNIQUE_CONSTRAINT = "uq_attendance_log_user_date"
+        private val KST = ZoneId.of("Asia/Seoul")
     }
 }

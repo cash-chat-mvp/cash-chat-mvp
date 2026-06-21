@@ -15,7 +15,7 @@ data class RewardView(
 
 /** 체크인 결과. */
 data class CheckInResult(
-    val awardedCoin: Long,
+    val awardedEnergy: Long,
     val streakDayCount: Int,
     val bonusItems: List<BonusItem>,
     val nextReward: RewardView,

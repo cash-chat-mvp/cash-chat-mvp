@@ -24,7 +24,7 @@ data class RewardPreviewResponse(
 }
 
 data class CheckInResponse(
-    val awardedCoin: Long,
+    val awardedEnergy: Long,
     val streakDayCount: Int,
     val bonusItems: List<BonusItemResponse>,
     val nextRewardPreview: RewardPreviewResponse,
@@ -32,7 +32,7 @@ data class CheckInResponse(
     companion object {
         fun from(result: CheckInResult): CheckInResponse =
             CheckInResponse(
-                awardedCoin = result.awardedCoin,
+                awardedEnergy = result.awardedEnergy,
                 streakDayCount = result.streakDayCount,
                 bonusItems = result.bonusItems.map { BonusItemResponse(it.itemCode, it.quantity) },
                 nextRewardPreview = RewardPreviewResponse.from(result.nextReward),

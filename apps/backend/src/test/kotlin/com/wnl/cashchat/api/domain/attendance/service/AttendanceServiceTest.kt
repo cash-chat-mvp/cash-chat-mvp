@@ -8,8 +8,9 @@ import com.wnl.cashchat.api.domain.attendance.persistence.entity.AttendanceRewar
 import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceLogRepository
 import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceRewardBonusRepository
 import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceRewardRepository
-import com.wnl.cashchat.api.domain.point.persistence.entity.PointTransactionReason
-import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.economy.persistence.entity.EnergySourceType
+import com.wnl.cashchat.api.domain.economy.properties.EconomyProperties
+import com.wnl.cashchat.api.domain.economy.service.EnergyService
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
@@ -27,7 +28,7 @@ class AttendanceServiceTest : FunSpec({
     lateinit var attendanceLogRepository: AttendanceLogRepository
     lateinit var attendanceRewardRepository: AttendanceRewardRepository
     lateinit var attendanceRewardBonusRepository: AttendanceRewardBonusRepository
-    lateinit var userPointService: UserPointService
+    lateinit var energyService: EnergyService
     lateinit var service: AttendanceService
 
     val userId = 1L
@@ -37,18 +38,19 @@ class AttendanceServiceTest : FunSpec({
         attendanceLogRepository = mock()
         attendanceRewardRepository = mock()
         attendanceRewardBonusRepository = mock()
-        userPointService = mock()
+        energyService = mock()
         service = AttendanceService(
             attendanceLogRepository,
             attendanceRewardRepository,
             attendanceRewardBonusRepository,
-            userPointService,
+            energyService,
+            EconomyProperties(),
         )
         whenever(attendanceRewardRepository.findByDayCount(0)).thenReturn(AttendanceReward(dayCount = 0, coin = 20))
         whenever(attendanceRewardBonusRepository.findByDayCountOrderByItemCodeAsc(any())).thenReturn(emptyList())
     }
 
-    test("first check-in: streak 1, base 20 coins, log saved, recordTransaction called with KST key") {
+    test("first check-in: streak 1, fixed 4 energy, log saved, grant called with idempotency key") {
         whenever(attendanceLogRepository.existsByUserIdAndCheckInDate(userId, today)).thenReturn(false)
         whenever(attendanceLogRepository.findTopByUserIdOrderByCheckInDateDesc(userId)).thenReturn(null)
         whenever(attendanceRewardRepository.findByDayCount(1)).thenReturn(null)
@@ -56,13 +58,13 @@ class AttendanceServiceTest : FunSpec({
         val result = service.checkIn(userId, today)
 
         result.streakDayCount shouldBe 1
-        result.awardedCoin shouldBe 20L
+        result.awardedEnergy shouldBe 4L
         result.bonusItems shouldBe emptyList()
         verify(attendanceLogRepository).saveAndFlush(argThat<AttendanceLog> {
             this.userId == userId && checkInDate == today && streakDayCount == 1
         })
-        verify(userPointService).recordTransaction(
-            eq(userId), eq(20L), eq(PointTransactionReason.ATTENDANCE), eq("attendance:1:2026-05-30"),
+        verify(energyService).grant(
+            eq(userId), eq(4L), eq(EnergySourceType.ATTENDANCE_AD), any(), eq("attendance:1:2026-05-30"),
         )
     }
 
@@ -72,7 +74,7 @@ class AttendanceServiceTest : FunSpec({
         shouldThrow<AlreadyCheckedInException> { service.checkIn(userId, today) }
 
         verify(attendanceLogRepository, never()).saveAndFlush(any())
-        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(energyService, never()).grant(any(), any(), any(), any(), any())
     }
 
     test("concurrent check-in losing the unique-constraint race is mapped to AlreadyCheckedInException") {
@@ -84,7 +86,7 @@ class AttendanceServiceTest : FunSpec({
 
         shouldThrow<AlreadyCheckedInException> { service.checkIn(userId, today) }
 
-        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(energyService, never()).grant(any(), any(), any(), any(), any())
     }
 
     test("a non-duplicate integrity violation is rethrown, not masked as AlreadyCheckedInException") {
@@ -96,7 +98,7 @@ class AttendanceServiceTest : FunSpec({
 
         shouldThrow<DataIntegrityViolationException> { service.checkIn(userId, today) }
 
-        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(energyService, never()).grant(any(), any(), any(), any(), any())
     }
 
     test("getMonthly rejects an out-of-range year with InvalidAttendanceQueryException") {
@@ -115,7 +117,7 @@ class AttendanceServiceTest : FunSpec({
         val result = service.checkIn(userId, today)
 
         result.streakDayCount shouldBe 4
-        result.awardedCoin shouldBe 20L
+        result.awardedEnergy shouldBe 4L
     }
 
     test("gap resets streak to 1") {
@@ -130,7 +132,7 @@ class AttendanceServiceTest : FunSpec({
         result.streakDayCount shouldBe 1
     }
 
-    test("day 7 milestone awards 50 coins plus EVO_STONE bonus") {
+    test("day 7 milestone: fixed 4 energy, EVO_STONE bonus, preview uses seeded coin") {
         whenever(attendanceLogRepository.existsByUserIdAndCheckInDate(userId, today)).thenReturn(false)
         whenever(attendanceLogRepository.findTopByUserIdOrderByCheckInDateDesc(userId)).thenReturn(
             AttendanceLog(userId = userId, checkInDate = today.minusDays(1), streakDayCount = 6)
@@ -143,10 +145,10 @@ class AttendanceServiceTest : FunSpec({
         val result = service.checkIn(userId, today)
 
         result.streakDayCount shouldBe 7
-        result.awardedCoin shouldBe 50L
+        result.awardedEnergy shouldBe 4L
         result.bonusItems shouldBe listOf(BonusItem("EVO_STONE", 1))
-        verify(userPointService).recordTransaction(
-            eq(userId), eq(50L), eq(PointTransactionReason.ATTENDANCE), eq("attendance:1:2026-05-30"),
+        verify(energyService).grant(
+            eq(userId), eq(4L), eq(EnergySourceType.ATTENDANCE_AD), any(), eq("attendance:1:2026-05-30"),
         )
     }
 

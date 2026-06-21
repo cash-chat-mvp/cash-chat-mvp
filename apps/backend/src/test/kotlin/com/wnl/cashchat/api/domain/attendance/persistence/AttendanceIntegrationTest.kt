@@ -5,9 +5,13 @@ import com.wnl.cashchat.api.domain.attendance.persistence.repository.AttendanceL
 import com.wnl.cashchat.api.domain.attendance.service.AttendanceService
 import com.wnl.cashchat.api.domain.attendance.service.BonusItem
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
-import com.wnl.cashchat.api.domain.point.persistence.repository.PointTransactionRepository
-import com.wnl.cashchat.api.domain.point.persistence.repository.UserPointRepository
-import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.economy.exception.EnergyCapExceededException
+import com.wnl.cashchat.api.domain.economy.persistence.entity.EnergySourceType
+import com.wnl.cashchat.api.domain.economy.persistence.repository.EnergyGrantRepository
+import com.wnl.cashchat.api.domain.economy.persistence.repository.UserWalletRepository
+import com.wnl.cashchat.api.domain.economy.persistence.repository.WalletLedgerRepository
+import com.wnl.cashchat.api.domain.economy.service.EnergyService
+import com.wnl.cashchat.api.domain.economy.service.WalletService
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
@@ -20,61 +24,63 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.containers.MySQLContainer
+import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 @SpringBootTest
 class AttendanceIntegrationTest : FunSpec() {
     override fun extensions() = listOf(SpringExtension)
 
     @Autowired lateinit var userRepository: UserRepository
-    @Autowired lateinit var userPointRepository: UserPointRepository
-    @Autowired lateinit var pointTransactionRepository: PointTransactionRepository
+    @Autowired lateinit var userWalletRepository: UserWalletRepository
+    @Autowired lateinit var walletLedgerRepository: WalletLedgerRepository
+    @Autowired lateinit var energyGrantRepository: EnergyGrantRepository
     @Autowired lateinit var attendanceLogRepository: AttendanceLogRepository
-    @Autowired lateinit var userPointService: UserPointService
+    @Autowired lateinit var walletService: WalletService
+    @Autowired lateinit var energyService: EnergyService
     @Autowired lateinit var attendanceService: AttendanceService
 
     init {
         beforeTest {
             attendanceLogRepository.deleteAll()
-            pointTransactionRepository.deleteAll()
-            userPointRepository.deleteAll()
+            walletLedgerRepository.deleteAll()
+            energyGrantRepository.deleteAll()
+            userWalletRepository.deleteAll()
             userRepository.deleteAll()
         }
 
-        test("first check-in credits 20 base coins atomically with the log") {
+        test("first check-in credits 4 energy atomically with the log") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "att"))
-            userPointService.ensureInitialized(user)
-            // 회원가입 초기 잔액을 캡처해 기준으로 삼는다(초기 잔액 설정값이 바뀌어도 견고).
-            val baseline = userPointRepository.findByUserId(user.id)!!.balance
 
             val result = attendanceService.checkIn(user.id, LocalDate.of(2026, 5, 30))
 
             result.streakDayCount shouldBe 1
-            result.awardedCoin shouldBe 20L
+            result.awardedEnergy shouldBe 4L
             attendanceLogRepository.findByUserIdAndCheckInDateBetweenOrderByCheckInDateAsc(
                 user.id, LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31)
             ).size shouldBe 1
-            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 20L
-            pointTransactionRepository.count() shouldBe 1L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 4L
+            walletLedgerRepository.count() shouldBe 1L
         }
 
-        test("check-in rolls back the attendance log when point accrual fails") {
-            // ensureInitialized 를 일부러 호출하지 않아 recordTransaction 이 IllegalStateException 으로 실패한다.
-            // checkIn 의 단일 @Transactional 덕분에 먼저 saveAndFlush 된 attendance_log 가 함께 롤백돼야 한다.
+        test("check-in rolls back the attendance log when energy accrual fails (cap exceeded)") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "rollback"))
+            walletService.ensureInitialized(user)
+            val exp = Instant.now().plus(7, ChronoUnit.DAYS)
+            energyService.grant(user.id, 49, EnergySourceType.ADMIN, exp, "seed:rollback")
 
-            shouldThrow<IllegalStateException> {
+            shouldThrow<EnergyCapExceededException> {
                 attendanceService.checkIn(user.id, LocalDate.of(2026, 5, 30))
             }
 
             attendanceLogRepository.count() shouldBe 0L
-            pointTransactionRepository.count() shouldBe 0L
+            walletLedgerRepository.count() shouldBe 1L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 49L
         }
 
         test("duplicate same-day check-in is rejected and writes nothing extra") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "dup"))
-            userPointService.ensureInitialized(user)
-            val baseline = userPointRepository.findByUserId(user.id)!!.balance
             attendanceService.checkIn(user.id, LocalDate.of(2026, 5, 30))
 
             shouldThrow<AlreadyCheckedInException> {
@@ -82,14 +88,12 @@ class AttendanceIntegrationTest : FunSpec() {
             }
 
             attendanceLogRepository.count() shouldBe 1L
-            pointTransactionRepository.count() shouldBe 1L
-            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 20L
+            walletLedgerRepository.count() shouldBe 1L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 4L
         }
 
-        test("reaching day 7 via consecutive check-ins awards the seeded 50 coins plus bonus") {
+        test("reaching day 7 via consecutive check-ins awards fixed 4 energy each day plus bonus") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "wk"))
-            userPointService.ensureInitialized(user)
-            val baseline = userPointRepository.findByUserId(user.id)!!.balance
 
             lateinit var last: com.wnl.cashchat.api.domain.attendance.service.CheckInResult
             for (day in 1..7) {
@@ -97,10 +101,9 @@ class AttendanceIntegrationTest : FunSpec() {
             }
 
             last.streakDayCount shouldBe 7
-            last.awardedCoin shouldBe 50L
+            last.awardedEnergy shouldBe 4L
             last.bonusItems shouldBe listOf(BonusItem("EVO_STONE", 1))
-            // 1~6일 = 6 x 20, 7일 = 50 → baseline + 170
-            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 170L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 28L
         }
     }
 

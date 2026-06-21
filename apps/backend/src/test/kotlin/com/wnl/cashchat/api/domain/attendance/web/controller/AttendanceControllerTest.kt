@@ -49,7 +49,7 @@ class AttendanceControllerTest : FunSpec() {
         test("check-in returns awarded coin and streak") {
             whenever(attendanceService.checkIn(eq(1L), any())).thenReturn(
                 CheckInResult(
-                    awardedCoin = 50L,
+                    awardedEnergy = 4L,
                     streakDayCount = 7,
                     bonusItems = listOf(BonusItem("EVO_STONE", 1)),
                     nextReward = RewardView(dayCount = 8, coin = 20L, bonusItems = emptyList()),
@@ -58,7 +58,7 @@ class AttendanceControllerTest : FunSpec() {
 
             mockMvc.perform(post("/api/attendance/check-in").principal(principal))
                 .andExpect(status().isOk)
-                .andExpect(jsonPath("$.awardedCoin").value(50))
+                .andExpect(jsonPath("$.awardedEnergy").value(4))
                 .andExpect(jsonPath("$.streakDayCount").value(7))
                 .andExpect(jsonPath("$.bonusItems[0].itemCode").value("EVO_STONE"))
                 .andExpect(jsonPath("$.bonusItems[0].quantity").value(1))
