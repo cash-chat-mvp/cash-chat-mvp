@@ -61,6 +61,16 @@ fun sharedDataModule(rawBaseUrl: String) = module {
             onEnergyChanged = { hud.refreshEnergyOnly() },
         )
     }
+    single<com.nomadclub.cashchat.shared.invite.InviteRepository> {
+        com.nomadclub.cashchat.shared.invite.FakeInviteRepository()
+    }
+    single {
+        val hud = get<HudStore>()
+        com.nomadclub.cashchat.shared.invite.InviteStore(
+            repo = get(),
+            onRewardChanged = { hud.refreshEnergyOnly() },
+        )
+    }
     single { EvolutionStore(get()) }
     single {
         val adsApi = get<AdsApi>()
