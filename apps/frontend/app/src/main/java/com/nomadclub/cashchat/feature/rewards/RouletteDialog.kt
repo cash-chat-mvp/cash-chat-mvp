@@ -164,7 +164,7 @@ fun RouletteDialog(
                             }
                         }
                     },
-                    enabled = phase == RouletteViewModel.Phase.IDLE,
+                    enabled = phase == RouletteViewModel.Phase.IDLE && !isAnimating,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("광고 보고 한 번 더") }
             }
