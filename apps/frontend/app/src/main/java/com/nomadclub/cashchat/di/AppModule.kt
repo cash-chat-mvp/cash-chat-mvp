@@ -69,6 +69,8 @@ val appModule = module {
 
     viewModel { com.nomadclub.cashchat.feature.chat.evolution.EvolutionViewModel(get(), get()) }
 
+    viewModel { com.nomadclub.cashchat.feature.rewards.BenefitRewardViewModel(get(), get()) }
+
     // shared 데이터 레이어 (CC-348)
     single<TokenProvider> { DataStoreTokenProvider(get(), get()) }
 
