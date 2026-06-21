@@ -147,7 +147,7 @@ fun RouletteDialog(
             val idle = phase == RouletteViewModel.Phase.IDLE && !isAnimating
             when {
                 remaining <= 0 -> {
-                    Button(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { /* no-op: 비활성 상태 */ }, enabled = false, modifier = Modifier.fillMaxWidth()) {
                         Text("내일 다시 · 자정 리셋")
                     }
                 }
@@ -159,7 +159,11 @@ fun RouletteDialog(
                 else -> {
                     Button(
                         onClick = {
-                            val activity = context.findActivity() ?: return@Button
+                            val activity = context.findActivity()
+                            if (activity == null) {
+                                Toast.makeText(context, "광고를 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+                                return@Button
+                            }
                             vm.spinWithAd { nonce ->
                                 suspendCancellableCoroutine { cont ->
                                     var rewarded = false

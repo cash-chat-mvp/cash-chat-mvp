@@ -129,7 +129,11 @@ fun RewardAdCard(
             .clip(RoundedCornerShape(18.dp))
             .background(gradient)
             .clickable(enabled = !limitReached && !busy) {
-                val activity = context.findActivity() ?: return@clickable
+                val activity = context.findActivity()
+                if (activity == null) {
+                    Toast.makeText(context, "광고를 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+                    return@clickable
+                }
                 vm.watchAd { nonce ->
                     suspendCancellableCoroutine { cont ->
                         var rewarded = false
