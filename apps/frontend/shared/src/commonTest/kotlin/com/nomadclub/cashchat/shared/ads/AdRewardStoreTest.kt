@@ -80,6 +80,8 @@ class AdRewardStoreTest {
             pollDelaysMillis = List(5) { 0L },
         )
         assertEquals(RewardOutcome.APPLIED, store.runRewardFlow(showAd = { true }))
+        // baseline 1회 + 첫 폴링 1회에 적립이 관측돼 즉시 종료 → 총 2회.
+        assertEquals(2, fetchCalls)
     }
 
     @Test
