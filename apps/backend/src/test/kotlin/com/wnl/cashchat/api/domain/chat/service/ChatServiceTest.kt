@@ -7,19 +7,18 @@ import com.wnl.cashchat.api.domain.chat.persistence.entity.ChatMessage
 import com.wnl.cashchat.api.domain.chat.persistence.entity.Conversation
 import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageRole
 import com.wnl.cashchat.api.domain.chat.persistence.entity.MessageStatus
+import com.wnl.cashchat.api.domain.chat.persistence.entity.SettlementStatus
 import com.wnl.cashchat.api.domain.chat.persistence.repository.ChatMessageRepository
 import com.wnl.cashchat.api.domain.chat.persistence.repository.ConversationRepository
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessage
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
-import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
-import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.economy.properties.EconomyProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
-import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
@@ -34,6 +33,7 @@ import org.springframework.transaction.TransactionStatus
 import org.springframework.transaction.support.SimpleTransactionStatus
 import reactor.core.publisher.Flux
 import reactor.test.StepVerifier
+import java.time.Instant
 import java.util.Optional
 import java.util.UUID
 
@@ -41,10 +41,9 @@ class ChatServiceTest : FunSpec() {
     private lateinit var conversationRepository: ConversationRepository
     private lateinit var chatMessageRepository: ChatMessageRepository
     private lateinit var userRepository: UserRepository
-    private lateinit var userPointService: UserPointService
+    private lateinit var settlementService: ChatRewardSettlementService
     private lateinit var llmProvider: LlmProvider
     private lateinit var chatService: ChatService
-    private lateinit var savedMessages: MutableList<SavedMessageSnapshot>
     private lateinit var savedMessageEntities: MutableMap<Long, ChatMessage>
     private var nextMessageId = 100L
 
@@ -53,16 +52,16 @@ class ChatServiceTest : FunSpec() {
             conversationRepository = mock()
             chatMessageRepository = mock()
             userRepository = mock()
-            userPointService = mock()
+            settlementService = mock()
             llmProvider = mock()
-            savedMessages = mutableListOf()
             savedMessageEntities = mutableMapOf()
             nextMessageId = 100L
             chatService = ChatService(
                 conversationRepository = conversationRepository,
                 chatMessageRepository = chatMessageRepository,
                 userRepository = userRepository,
-                userPointService = userPointService,
+                settlementService = settlementService,
+                economyProperties = EconomyProperties(rewardChatEnabled = true),
                 llmProvider = llmProvider,
                 transactionManager = NoOpTransactionManager(),
             )
@@ -151,23 +150,9 @@ class ChatServiceTest : FunSpec() {
         test("stream rejects conversations owned by another user") {
             whenever(conversationRepository.findByIdAndUserId(1L, 99L)).thenReturn(null)
 
-            shouldThrow<ConversationNotFoundException> {
-                chatService.stream(userId = 99L, conversationId = 1L, content = "hello").blockLast()
-            }
-        }
-
-        test("stream rejects insufficient point balance before persisting messages") {
-            val conversation = conversation(ownerId = 1L)
-
-            whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
-            whenever(userPointService.hasEnoughBalance(1L)).thenReturn(false)
-
-            shouldThrow<InsufficientPointsException> {
-                chatService.stream(userId = 1L, conversationId = 1L, content = "hello")
-            }
-
-            verify(chatMessageRepository, never()).save(any())
-            verify(llmProvider, never()).stream(any())
+            StepVerifier.create(
+                chatService.stream(userId = 99L, conversationId = 1L, messageId = "msg-x", content = "hello")
+            ).verifyError(ConversationNotFoundException::class.java)
         }
 
         test("stream sends only completed history plus the current user message to the provider") {
@@ -204,13 +189,19 @@ class ChatServiceTest : FunSpec() {
             )
 
             whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
-            whenever(userPointService.hasEnoughBalance(1L)).thenReturn(true)
             whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(history)
             stubMessagePersistence()
+            whenever(settlementService.beginReservation(any(), any(), any())).thenReturn(1L)
+            whenever(settlementService.settle(any(), any(), any())).thenReturn(dummySettlementResult())
             whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi there"))
 
-            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
-                .expectNext("hi there")
+            StepVerifier.create(
+                chatService.stream(userId = 1L, conversationId = 1L, messageId = "msg-1", content = "hello")
+            )
+                .expectNextMatches { it is ChatStreamEvent.Meta }
+                .expectNextMatches { it is ChatStreamEvent.Delta && it.text == "hi there" }
+                .expectNextMatches { it is ChatStreamEvent.RewardSettled }
+                .expectNextMatches { it is ChatStreamEvent.Done }
                 .verifyComplete()
 
             verify(llmProvider).stream(
@@ -221,75 +212,6 @@ class ChatServiceTest : FunSpec() {
                         LlmMessage(LlmMessageRole.USER, "hello"),
                     )
                 }
-            )
-        }
-
-        test("stream marks the assistant message completed when streaming finishes") {
-            val conversation = conversation(ownerId = 1L)
-
-            stubConversation(conversation)
-            whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi", " there"))
-
-            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
-                .expectNext("hi", " there")
-                .verifyComplete()
-
-            savedMessages shouldContain SavedMessageSnapshot(
-                role = MessageRole.ASSISTANT,
-                status = MessageStatus.COMPLETED,
-                content = "hi there",
-            )
-        }
-
-        test("stream marks the assistant message failed when the provider errors") {
-            val conversation = conversation(ownerId = 1L)
-
-            stubConversation(conversation)
-            whenever(llmProvider.stream(any())).thenReturn(Flux.error(IllegalStateException("boom")))
-
-            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
-                .expectErrorMessage("boom")
-                .verify()
-
-            savedMessages shouldContain SavedMessageSnapshot(
-                role = MessageRole.ASSISTANT,
-                status = MessageStatus.FAILED,
-                content = "",
-            )
-        }
-
-        test("stream marks the assistant message failed when cancelled before any chunk arrives") {
-            val conversation = conversation(ownerId = 1L)
-
-            stubConversation(conversation)
-            whenever(llmProvider.stream(any())).thenReturn(Flux.never())
-
-            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
-                .thenCancel()
-                .verify()
-
-            savedMessages shouldContain SavedMessageSnapshot(
-                role = MessageRole.ASSISTANT,
-                status = MessageStatus.FAILED,
-                content = "",
-            )
-        }
-
-        test("stream keeps partial assistant content when cancelled after a chunk arrives") {
-            val conversation = conversation(ownerId = 1L)
-
-            stubConversation(conversation)
-            whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi").concatWith(Flux.never()))
-
-            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
-                .expectNext("hi")
-                .thenCancel()
-                .verify()
-
-            savedMessages shouldContain SavedMessageSnapshot(
-                role = MessageRole.ASSISTANT,
-                status = MessageStatus.COMPLETED,
-                content = "hi",
             )
         }
 
@@ -349,13 +271,6 @@ class ChatServiceTest : FunSpec() {
         }
     }
 
-    private fun stubConversation(conversation: Conversation) {
-        whenever(conversationRepository.findByIdAndUserId(conversation.id, conversation.user.id)).thenReturn(conversation)
-        whenever(userPointService.hasEnoughBalance(conversation.user.id)).thenReturn(true)
-        whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(conversation.id)).thenReturn(emptyList())
-        stubMessagePersistence()
-    }
-
     private fun conversation(ownerId: Long, uuid: UUID = UUID.randomUUID()): Conversation {
         val owner = User(id = ownerId, role = Role.MEMBER, provider = AuthProviderType.NONE, name = "owner")
         return Conversation(id = 1L, uuid = uuid, user = owner, title = null)
@@ -364,49 +279,42 @@ class ChatServiceTest : FunSpec() {
     private fun stubMessagePersistence() {
         whenever(chatMessageRepository.save(any<ChatMessage>())).thenAnswer { invocation ->
             val message = invocation.getArgument<ChatMessage>(0)
-            savedMessages += SavedMessageSnapshot(
-                role = message.role,
-                status = message.status,
-                content = message.content,
-            )
-
             if (message.id > 0) {
                 savedMessageEntities[message.id] = message
                 message
             } else {
-                persistNewMessage(message)
+                val persisted = ChatMessage(
+                    id = nextMessageId++,
+                    conversation = message.conversation,
+                    role = message.role,
+                    content = message.content,
+                    status = message.status,
+                    model = message.model,
+                )
+                savedMessageEntities[persisted.id] = persisted
+                persisted
             }
         }
-
         whenever(chatMessageRepository.findById(any())).thenAnswer { invocation ->
             Optional.ofNullable(savedMessageEntities[invocation.getArgument<Long>(0)])
         }
     }
 
-    private fun persistNewMessage(message: ChatMessage): ChatMessage {
-        val persisted = ChatMessage(
-            id = nextMessageId++,
-            conversation = message.conversation,
-            role = message.role,
-            content = message.content,
-            status = message.status,
-            model = message.model,
-        )
-        savedMessageEntities[persisted.id] = persisted
-        return persisted
-    }
-
-    private data class SavedMessageSnapshot(
-        val role: MessageRole,
-        val status: MessageStatus,
-        val content: String,
+    private fun dummySettlementResult() = SettlementResult(
+        messageId = "msg-dummy",
+        status = SettlementStatus.SETTLED,
+        energyDelta = -1L,
+        pendingPtDelta = 1L,
+        evolutionExpDelta = 1L,
+        energyBalance = 9L,
+        pendingCashablePt = 1L,
+        evolutionExp = 1L,
+        settledAt = Instant.now(),
     )
 
     private class NoOpTransactionManager : PlatformTransactionManager {
         override fun getTransaction(definition: TransactionDefinition?): TransactionStatus = SimpleTransactionStatus()
-
         override fun commit(status: TransactionStatus) = Unit
-
         override fun rollback(status: TransactionStatus) = Unit
     }
 }

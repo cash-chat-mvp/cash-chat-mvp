@@ -15,6 +15,7 @@ import com.wnl.cashchat.api.domain.chat.web.exception.ChatExceptionHandler
 import com.wnl.cashchat.api.domain.chat.web.response.ChatMessageResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
+import com.wnl.cashchat.api.domain.chat.service.ChatStreamEvent
 import com.wnl.cashchat.api.domain.point.exception.InsufficientPointsException
 import com.wnl.cashchat.api.domain.point.web.exception.PointExceptionHandler
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
@@ -157,14 +158,15 @@ class ChatControllerWebMvcTest : FunSpec() {
         }
 
         test("chat stream endpoint returns text event stream for authenticated user") {
-            whenever(chatService.stream(1L, 7L, "hello")).thenReturn(Flux.just("hi there"))
+            whenever(chatService.stream(eq(1L), eq(7L), any(), eq("hello")))
+                .thenReturn(Flux.just(ChatStreamEvent.Delta("hi there")))
 
             val result = mockMvc.perform(
                 post("/api/v1/chat/stream")
                     .principal(UsernamePasswordAuthenticationToken(1L, null))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.TEXT_EVENT_STREAM)
-                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "message" to "hello")))
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg-001", "message" to "hello")))
             )
                 .andExpect(request().asyncStarted())
                 .andReturn()
@@ -174,7 +176,7 @@ class ChatControllerWebMvcTest : FunSpec() {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
                 .andExpect(content().string("event:message\ndata:hi there\n\n"))
 
-            verify(chatService).stream(eq(1L), eq(7L), eq("hello"))
+            verify(chatService).stream(eq(1L), eq(7L), any(), eq("hello"))
         }
 
         test("chat stream endpoint rejects a missing conversation id") {
@@ -182,7 +184,7 @@ class ChatControllerWebMvcTest : FunSpec() {
                 post("/api/v1/chat/stream")
                     .principal(UsernamePasswordAuthenticationToken(1L, null))
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(mapOf("message" to "hello")))
+                    .content(objectMapper.writeValueAsString(mapOf("messageId" to "msg-001", "message" to "hello")))
             )
                 .andExpect(status().isBadRequest)
         }
@@ -192,20 +194,21 @@ class ChatControllerWebMvcTest : FunSpec() {
                 post("/api/v1/chat/stream")
                     .principal(UsernamePasswordAuthenticationToken(1L, null))
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "message" to "")))
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg-001", "message" to "")))
             )
                 .andExpect(status().isBadRequest)
         }
 
         test("chat stream endpoint sends a generic error message") {
-            whenever(chatService.stream(1L, 7L, "hello")).thenReturn(Flux.error(IllegalStateException("sensitive details")))
+            whenever(chatService.stream(eq(1L), eq(7L), any(), eq("hello")))
+                .thenReturn(Flux.error(IllegalStateException("sensitive details")))
 
             val result = mockMvc.perform(
                 post("/api/v1/chat/stream")
                     .principal(UsernamePasswordAuthenticationToken(1L, null))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.TEXT_EVENT_STREAM)
-                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "message" to "hello")))
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg-001", "message" to "hello")))
             )
                 .andExpect(request().asyncStarted())
                 .andReturn()
@@ -221,14 +224,15 @@ class ChatControllerWebMvcTest : FunSpec() {
         }
 
         test("chat stream endpoint returns payment required when points are insufficient") {
-            whenever(chatService.stream(1L, 7L, "hello")).thenThrow(InsufficientPointsException())
+            whenever(chatService.stream(eq(1L), eq(7L), any(), eq("hello")))
+                .thenThrow(InsufficientPointsException())
 
             mockMvc.perform(
                 post("/api/v1/chat/stream")
                     .principal(UsernamePasswordAuthenticationToken(1L, null))
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.TEXT_EVENT_STREAM)
-                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "message" to "hello")))
+                    .content(objectMapper.writeValueAsString(mapOf("conversationId" to 7L, "messageId" to "msg-001", "message" to "hello")))
             )
                 .andExpect(status().isPaymentRequired)
         }

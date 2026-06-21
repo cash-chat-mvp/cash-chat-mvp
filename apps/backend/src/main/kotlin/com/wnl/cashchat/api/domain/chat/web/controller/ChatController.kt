@@ -265,12 +265,21 @@ class ChatController(
         )
         @Valid @RequestBody request: ChatStreamRequest,
     ): Flux<ServerSentEvent<String>> {
+        // TODO(Task 6): map ChatStreamEvent subtypes to typed SSE events; for now pass text through as plain strings
         return chatService.stream(
             userId = authentication.userId(),
             conversationId = request.conversationId!!,
+            messageId = request.messageId,
             content = request.message,
         )
-            .map { chunk -> ServerSentEvent.builder<String>(chunk).event(MESSAGE_EVENT).build() }
+            .map { event ->
+                val text = when (event) {
+                    is com.wnl.cashchat.api.domain.chat.service.ChatStreamEvent.Delta -> event.text
+                    else -> ""
+                }
+                ServerSentEvent.builder<String>(text).event(MESSAGE_EVENT).build()
+            }
+            .filter { it.data()?.isNotEmpty() == true }
             .onErrorResume {
                 Flux.just(ServerSentEvent.builder<String>(STREAM_FAILED_MESSAGE).event(ERROR_EVENT).build())
             }
