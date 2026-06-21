@@ -65,6 +65,16 @@ class EnergyServiceIntegrationTest : FunSpec() {
                 energyService.grant(userId, 3, EnergySourceType.REWARDED_AD, exp, "admob:reward:tx2")
             }
         }
+        test("grant lazily bootstraps the wallet when it does not exist yet") {
+            // ensureInitialized 를 호출하지 않아 user_wallet 행이 없는 상태
+            val u = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "boot"))
+
+            energyService.grant(u.id, 3, EnergySourceType.REWARDED_AD, exp, "admob:reward:tx-boot")
+
+            userWalletRepository.findByUserId(u.id)!!.energyAvailable shouldBe 3L
+            walletLedgerRepository.count() shouldBe 1L
+            energyGrantRepository.count() shouldBe 1L
+        }
     }
 
     companion object {

@@ -31,7 +31,7 @@ class EnergyService(
         expiresAt: Instant,
         idempotencyKey: String,
     ): WalletLedger {
-        val wallet = walletService.getForUpdate(userId)
+        val wallet = walletService.ensureForUpdate(userId)
         walletLedgerRepository.findByIdempotencyKey(idempotencyKey)?.let { return it }
 
         wallet.grantEnergy(amount, economyProperties.maxEnergy)

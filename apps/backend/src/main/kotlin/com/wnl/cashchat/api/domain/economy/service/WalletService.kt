@@ -18,6 +18,13 @@ class WalletService(
         userWalletRepository.findByUserId(user.id) ?: create(user)
 
     @Transactional(propagation = Propagation.MANDATORY)
+    fun ensureForUpdate(userId: Long): UserWallet {
+        userWalletRepository.insertIfAbsent(userId)
+        return userWalletRepository.findByUserIdForUpdate(userId)
+            ?: throw WalletNotInitializedException(userId)
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
     fun getForUpdate(userId: Long): UserWallet =
         userWalletRepository.findByUserIdForUpdate(userId)
             ?: throw WalletNotInitializedException(userId)
