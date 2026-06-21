@@ -49,7 +49,7 @@ import kotlin.coroutines.resume
 
 /** 혜택존 리워드 광고 카드 상태 홀더. 채팅 경로와 무관하게 독립 동작한다. */
 class BenefitRewardViewModel(
-    val adRewardStore: AdRewardStore,
+    private val adRewardStore: AdRewardStore,
     private val hudStore: HudStore,
 ) : ViewModel() {
 
@@ -100,7 +100,7 @@ fun RewardAdCard(
         adManager.preload(context)
         vm.loadQuota()
     }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(vm) {
         vm.toast.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
     }
 
@@ -108,10 +108,11 @@ fun RewardAdCard(
     val limitReached = remaining == 0
     val busy = phase == BenefitRewardViewModel.Phase.BUSY
 
+    val accentColor = Color(0xFFFF5E8A)
     val gradient = if (limitReached) {
         Brush.linearGradient(listOf(Color(0xFFBFA9A0), Color(0xFFA89AA0)))
     } else {
-        Brush.linearGradient(listOf(Color(0xFFFF8A4C), Color(0xFFFF5E8A)))
+        Brush.linearGradient(listOf(Color(0xFFFF8A4C), accentColor))
     }
 
     Box(
@@ -191,15 +192,15 @@ fun RewardAdCard(
             ) {
                 if (busy) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color(0xFFFF5E8A))
-                        Text("보상 확인 중...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFF5E8A))
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = accentColor)
+                        Text("보상 확인 중...", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = accentColor)
                     }
                 } else {
                     Text(
                         if (limitReached) "내일 다시 만나요" else "▶  광고 보기",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFF5E8A),
+                        color = accentColor,
                     )
                 }
             }
