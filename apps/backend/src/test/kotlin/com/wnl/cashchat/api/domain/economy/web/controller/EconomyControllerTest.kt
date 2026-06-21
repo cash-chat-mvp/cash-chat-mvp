@@ -1,6 +1,8 @@
 package com.wnl.cashchat.api.domain.economy.web.controller
 
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
+import com.wnl.cashchat.api.domain.ad.service.AdRewardQuota
+import com.wnl.cashchat.api.domain.ad.service.AdRewardService
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
 import com.wnl.cashchat.api.domain.economy.exception.WalletNotInitializedException
 import com.wnl.cashchat.api.domain.economy.persistence.entity.UserWallet
@@ -11,6 +13,8 @@ import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.extensions.spring.SpringExtension
+import org.mockito.kotlin.any
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.whenever
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -24,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
+import java.time.Instant
 
 /**
  * 의도적으로 웹 슬라이스(@WebMvcTest) 테스트다 — 라우팅·응답 매핑·예외 매핑(상태코드/에러코드)만 검증한다.
@@ -41,6 +46,7 @@ class EconomyControllerTest : FunSpec() {
     @Autowired lateinit var mockMvc: MockMvc
 
     @MockBean lateinit var walletService: WalletService
+    @MockBean lateinit var adRewardService: AdRewardService
     @MockBean lateinit var jwtTokenHandler: JwtTokenHandler
     @MockBean(name = "jpaMappingContext") lateinit var jpaMappingContext: JpaMetamodelMappingContext
 
@@ -54,6 +60,9 @@ class EconomyControllerTest : FunSpec() {
     init {
         test("GET /economy/me returns the authenticated user's energy snapshot") {
             whenever(walletService.snapshot(1L)).thenReturn(walletWithEnergy(3))
+            whenever(adRewardService.quotaOf(eq(1L), any())).thenReturn(
+                AdRewardQuota(usedToday = 2, dailyLimit = 10, remaining = 8, resetAtKst = Instant.parse("2026-06-22T15:00:00Z"))
+            )
 
             mockMvc.perform(get("/api/v1/economy/me").principal(principal))
                 .andExpect(status().isOk)
@@ -64,6 +73,9 @@ class EconomyControllerTest : FunSpec() {
                 .andExpect(jsonPath("$.point.confirmed").value(0))
                 .andExpect(jsonPath("$.evolution.level").value(1))
                 .andExpect(jsonPath("$.features.rewardChatEnabled").value(true))
+                .andExpect(jsonPath("$.ad.usedToday").value(2))
+                .andExpect(jsonPath("$.ad.dailyLimit").value(10))
+                .andExpect(jsonPath("$.ad.remaining").value(8))
         }
 
         test("GET /economy/me returns 404 WALLET_NOT_FOUND when the wallet is missing") {

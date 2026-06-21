@@ -1,5 +1,6 @@
 package com.wnl.cashchat.api.domain.economy.web.controller
 
+import com.wnl.cashchat.api.domain.ad.service.AdRewardService
 import com.wnl.cashchat.api.domain.economy.properties.EconomyProperties
 import com.wnl.cashchat.api.domain.economy.service.WalletService
 import com.wnl.cashchat.api.domain.economy.web.response.EconomyPolicyResponse
@@ -15,15 +16,20 @@ import java.time.Instant
 class EconomyController(
     private val walletService: WalletService,
     private val economyProperties: EconomyProperties,
+    private val adRewardService: AdRewardService,
 ) {
     @GetMapping("/me")
     fun me(authentication: Authentication): EconomySnapshotResponse {
-        val w = walletService.snapshot(authentication.userId())
+        val userId = authentication.userId()
+        val now = Instant.now()
+        val w = walletService.snapshot(userId)
+        val quota = adRewardService.quotaOf(userId, now)
         return EconomySnapshotResponse(
-            serverTime = Instant.now(),
+            serverTime = now,
             energy = EconomySnapshotResponse.EnergyView(w.energyAvailable, w.energyReserved, economyProperties.maxEnergy),
             point = EconomySnapshotResponse.PointView(w.pendingCashablePt, w.confirmedCashablePt),
             evolution = EconomySnapshotResponse.EvolutionView(w.evolutionLevel, w.evolutionExp, w.evolutionFailStack),
+            ad = EconomySnapshotResponse.AdView(quota.usedToday, quota.dailyLimit, quota.remaining, quota.resetAtKst),
             features = EconomySnapshotResponse.FeaturesView(
                 rewardChatEnabled = economyProperties.rewardChatEnabled,
                 rewardedAdEnabled = economyProperties.rewardedAdEnabled,
