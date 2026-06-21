@@ -48,6 +48,7 @@ fun BenefitZoneScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
+    var showRoulette by remember { mutableStateOf(false) }
 
     suspend fun refreshAll() {
         runCatching { pointsRepository.refresh() }
@@ -117,6 +118,14 @@ fun BenefitZoneScreen(
             item { RewardAdCard() }
             item {
                 BenefitInfoCard(
+                    icon = "🎡", title = "행운 룰렛", badge = BenefitBadge.NEXT,
+                    description = "하루 1회 무료 · 광고로 최대 5회 · 에너지 잭팟까지!",
+                    dimmed = false,
+                    onClick = { showRoulette = true },
+                )
+            }
+            item {
+                BenefitInfoCard(
                     icon = "🎯", title = "데일리 미션", badge = BenefitBadge.SOON,
                     description = "매일 바뀌는 3가지 미션을 완료하고 코인 적립",
                     dimmed = true,
@@ -142,6 +151,9 @@ fun BenefitZoneScreen(
                     },
                 )
             }
+        }
+        if (showRoulette) {
+            RouletteDialog(onDismiss = { showRoulette = false })
         }
     }
 }
