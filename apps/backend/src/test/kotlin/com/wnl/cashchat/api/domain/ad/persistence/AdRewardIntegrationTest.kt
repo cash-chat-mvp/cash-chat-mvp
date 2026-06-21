@@ -9,9 +9,9 @@ import com.wnl.cashchat.api.domain.ad.persistence.repository.GoogleAdSsvEventRep
 import com.wnl.cashchat.api.domain.ad.service.AdRewardService
 import com.wnl.cashchat.api.domain.ad.service.GoogleAdSsvCallback
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
-import com.wnl.cashchat.api.domain.point.persistence.repository.PointTransactionRepository
-import com.wnl.cashchat.api.domain.point.persistence.repository.UserPointRepository
-import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.economy.persistence.repository.EnergyGrantRepository
+import com.wnl.cashchat.api.domain.economy.persistence.repository.UserWalletRepository
+import com.wnl.cashchat.api.domain.economy.persistence.repository.WalletLedgerRepository
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
@@ -36,12 +36,12 @@ class AdRewardIntegrationTest : FunSpec() {
     override fun extensions() = listOf(SpringExtension)
 
     @Autowired lateinit var userRepository: UserRepository
-    @Autowired lateinit var userPointRepository: UserPointRepository
-    @Autowired lateinit var pointTransactionRepository: PointTransactionRepository
+    @Autowired lateinit var userWalletRepository: UserWalletRepository
+    @Autowired lateinit var walletLedgerRepository: WalletLedgerRepository
+    @Autowired lateinit var energyGrantRepository: EnergyGrantRepository
     @Autowired lateinit var eventRepository: GoogleAdSsvEventRepository
     @Autowired lateinit var nonceRepository: AdRewardNonceRepository
     @Autowired lateinit var quotaRepository: AdRewardDailyQuotaRepository
-    @Autowired lateinit var userPointService: UserPointService
     @Autowired lateinit var adRewardService: AdRewardService
 
     private val now = Instant.parse("2026-05-31T00:00:00Z")
@@ -60,18 +60,17 @@ class AdRewardIntegrationTest : FunSpec() {
 
     init {
         beforeTest {
+            walletLedgerRepository.deleteAll()
+            energyGrantRepository.deleteAll()
+            userWalletRepository.deleteAll()
             quotaRepository.deleteAll()
             nonceRepository.deleteAll()
             eventRepository.deleteAll()
-            pointTransactionRepository.deleteAll()
-            userPointRepository.deleteAll()
             userRepository.deleteAll()
         }
 
-        test("valid nonce grants configured coins and marks event GRANTED") {
+        test("valid nonce grants configured energy and marks event GRANTED") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "ad"))
-            userPointService.ensureInitialized(user)
-            val baseline = userPointRepository.findByUserId(user.id)!!.balance
             nonceRepository.saveAndFlush(AdRewardNonce(nonce = "n1", userId = user.id, expiresAt = now.plusSeconds(600)))
             storeEvent("t1", "n1")
 
@@ -79,28 +78,24 @@ class AdRewardIntegrationTest : FunSpec() {
 
             eventRepository.findByTransactionId("t1")!!.rewardStatus shouldBe RewardStatus.GRANTED
             nonceRepository.findById("n1").get().used shouldBe true
-            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 40L
-            pointTransactionRepository.count() shouldBe 1L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 3L
+            walletLedgerRepository.count() shouldBe 1L
         }
 
         test("duplicate transaction id does not double-credit (idempotency key)") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "dup"))
-            userPointService.ensureInitialized(user)
-            val baseline = userPointRepository.findByUserId(user.id)!!.balance
             nonceRepository.saveAndFlush(AdRewardNonce(nonce = "n2", userId = user.id, expiresAt = now.plusSeconds(600)))
             storeEvent("t2", "n2")
 
             adRewardService.grantFromCallback(callback("t2", "n2"), now)
             adRewardService.grantFromCallback(callback("t2", "n2"), now)
 
-            pointTransactionRepository.count() shouldBe 1L
-            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 40L
+            walletLedgerRepository.count() shouldBe 1L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 3L
         }
 
         test("concurrent grants for one user at limit-1 grant exactly once more") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "race"))
-            userPointService.ensureInitialized(user)
-            val baseline = userPointRepository.findByUserId(user.id)!!.balance
             quotaRepository.saveAndFlush(
                 com.wnl.cashchat.api.domain.ad.persistence.entity.AdRewardDailyQuota(
                     userId = user.id, kstDate = LocalDate.ofInstant(now, kst), usedCount = 9
@@ -125,14 +120,12 @@ class AdRewardIntegrationTest : FunSpec() {
             // 한도 초과는 예외가 아니라 REJECTED 처리이므로 어떤 스레드도 예외를 던지지 않아야 한다.
             failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
             quotaRepository.findByUserIdAndKstDate(user.id, LocalDate.ofInstant(now, kst))!!.usedCount shouldBe 10
-            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 40L
-            pointTransactionRepository.count() shouldBe 1L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 3L
+            walletLedgerRepository.count() shouldBe 1L
         }
 
         test("concurrent first grants with no pre-existing quota row create exactly one row (no DIV leak)") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "first"))
-            userPointService.ensureInitialized(user)
-            val baseline = userPointRepository.findByUserId(user.id)!!.balance
             // quota 행을 미리 만들지 않는다 → 동시 첫 적립들이 lockOrCreateQuota 의 생성 경로(REQUIRES_NEW)를 경합한다.
             val threads = 6
             val pool = Executors.newFixedThreadPool(threads)
@@ -154,14 +147,13 @@ class AdRewardIntegrationTest : FunSpec() {
             failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
             quotaRepository.count() shouldBe 1L
             quotaRepository.findByUserIdAndKstDate(user.id, LocalDate.ofInstant(now, kst))!!.usedCount shouldBe 6
-            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 240L
-            pointTransactionRepository.count() shouldBe 6L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 18L
+            walletLedgerRepository.count() shouldBe 6L
+            userWalletRepository.count() shouldBe 1L
         }
 
         test("concurrent grants reusing one nonce credit exactly once (no double spending)") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "reuse"))
-            userPointService.ensureInitialized(user)
-            val baseline = userPointRepository.findByUserId(user.id)!!.balance
             // 단일 nonce 하나만 발급하고, 서로 다른 transactionId 6건이 동시에 같은 nonce 로 적립을 시도한다.
             nonceRepository.saveAndFlush(AdRewardNonce(nonce = "shared", userId = user.id, expiresAt = now.plusSeconds(600)))
             val threads = 6
@@ -182,8 +174,8 @@ class AdRewardIntegrationTest : FunSpec() {
             // nonce 비관적 락으로 직렬화 → 정확히 1회만 적립, 나머지는 예외 없이 REJECTED_INVALID_NONCE.
             failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
             nonceRepository.findById("shared").get().used shouldBe true
-            pointTransactionRepository.count() shouldBe 1L
-            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 40L
+            walletLedgerRepository.count() shouldBe 1L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 3L
             (0 until threads).count {
                 eventRepository.findByTransactionId("st-$it")!!.rewardStatus == RewardStatus.GRANTED
             } shouldBe 1
@@ -191,8 +183,6 @@ class AdRewardIntegrationTest : FunSpec() {
 
         test("concurrent callbacks with the same transactionId keep event GRANTED (no status overwrite)") {
             val user = userRepository.save(User(role = Role.MEMBER, provider = AuthProviderType.NONE, name = "sametxn"))
-            userPointService.ensureInitialized(user)
-            val baseline = userPointRepository.findByUserId(user.id)!!.balance
             // 단일 이벤트·단일 nonce 를 같은 transactionId 로 6스레드가 동시에 적립 시도한다.
             nonceRepository.saveAndFlush(AdRewardNonce(nonce = "sn", userId = user.id, expiresAt = now.plusSeconds(600)))
             storeEvent("stx", "sn")
@@ -214,8 +204,8 @@ class AdRewardIntegrationTest : FunSpec() {
             failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
             eventRepository.findByTransactionId("stx")!!.rewardStatus shouldBe RewardStatus.GRANTED
             nonceRepository.findById("sn").get().used shouldBe true
-            pointTransactionRepository.count() shouldBe 1L
-            userPointRepository.findByUserId(user.id)!!.balance shouldBe baseline + 40L
+            walletLedgerRepository.count() shouldBe 1L
+            userWalletRepository.findByUserId(user.id)!!.energyAvailable shouldBe 3L
         }
     }
 
