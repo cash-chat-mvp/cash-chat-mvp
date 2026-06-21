@@ -83,4 +83,14 @@ class UserWallet(
         require(amount >= 0) { "Exp amount must be non-negative" }
         evolutionExp = Math.addExact(evolutionExp, amount)
     }
+    fun applyEvolutionSuccess() {
+        evolutionLevel += 1
+        evolutionExp = 0
+        evolutionFailStack = 0
+    }
+    fun applyEvolutionFailure(keepRatio: Double) {
+        require(keepRatio in 0.0..1.0) { "keepRatio must be within [0,1]" }
+        evolutionExp = Math.floor(evolutionExp * keepRatio).toLong()
+        evolutionFailStack += 1
+    }
 }
