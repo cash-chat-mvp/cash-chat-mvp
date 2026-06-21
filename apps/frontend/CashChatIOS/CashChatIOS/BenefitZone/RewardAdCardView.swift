@@ -35,17 +35,22 @@ final class RewardAdCardViewModel: ObservableObject {
                 let baseline = try await adRewardStore.refreshQuota().usedToday
                 let nonce = try await adRewardStore.requestNonce()
 
+                var notReady = false
                 let watched: Bool = await withCheckedContinuation { cont in
                     var rewarded = false
                     adManager.show(
                         nonce: nonce,
                         onRewarded: { _ in rewarded = true },
                         onDismissed: { cont.resume(returning: rewarded) },
-                        onNotReady: { cont.resume(returning: false) }
+                        onNotReady: { notReady = true; cont.resume(returning: false) }
                     )
                 }
 
-                guard watched else { return }
+                // 광고 미준비일 때만 안내 토스트(Android parity). 끝까지 안 보고 닫은 경우는 무토스트.
+                guard watched else {
+                    if notReady { toast = "광고를 준비 중이에요. 잠시 후 다시 시도해주세요" }
+                    return
+                }
 
                 let applied = try await adRewardStore.awaitRewardApplied(baselineUsedToday: baseline).boolValue
                 try? await hudStore.refreshEnergyOnly()
