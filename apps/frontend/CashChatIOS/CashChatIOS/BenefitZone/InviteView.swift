@@ -92,5 +92,10 @@ struct InviteView: View {
             }
         }
         .animation(.easeOut(duration: 0.25), value: vm.toast)
+        .onChange(of: vm.toast) { _, newValue in
+            guard newValue != nil else { return }
+            // 토스트 자동 사라짐(Android Toast.LENGTH_SHORT 와 동등).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { vm.toast = nil }
+        }
     }
 }
