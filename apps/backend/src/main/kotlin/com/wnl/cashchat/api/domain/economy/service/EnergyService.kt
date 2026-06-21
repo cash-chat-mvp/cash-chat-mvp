@@ -1,5 +1,6 @@
 package com.wnl.cashchat.api.domain.economy.service
 
+import com.wnl.cashchat.api.domain.economy.exception.EnergyInsufficientException
 import com.wnl.cashchat.api.domain.economy.persistence.entity.EnergyGrant
 import com.wnl.cashchat.api.domain.economy.persistence.entity.EnergySourceType
 import com.wnl.cashchat.api.domain.economy.persistence.entity.WalletLedger
@@ -51,6 +52,41 @@ class EnergyService(
                 delta = amount,
                 balanceAfter = wallet.energyAvailable,
                 referenceId = grant.id.toString(),
+                idempotencyKey = idempotencyKey,
+            )
+        )
+    }
+
+    @Transactional
+    fun reserve(userId: Long, idempotencyKey: String): WalletLedger {
+        val wallet = walletService.ensureForUpdate(userId)
+        walletLedgerRepository.findByIdempotencyKey(idempotencyKey)?.let { return it }
+        if (wallet.energyAvailable < 1) throw EnergyInsufficientException()
+        wallet.reserveEnergy(1)
+        return walletLedgerRepository.save(
+            WalletLedger(
+                userId = userId,
+                type = WalletTxType.ENERGY_RESERVED,
+                delta = -1,
+                balanceAfter = wallet.energyAvailable,
+                referenceId = null,
+                idempotencyKey = idempotencyKey,
+            )
+        )
+    }
+
+    @Transactional
+    fun refund(userId: Long, idempotencyKey: String): WalletLedger {
+        val wallet = walletService.ensureForUpdate(userId)
+        walletLedgerRepository.findByIdempotencyKey(idempotencyKey)?.let { return it }
+        wallet.refundReserved(1)
+        return walletLedgerRepository.save(
+            WalletLedger(
+                userId = userId,
+                type = WalletTxType.ENERGY_REFUNDED,
+                delta = 1,
+                balanceAfter = wallet.energyAvailable,
+                referenceId = null,
                 idempotencyKey = idempotencyKey,
             )
         )
