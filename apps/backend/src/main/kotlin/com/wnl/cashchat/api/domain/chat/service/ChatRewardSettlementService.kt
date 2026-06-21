@@ -4,7 +4,9 @@ import com.wnl.cashchat.api.domain.chat.exception.RewardAlreadySettledException
 import com.wnl.cashchat.api.domain.chat.persistence.entity.ChatRewardSettlement
 import com.wnl.cashchat.api.domain.chat.persistence.entity.ChatRewardType
 import com.wnl.cashchat.api.domain.chat.persistence.entity.SettlementStatus
+import com.wnl.cashchat.api.domain.chat.persistence.repository.ChatMessageRepository
 import com.wnl.cashchat.api.domain.chat.persistence.repository.ChatRewardSettlementRepository
+import com.wnl.cashchat.api.domain.chat.web.response.MessageSettlementResponse
 import com.wnl.cashchat.api.domain.economy.persistence.entity.UserWallet
 import com.wnl.cashchat.api.domain.economy.persistence.entity.WalletLedger
 import com.wnl.cashchat.api.domain.economy.persistence.entity.WalletTxType
@@ -26,6 +28,7 @@ class ChatRewardSettlementService(
     private val sharedQualityPoolService: SharedQualityPoolService,
     private val walletLedgerRepository: WalletLedgerRepository,
     private val economyProperties: EconomyProperties,
+    private val chatMessageRepository: ChatMessageRepository,
 ) {
     @Transactional
     fun beginReservation(userId: Long, conversationId: Long, messageId: String): Long {
@@ -77,6 +80,24 @@ class ChatRewardSettlementService(
         if (settlement.status == SettlementStatus.SETTLED || settlement.status == SettlementStatus.REFUNDED) return
         energyService.refund(userId, "chat:refund:${settlement.messageId}")
         settlement.markRefunded(assistantMessageId)
+    }
+
+    @Transactional(readOnly = true)
+    fun findForUser(userId: Long, messageId: String): MessageSettlementResponse? {
+        val settlement = chatRewardSettlementRepository.findByMessageId(messageId) ?: return null
+        if (settlement.userId != userId) return null
+        val chatStatus = settlement.assistantMessageId?.let { id ->
+            chatMessageRepository.findById(id).map { m -> m.status.name }.orElse(null)
+        }
+        return MessageSettlementResponse(
+            messageId = settlement.messageId,
+            chatStatus = chatStatus,
+            settlementStatus = settlement.status,
+            energyDelta = settlement.energyDelta,
+            pendingCashablePtDelta = settlement.pendingPtDelta,
+            evolutionExpDelta = settlement.evolutionExpDelta,
+            settledAt = settlement.settledAt,
+        )
     }
 
     private fun ledger(userId: Long, type: WalletTxType, delta: Long, balanceAfter: Long, referenceId: String, key: String) {

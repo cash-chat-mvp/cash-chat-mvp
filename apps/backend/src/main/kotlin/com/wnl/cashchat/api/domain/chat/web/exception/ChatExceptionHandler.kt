@@ -4,6 +4,7 @@ import com.wnl.cashchat.api.common.web.response.ErrorResponse
 import com.wnl.cashchat.api.domain.chat.exception.ConversationAccessDeniedException
 import com.wnl.cashchat.api.domain.chat.exception.ConversationNotFoundException
 import com.wnl.cashchat.api.domain.chat.exception.RewardAlreadySettledException
+import com.wnl.cashchat.api.domain.chat.exception.SettlementNotFoundException
 import com.wnl.cashchat.api.domain.economy.exception.EnergyInsufficientException
 import com.wnl.cashchat.api.domain.economy.exception.FeatureDisabledException
 import org.springframework.http.HttpStatus
@@ -38,4 +39,9 @@ class ChatExceptionHandler {
     fun handleRewardAlreadySettledException(e: RewardAlreadySettledException): ResponseEntity<ErrorResponse> =
         ResponseEntity.status(HttpStatus.CONFLICT)
             .body(ErrorResponse("REWARD_ALREADY_SETTLED", e.message ?: "Reward already settled for this message"))
+
+    @ExceptionHandler(SettlementNotFoundException::class)
+    fun handleSettlementNotFoundException(e: SettlementNotFoundException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(ErrorResponse("SETTLEMENT_NOT_FOUND", e.message ?: "Settlement not found"))
 }
