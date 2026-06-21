@@ -40,12 +40,25 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
     @Autowired lateinit var offerwallUserTokenRepository: OfferwallUserTokenRepository
 
     private val now = Instant.parse("2026-06-17T00:00:00Z")
-    private val appKey = "test-app-key"
+
+    // 플랫폼별로 서로 다른 앱키 — md_chk 검증이 각 플랫폼의 키로 정확히 분리되는지 통합 레벨에서 확인한다
+    // (예: android.app-key 가 ios 필드로 잘못 바인딩되는 설정 오류를 잡는다).
+    private val androidKey = "android-test-key"
+    private val iosKey = "ios-test-key"
 
     private fun md5Hex(input: String): String =
         MessageDigest.getInstance("MD5").digest(input.toByteArray()).joinToString("") { "%02x".format(it) }
 
-    private fun params(seqId: String, token: String, payPnt: Long, mdChk: String = md5Hex(appKey + token + seqId)) =
+    private fun keyFor(platform: OfferwallPlatform) =
+        if (platform == OfferwallPlatform.IOS) iosKey else androidKey
+
+    private fun params(
+        seqId: String,
+        token: String,
+        payPnt: Long,
+        platform: OfferwallPlatform = OfferwallPlatform.ANDROID,
+        mdChk: String = md5Hex(keyFor(platform) + token + seqId),
+    ) =
         TnkOfferwallCallbackParams(seqId = seqId, payPnt = payPnt, mdUserNm = token, mdChk = mdChk, rawQuery = "seq_id=$seqId")
 
     private fun newUserWithToken(name: String): Pair<Long, String> {
@@ -189,9 +202,10 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             val (userId, token) = newUserWithToken("multiplat")
             val baseline = userPointRepository.findByUserId(userId)!!.balance
 
-            // 동일 seq_id "dup-seq" 를 android, ios 양쪽으로. 멱등 단위가 (platform, seq_id) 이므로 둘 다 적립.
+            // 동일 seq_id "dup-seq" 를 android, ios 양쪽으로. 각 콜백의 md_chk 는 해당 플랫폼 키로 서명되어
+            // 플랫폼별 키 검증이 양쪽 모두 통과해야 하고, 멱등 단위가 (platform, seq_id) 이므로 둘 다 적립된다.
             service.handleCallback(OfferwallPlatform.ANDROID, params("dup-seq", token, 1000), now) shouldBe TnkOfferwallStatus.GRANTED
-            service.handleCallback(OfferwallPlatform.IOS, params("dup-seq", token, 1000), now) shouldBe TnkOfferwallStatus.GRANTED
+            service.handleCallback(OfferwallPlatform.IOS, params("dup-seq", token, 1000, platform = OfferwallPlatform.IOS), now) shouldBe TnkOfferwallStatus.GRANTED
 
             // 1000 * 0.5 = 500 씩 두 번
             userPointRepository.findByUserId(userId)!!.balance shouldBe baseline + 1000L
@@ -214,8 +228,8 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             registry.add("spring.datasource.username", mysql::getUsername)
             registry.add("spring.datasource.password", mysql::getPassword)
             registry.add("spring.datasource.driver-class-name", mysql::getDriverClassName)
-            registry.add("app.offerwall.tnk.android.app-key") { "test-app-key" }
-            registry.add("app.offerwall.tnk.ios.app-key") { "test-app-key" }
+            registry.add("app.offerwall.tnk.android.app-key") { "android-test-key" }
+            registry.add("app.offerwall.tnk.ios.app-key") { "ios-test-key" }
             registry.add("app.offerwall.tnk.point-to-coin-ratio") { "0.5" }
         }
     }
