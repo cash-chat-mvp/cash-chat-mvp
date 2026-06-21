@@ -223,6 +223,9 @@ final class KeyboardObserver: ObservableObject {
 struct OnboardingView: View {
     @EnvironmentObject private var appState: AppState
     @State private var visible = false
+    @State private var referral = ""
+    @State private var referralDone = false
+    @State private var referralToast: String?
 
     var body: some View {
         ZStack {
@@ -325,6 +328,33 @@ struct OnboardingView: View {
                     }
                     .disabled(appState.isLoading)
 
+                    if !referralDone {
+                        TextField("추천 코드 (선택)", text: $referral)
+                            .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                            .textFieldStyle(.roundedBorder).padding(.horizontal, 0)
+                        Button("추천 코드 적용") {
+                            let code = referral
+                            Task { @MainActor in
+                                guard let result = try? await KoinHelper().inviteStore().redeem(code: code) else {
+                                    referralToast = "잠시 후 다시 시도해주세요"; return
+                                }
+                                if result.success {
+                                    referralDone = true
+                                    referralToast = "⚡\(Int(result.awardedEnergy)) 에너지 적용됐어요!"
+                                } else {
+                                    referralToast = result.message ?? "코드를 확인해주세요"
+                                }
+                            }
+                        }
+                        .disabled(referral.isEmpty)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(referral.isEmpty ? Color.white.opacity(0.2) : Color.white.opacity(0.9))
+                        .foregroundStyle(referral.isEmpty ? Color.white.opacity(0.5) : Color(red: 0.36, green: 0.42, blue: 0.98))
+                        .fontWeight(.semibold)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+
                     Text("가입하면 즉시 500P 지급!")
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.6))
@@ -334,6 +364,27 @@ struct OnboardingView: View {
                 .opacity(visible ? 1 : 0)
                 .offset(y: visible ? 0 : 30)
                 .animation(.easeOut(duration: 0.5).delay(0.3), value: visible)
+            }
+
+            // 추천 코드 토스트
+            if let msg = referralToast {
+                VStack {
+                    Spacer()
+                    Text(msg)
+                        .font(.footnote)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(.black.opacity(0.75))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .padding(.bottom, 140)
+                        .onAppear {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                referralToast = nil
+                            }
+                        }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
             // 에러 토스트
@@ -358,6 +409,7 @@ struct OnboardingView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: appState.errorMessage)
+        .animation(.easeInOut(duration: 0.3), value: referralToast)
         .onAppear { visible = true }
     }
     
