@@ -3,6 +3,7 @@ import SwiftUI
 struct BenefitZoneScreen: View {
     @StateObject private var attendanceVM = AttendanceViewModel()
     @State private var animateIn = false
+    @State private var showRoulette = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -32,6 +33,10 @@ struct BenefitZoneScreen: View {
 
                 RewardAdCardView(onToast: { attendanceVM.toast = $0 })
                     .padding(.horizontal, 16)
+                BenefitInfoCardView(icon: "die.face.5.fill", title: "행운 룰렛", badge: .next,
+                    description: "하루 1회 무료 · 광고로 최대 5회 · 에너지 잭팟까지!", dimmed: false)
+                    .padding(.horizontal, 16)
+                    .onTapGesture { showRoulette = true }
                 BenefitInfoCardView(icon: "target", title: "데일리 미션", badge: .soon,
                     description: "매일 바뀌는 3가지 미션을 완료하고 코인 적립", dimmed: true)
                     .padding(.horizontal, 16)
@@ -47,6 +52,9 @@ struct BenefitZoneScreen: View {
             .padding(.bottom, 16)
         }
         .refreshable { await attendanceVM.refresh() }
+        .sheet(isPresented: $showRoulette) {
+            RouletteView(onClose: { showRoulette = false })
+        }
         .background(Color(.systemGroupedBackground))
         .safeAreaInset(edge: .bottom) {
             if let toast = attendanceVM.toast {
