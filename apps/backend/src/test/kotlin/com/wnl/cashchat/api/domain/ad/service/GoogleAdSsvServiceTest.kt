@@ -260,4 +260,14 @@ class GoogleAdSsvServiceTest : FunSpec({
     test("query parser is registered as a spring component") {
         (GoogleAdSsvQueryParser::class.java.getAnnotation(Component::class.java) != null) shouldBe true
     }
+
+    test("null or blank raw query string is rejected as invalid callback before parsing") {
+        val parser = mock<GoogleAdSsvQueryParser>()
+        val service = service(parser = parser)
+
+        shouldThrow<InvalidGoogleAdSsvCallbackException> { service.verifyAndStore(null) }
+        shouldThrow<InvalidGoogleAdSsvCallbackException> { service.verifyAndStore("   ") }
+
+        verify(parser, never()).parse(any())
+    }
 })

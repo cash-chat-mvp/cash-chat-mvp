@@ -26,6 +26,10 @@ class GoogleAdSsvService(
 ) {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     fun verifyAndStore(rawQueryString: String?): GoogleAdSsvVerificationResult {
+        // 공개 진입점에서 fail-fast: null/blank 는 파서 구현에 의존하지 않고 여기서 명확히 거절한다.
+        if (rawQueryString.isNullOrBlank()) {
+            throw InvalidGoogleAdSsvCallbackException("Google Ad SSV raw query string is null or blank")
+        }
         val callback = parser.parse(rawQueryString)
         validateAdUnit(callback)
         signatureVerifier.verify(callback.signedPayload, callback.signature, callback.keyId)
