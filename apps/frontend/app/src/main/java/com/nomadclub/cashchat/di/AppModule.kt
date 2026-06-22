@@ -78,7 +78,12 @@ val appModule = module {
     // shared 데이터 레이어 (CC-348)
     single<TokenProvider> { DataStoreTokenProvider(get(), get()) }
 
-    single { com.nomadclub.cashchat.config.AppConfig.fromBuildConfig() }
+    // Firebase Remote Config / Analytics
+    single { com.nomadclub.cashchat.config.RemoteConfigManager(appVersionName = BuildConfig.VERSION_NAME) }
+    single { com.nomadclub.cashchat.config.AnalyticsManager(androidContext()) }
+
+    // AppConfig: RC(활성값)→BuildConfig→테스트ID 계층 폴백
+    single { com.nomadclub.cashchat.config.AppConfig.resolve(get()) }
     single { com.nomadclub.cashchat.ads.RewardedAdManager(get()) }
 
     single { com.nomadclub.cashchat.offerwall.TnkOfferwallManager(get()) }

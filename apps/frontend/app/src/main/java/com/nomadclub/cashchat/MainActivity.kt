@@ -1,5 +1,9 @@
 package com.nomadclub.cashchat
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -29,6 +33,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
@@ -36,9 +41,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.compose.rememberNavController
+import com.nomadclub.cashchat.config.AppGateState
+import com.nomadclub.cashchat.config.RemoteConfigManager
 import com.nomadclub.cashchat.feature.auth.AuthState
 import com.nomadclub.cashchat.feature.auth.AuthViewModel
 import com.nomadclub.cashchat.feature.auth.LoginScreen
+import com.nomadclub.cashchat.feature.gate.AppGateScreen
 import com.nomadclub.cashchat.feature.main.MainScreen
 import com.nomadclub.cashchat.feature.onboarding.OnboardingScreen
 import com.nomadclub.cashchat.feature.settings.SettingsViewModel
@@ -97,6 +105,15 @@ private fun CashChatApp() {
 
 @Composable
 private fun CashChatAppContent() {
+    // 긴급 게이트(점검 모드 / 강제 업데이트)는 모든 화면보다 우선한다.
+    val remoteConfigManager = koinInject<RemoteConfigManager>()
+    val gateState by remoteConfigManager.gateState.collectAsStateWithLifecycle()
+    if (gateState !is AppGateState.None) {
+        val context = LocalContext.current
+        AppGateScreen(state = gateState, onUpdate = { openPlayStore(context) })
+        return
+    }
+
     // 앱 시작 시 게스트 세션 자동 초기화 (CC-154, CC-155)
     val authViewModel: AuthViewModel = koinViewModel()
     val authState by authViewModel.authState.collectAsState()
@@ -286,6 +303,26 @@ private fun AuthErrorScreen(onRetry: () -> Unit) {
             Button(onClick = onRetry) {
                 Text("다시 시도")
             }
+        }
+    }
+}
+
+/** Play 스토어의 앱 상세로 이동(미설치 시 웹 폴백). 강제 업데이트 게이트에서 사용. */
+private fun openPlayStore(context: Context) {
+    val packageName = context.packageName
+    runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }.onFailure { e ->
+        if (e is ActivityNotFoundException) {
+            context.startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
         }
     }
 }
