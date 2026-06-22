@@ -26,4 +26,7 @@ data class EconomyProperties(
     val cashoutEnabled: Boolean = true,
     val premiumRoutingEnabled: Boolean = true,
     @field:DecimalMin("0.0") val sharedPoolMarginPerChat: BigDecimal = BigDecimal.ZERO,
+    @field:DecimalMin("0.0") val premiumDeltaPt: BigDecimal = BigDecimal.ZERO,
+    val nanoModelName: String = "",
+    val premiumModelName: String = "",
 )

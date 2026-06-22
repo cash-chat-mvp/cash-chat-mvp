@@ -21,4 +21,12 @@ interface SharedQualityPoolRepository : JpaRepository<SharedQualityPool, Long> {
         nativeQuery = true,
     )
     fun accrue(@Param("amount") amount: BigDecimal): Int
+
+    @Modifying
+    @Query(
+        value = "UPDATE shared_quality_pool SET balance = balance - :amount, updated_at = CURRENT_TIMESTAMP(6) " +
+            "WHERE id = 1 AND balance >= :amount",
+        nativeQuery = true,
+    )
+    fun tryDebit(@Param("amount") amount: BigDecimal): Int
 }

@@ -17,4 +17,11 @@ class SharedQualityPoolService(
         sharedQualityPoolRepository.insertSingletonIfAbsent()
         sharedQualityPoolRepository.accrue(amount)
     }
+
+    /** premiumDelta 만큼 조건부 차감(잔액 충분할 때만). I9: WHERE balance >= delta 로 음수 불가. 성공 시 true. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    fun tryConsumePremium(premiumDelta: BigDecimal): Boolean {
+        sharedQualityPoolRepository.insertSingletonIfAbsent()
+        return sharedQualityPoolRepository.tryDebit(premiumDelta) == 1
+    }
 }
