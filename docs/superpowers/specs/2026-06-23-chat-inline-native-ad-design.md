@@ -73,3 +73,4 @@
 - 광고 프리로딩/풀링 최적화(초기엔 placeholder 도달 시 on-demand 로딩).
 - 사용자 메시지 기준 카운팅(본 설계는 assistant 응답 기준).
 - 빈도 외 타게팅/세그먼트.
+- **대화 맥락 반영 광고**(자체/제휴 카드 하이브리드) — 순수 AdMob으로는 불가하며 백엔드 제휴 인벤토리가 선행되어야 함. 향후 작업으로 [docs/issues/2026-06-23-contextual-native-ad-affiliate-cards.md](../../issues/2026-06-23-contextual-native-ad-affiliate-cards.md)에 기록.
