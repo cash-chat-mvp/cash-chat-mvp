@@ -39,6 +39,10 @@ private struct NativeAdContainer: UIViewRepresentable {
         advertiser.font = .systemFont(ofSize: 11)
         advertiser.textColor = .secondaryLabel
 
+        let rating = UILabel()
+        rating.font = .systemFont(ofSize: 11)
+        rating.textColor = .secondaryLabel
+
         let badge = UILabel()
         badge.text = "Ad"
         badge.font = .systemFont(ofSize: 10)
@@ -51,7 +55,7 @@ private struct NativeAdContainer: UIViewRepresentable {
         let cta = UIButton(type: .system)
         cta.isUserInteractionEnabled = false
 
-        let textStack = UIStackView(arrangedSubviews: [headline, advertiser])
+        let textStack = UIStackView(arrangedSubviews: [headline, advertiser, rating])
         textStack.axis = .vertical
         let topRow = UIStackView(arrangedSubviews: [icon, textStack, badge])
         topRow.axis = .horizontal
@@ -75,6 +79,7 @@ private struct NativeAdContainer: UIViewRepresentable {
 
         adView.headlineView = headline
         adView.advertiserView = advertiser
+        adView.starRatingView = rating
         adView.iconView = icon
         adView.mediaView = media
         adView.callToActionView = cta
@@ -88,6 +93,12 @@ private struct NativeAdContainer: UIViewRepresentable {
     func updateUIView(_ adView: NativeAdView, context: Context) {
         (adView.headlineView as? UILabel)?.text = nativeAd.headline
         (adView.advertiserView as? UILabel)?.text = nativeAd.advertiser ?? nativeAd.store ?? ""
+        if let stars = nativeAd.starRating {
+            (adView.starRatingView as? UILabel)?.text = "★ \(stars)"
+            adView.starRatingView?.isHidden = false
+        } else {
+            adView.starRatingView?.isHidden = true
+        }
         (adView.iconView as? UIImageView)?.image = nativeAd.icon?.image
         (adView.iconView as? UIImageView)?.isHidden = nativeAd.icon?.image == nil
         (adView.callToActionView as? UIButton)?.setTitle(nativeAd.callToAction ?? "자세히 보기", for: .normal)
