@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nomadclub.cashchat.ads.ChatNativeAdView
 import com.nomadclub.cashchat.ads.RewardedAdManager
 import com.nomadclub.cashchat.core.data.CharacterPreferenceStore
 import com.nomadclub.cashchat.feature.chat.components.AdGateCard
@@ -230,7 +231,9 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(items, key = { it.id }) { item ->
-                        if (item is ChatItem.AssistantMessage && item.gated && !item.isStreaming) {
+                        if (item is ChatItem.NativeAd) {
+                            ChatNativeAdView()
+                        } else if (item is ChatItem.AssistantMessage && item.gated && !item.isStreaming) {
                             AdGateCard(
                                 fullText = item.text,
                                 teaserChars = gateInfo?.teaserChars ?: 80,
