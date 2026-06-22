@@ -14,6 +14,9 @@ import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessage
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmMessageRole
 import com.wnl.cashchat.api.domain.chat.service.llm.LlmProvider
 import com.wnl.cashchat.api.domain.economy.properties.EconomyProperties
+import com.wnl.cashchat.api.domain.economy.service.ModelRoutingService
+import com.wnl.cashchat.api.domain.economy.service.ModelTier
+import com.wnl.cashchat.api.domain.economy.service.RoutingDecision
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
@@ -22,7 +25,9 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -43,6 +48,7 @@ class ChatServiceTest : FunSpec() {
     private lateinit var userRepository: UserRepository
     private lateinit var settlementService: ChatRewardSettlementService
     private lateinit var llmProvider: LlmProvider
+    private lateinit var modelRoutingService: ModelRoutingService
     private lateinit var chatService: ChatService
     private lateinit var savedMessageEntities: MutableMap<Long, ChatMessage>
     private var nextMessageId = 100L
@@ -54,6 +60,9 @@ class ChatServiceTest : FunSpec() {
             userRepository = mock()
             settlementService = mock()
             llmProvider = mock()
+            modelRoutingService = mock()
+            whenever(modelRoutingService.selectAndConsume())
+                .thenReturn(RoutingDecision(ModelTier.NANO, null))
             savedMessageEntities = mutableMapOf()
             nextMessageId = 100L
             chatService = ChatService(
@@ -63,6 +72,7 @@ class ChatServiceTest : FunSpec() {
                 settlementService = settlementService,
                 economyProperties = EconomyProperties(rewardChatEnabled = true),
                 llmProvider = llmProvider,
+                modelRoutingService = modelRoutingService,
                 transactionManager = NoOpTransactionManager(),
             )
         }
@@ -194,7 +204,7 @@ class ChatServiceTest : FunSpec() {
             stubMessagePersistence()
             whenever(settlementService.beginReservation(any(), any(), any())).thenReturn(1L)
             whenever(settlementService.settle(any(), any(), any())).thenReturn(dummySettlementResult())
-            whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi there"))
+            whenever(llmProvider.stream(any(), anyOrNull())).thenReturn(Flux.just("hi there"))
 
             StepVerifier.create(
                 chatService.stream(userId = 1L, conversationId = 1L, messageId = "msg-1", content = "hello")
@@ -212,8 +222,32 @@ class ChatServiceTest : FunSpec() {
                         LlmMessage(LlmMessageRole.USER, "previous question"),
                         LlmMessage(LlmMessageRole.USER, "hello"),
                     )
-                }
+                },
+                anyOrNull(),
             )
+        }
+
+        test("stream passes premium model override from routing to the provider") {
+            val conversation = conversation(ownerId = 1L)
+            whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
+            whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(emptyList())
+            stubMessagePersistence()
+            whenever(settlementService.beginReservation(any(), any(), any())).thenReturn(1L)
+            whenever(settlementService.settle(any(), any(), any())).thenReturn(dummySettlementResult())
+            whenever(modelRoutingService.selectAndConsume())
+                .thenReturn(RoutingDecision(ModelTier.PREMIUM, "pro-1"))
+            whenever(llmProvider.stream(any(), eq("pro-1"))).thenReturn(Flux.just("hi"))
+
+            StepVerifier.create(
+                chatService.stream(userId = 1L, conversationId = 1L, messageId = "msg-pro", content = "hello")
+            )
+                .expectNextMatches { it is ChatStreamEvent.Meta }
+                .expectNextMatches { it is ChatStreamEvent.Delta }
+                .expectNextMatches { it is ChatStreamEvent.RewardSettled }
+                .expectNextMatches { it is ChatStreamEvent.Done }
+                .verifyComplete()
+
+            verify(llmProvider).stream(any(), eq("pro-1"))
         }
 
         test("getHistory returns owned conversation messages ordered by creation time") {

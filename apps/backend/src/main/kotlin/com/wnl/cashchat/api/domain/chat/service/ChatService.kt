@@ -16,6 +16,7 @@ import com.wnl.cashchat.api.domain.chat.web.response.ConversationResponse
 import com.wnl.cashchat.api.domain.chat.web.response.ConversationSummaryResponse
 import com.wnl.cashchat.api.domain.economy.exception.FeatureDisabledException
 import com.wnl.cashchat.api.domain.economy.properties.EconomyProperties
+import com.wnl.cashchat.api.domain.economy.service.ModelRoutingService
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
@@ -36,6 +37,7 @@ class ChatService(
     private val settlementService: ChatRewardSettlementService,
     private val economyProperties: EconomyProperties,
     private val llmProvider: LlmProvider,
+    private val modelRoutingService: ModelRoutingService,
     transactionManager: PlatformTransactionManager,
 ) {
     private val transactionTemplate = TransactionTemplate(transactionManager)
@@ -125,14 +127,15 @@ class ChatService(
             require(assistant.id > 0) { "Assistant message id must be assigned" }
 
             val settlementId = settlementService.beginReservation(userId, conversationId, messageId)
-            StreamContext(assistant.id, settlementId, providerMessages)
+            val routing = modelRoutingService.selectAndConsume()
+            StreamContext(assistant.id, settlementId, providerMessages, routing.modelOverride)
         } ?: error("Failed to initialize chat stream")
 
         val buffer = StringBuilder()
 
         return Flux.concat(
             Flux.just(ChatStreamEvent.Meta(messageId, 1L) as ChatStreamEvent),
-            llmProvider.stream(ctx.providerMessages)
+            llmProvider.stream(ctx.providerMessages, ctx.modelOverride)
                 .doOnNext { buffer.append(it) }
                 .map { ChatStreamEvent.Delta(it) as ChatStreamEvent },
             Flux.defer {
@@ -224,6 +227,7 @@ class ChatService(
         val assistantMessageId: Long,
         val settlementId: Long,
         val providerMessages: List<LlmMessage>,
+        val modelOverride: String?,
     )
 
     private companion object {

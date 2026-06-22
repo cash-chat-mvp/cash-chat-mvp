@@ -13,6 +13,7 @@ interface LlmProvider {
 
     /**
      * Streams response chunks from the supplied conversation context.
+     * [modelOverride] selects a specific model (routing); null/blank uses the provider's default model.
      */
-    fun stream(messages: List<LlmMessage>): Flux<String>
+    fun stream(messages: List<LlmMessage>, modelOverride: String? = null): Flux<String>
 }

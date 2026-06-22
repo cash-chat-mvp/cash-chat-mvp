@@ -17,7 +17,11 @@ import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
+import com.wnl.cashchat.api.domain.economy.service.ModelRoutingService
+import com.wnl.cashchat.api.domain.economy.service.ModelTier
+import com.wnl.cashchat.api.domain.economy.service.RoutingDecision
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -38,6 +42,7 @@ class ChatServiceStreamTest : FunSpec() {
     private lateinit var userRepository: UserRepository
     private lateinit var llmProvider: LlmProvider
     private lateinit var settlementService: ChatRewardSettlementService
+    private lateinit var modelRoutingService: ModelRoutingService
     private lateinit var chatService: ChatService
 
     private var nextMessageId = 100L
@@ -50,6 +55,9 @@ class ChatServiceStreamTest : FunSpec() {
             userRepository = mock()
             llmProvider = mock()
             settlementService = mock()
+            modelRoutingService = mock()
+            whenever(modelRoutingService.selectAndConsume())
+                .thenReturn(RoutingDecision(ModelTier.NANO, null))
             nextMessageId = 100L
             savedMessageEntities.clear()
         }
@@ -67,7 +75,7 @@ class ChatServiceStreamTest : FunSpec() {
             }
 
             verify(settlementService, never()).beginReservation(any(), any(), any())
-            verify(llmProvider, never()).stream(any())
+            verify(llmProvider, never()).stream(any(), anyOrNull())
         }
 
         test("stream produces Meta, Delta, RewardSettled, Done in order on success") {
@@ -79,7 +87,7 @@ class ChatServiceStreamTest : FunSpec() {
             whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(emptyList())
             stubMessagePersistence()
             whenever(settlementService.beginReservation(1L, 1L, "msg-001")).thenReturn(42L)
-            whenever(llmProvider.stream(any())).thenReturn(Flux.just("A", "B"))
+            whenever(llmProvider.stream(any(), anyOrNull())).thenReturn(Flux.just("A", "B"))
             val settlementResult = SettlementResult(
                 messageId = "msg-001",
                 status = SettlementStatus.SETTLED,
@@ -116,7 +124,7 @@ class ChatServiceStreamTest : FunSpec() {
             whenever(chatMessageRepository.findAllByConversationIdOrderByCreatedAtAsc(1L)).thenReturn(emptyList())
             stubMessagePersistence()
             whenever(settlementService.beginReservation(1L, 1L, "msg-001")).thenReturn(42L)
-            whenever(llmProvider.stream(any())).thenReturn(Flux.error(RuntimeException("boom")))
+            whenever(llmProvider.stream(any(), anyOrNull())).thenReturn(Flux.error(RuntimeException("boom")))
 
             StepVerifier.create(
                 chatService.stream(userId = 1L, conversationId = 1L, messageId = "msg-001", content = "hello")
@@ -150,6 +158,7 @@ class ChatServiceStreamTest : FunSpec() {
             settlementService = settlementService,
             economyProperties = props,
             llmProvider = llmProvider,
+            modelRoutingService = modelRoutingService,
             transactionManager = NoOpTransactionManager(),
         )
 
