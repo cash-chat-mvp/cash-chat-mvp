@@ -227,6 +227,11 @@ struct ChatScreen: View {
                     ProductCardView(product: product)
                 }
             }
+        } else if item is ChatItemNativeAd {
+            HStack {
+                ChatNativeAdView()
+                Spacer(minLength: 0)
+            }
         }
     }
 
