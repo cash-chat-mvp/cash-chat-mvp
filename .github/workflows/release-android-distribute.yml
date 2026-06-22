@@ -265,15 +265,28 @@ jobs:
         run: printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
 
       - name: Write local.properties
+        env:
+          ADMOB_APP_ID:                  ${{ secrets.ADMOB_APP_ID }}
+          ADMOB_BANNER_AD_UNIT_ID:       ${{ secrets.ADMOB_BANNER_AD_UNIT_ID }}
+          ADMOB_INTERSTITIAL_AD_UNIT_ID: ${{ secrets.ADMOB_INTERSTITIAL_AD_UNIT_ID }}
+          ADMOB_NATIVE_AD_UNIT_ID:       ${{ secrets.ADMOB_NATIVE_AD_UNIT_ID }}
+          ADMOB_REWARDED_AD_UNIT_ID:     ${{ secrets.ADMOB_REWARDED_AD_UNIT_ID }}
         run: |
+          # AdMob 실 ID 시크릿이 없으면 Google 공식 Android 테스트 ID로 폴백 (빌드/실행 실패 방지)
+          ADMOB_APP_ID="${ADMOB_APP_ID:-ca-app-pub-3940256099942544~3347511713}"
+          ADMOB_BANNER_AD_UNIT_ID="${ADMOB_BANNER_AD_UNIT_ID:-ca-app-pub-3940256099942544/6300978111}"
+          ADMOB_INTERSTITIAL_AD_UNIT_ID="${ADMOB_INTERSTITIAL_AD_UNIT_ID:-ca-app-pub-3940256099942544/1033173712}"
+          ADMOB_NATIVE_AD_UNIT_ID="${ADMOB_NATIVE_AD_UNIT_ID:-ca-app-pub-3940256099942544/2247696110}"
+          ADMOB_REWARDED_AD_UNIT_ID="${ADMOB_REWARDED_AD_UNIT_ID:-ca-app-pub-3940256099942544/5224354917}"
           echo "BASE_URL=${{ secrets.BASE_URL }}"                                                     >> local.properties
           echo "GOOGLE_WEB_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}"                                 >> local.properties
-          echo "ADMOB_APP_ID=${{ secrets.ADMOB_APP_ID }}"                                             >> local.properties
-          echo "ADMOB_BANNER_AD_UNIT_ID=${{ secrets.ADMOB_BANNER_AD_UNIT_ID }}"                       >> local.properties
-          echo "ADMOB_INTERSTITIAL_AD_UNIT_ID=${{ secrets.ADMOB_INTERSTITIAL_AD_UNIT_ID }}"           >> local.properties
-          echo "ADMOB_NATIVE_AD_UNIT_ID=${{ secrets.ADMOB_NATIVE_AD_UNIT_ID }}"                       >> local.properties
-          echo "ADMOB_REWARDED_AD_UNIT_ID=${{ secrets.ADMOB_REWARDED_AD_UNIT_ID }}"                   >> local.properties
+          echo "ADMOB_APP_ID=${ADMOB_APP_ID}"                                                         >> local.properties
+          echo "ADMOB_BANNER_AD_UNIT_ID=${ADMOB_BANNER_AD_UNIT_ID}"                                   >> local.properties
+          echo "ADMOB_INTERSTITIAL_AD_UNIT_ID=${ADMOB_INTERSTITIAL_AD_UNIT_ID}"                       >> local.properties
+          echo "ADMOB_NATIVE_AD_UNIT_ID=${ADMOB_NATIVE_AD_UNIT_ID}"                                   >> local.properties
+          echo "ADMOB_REWARDED_AD_UNIT_ID=${ADMOB_REWARDED_AD_UNIT_ID}"                               >> local.properties
           echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}"                                                 >> local.properties
+          echo "TNK_APP_ID=${{ secrets.TNK_APP_ID_ANDROID }}"                                         >> local.properties
 
       - name: Write Firebase Service Account
         env:

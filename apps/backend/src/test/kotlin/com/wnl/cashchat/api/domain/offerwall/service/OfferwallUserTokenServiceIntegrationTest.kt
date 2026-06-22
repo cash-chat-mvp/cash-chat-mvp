@@ -98,7 +98,8 @@ class OfferwallUserTokenServiceIntegrationTest : FunSpec() {
             registry.add("spring.datasource.username", mysql::getUsername)
             registry.add("spring.datasource.password", mysql::getPassword)
             registry.add("spring.datasource.driver-class-name", mysql::getDriverClassName)
-            registry.add("app.offerwall.tnk.app-key") { "test-app-key" }
+            registry.add("app.offerwall.tnk.android.app-key") { "test-app-key" }
+            registry.add("app.offerwall.tnk.ios.app-key") { "test-app-key" }
         }
     }
 }

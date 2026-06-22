@@ -1,6 +1,7 @@
 package com.wnl.cashchat.api.domain.offerwall.service
 
 import com.wnl.cashchat.api.domain.auth.persistence.entity.AuthProviderType
+import com.wnl.cashchat.api.domain.offerwall.persistence.entity.OfferwallPlatform
 import com.wnl.cashchat.api.domain.offerwall.persistence.entity.TnkOfferwallStatus
 import com.wnl.cashchat.api.domain.offerwall.persistence.repository.OfferwallUserTokenRepository
 import com.wnl.cashchat.api.domain.offerwall.persistence.repository.TnkOfferwallCallbackRepository
@@ -39,12 +40,25 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
     @Autowired lateinit var offerwallUserTokenRepository: OfferwallUserTokenRepository
 
     private val now = Instant.parse("2026-06-17T00:00:00Z")
-    private val appKey = "test-app-key"
+
+    // 플랫폼별로 서로 다른 앱키 — md_chk 검증이 각 플랫폼의 키로 정확히 분리되는지 통합 레벨에서 확인한다
+    // (예: android.app-key 가 ios 필드로 잘못 바인딩되는 설정 오류를 잡는다).
+    private val androidKey = "android-test-key"
+    private val iosKey = "ios-test-key"
 
     private fun md5Hex(input: String): String =
         MessageDigest.getInstance("MD5").digest(input.toByteArray()).joinToString("") { "%02x".format(it) }
 
-    private fun params(seqId: String, token: String, payPnt: Long, mdChk: String = md5Hex(appKey + token + seqId)) =
+    private fun keyFor(platform: OfferwallPlatform) =
+        if (platform == OfferwallPlatform.IOS) iosKey else androidKey
+
+    private fun params(
+        seqId: String,
+        token: String,
+        payPnt: Long,
+        platform: OfferwallPlatform = OfferwallPlatform.ANDROID,
+        mdChk: String = md5Hex(keyFor(platform) + token + seqId),
+    ) =
         TnkOfferwallCallbackParams(seqId = seqId, payPnt = payPnt, mdUserNm = token, mdChk = mdChk, rawQuery = "seq_id=$seqId")
 
     private fun newUserWithToken(name: String): Pair<Long, String> {
@@ -68,11 +82,11 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             val baseline = userPointRepository.findByUserId(userId)!!.balance
 
             // ratio=0.5 (아래 DynamicPropertySource) → 1500 * 0.5 = 750
-            val status = service.handleCallback(params("s1", token, 1500), now)
+            val status = service.handleCallback(OfferwallPlatform.ANDROID, params("s1", token, 1500), now)
 
             status shouldBe TnkOfferwallStatus.GRANTED
             userPointRepository.findByUserId(userId)!!.balance shouldBe baseline + 750L
-            val row = callbackRepository.findBySeqId("s1")!!
+            val row = callbackRepository.findByPlatformAndSeqId(OfferwallPlatform.ANDROID, "s1")!!
             row.status shouldBe TnkOfferwallStatus.GRANTED
             row.userId shouldBe userId
             row.coinAmount shouldBe 750L
@@ -82,28 +96,28 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
         test("conversion floors fractional results") {
             val (_, token) = newUserWithToken("floor")
             // 1501 * 0.5 = 750.5 → floor 750
-            service.handleCallback(params("s2", token, 1501), now)
-            callbackRepository.findBySeqId("s2")!!.coinAmount shouldBe 750L
+            service.handleCallback(OfferwallPlatform.ANDROID, params("s2", token, 1501), now)
+            callbackRepository.findByPlatformAndSeqId(OfferwallPlatform.ANDROID, "s2")!!.coinAmount shouldBe 750L
         }
 
         test("bad signature is rejected without persisting a ledger row and credits nothing") {
             val (userId, token) = newUserWithToken("badsig")
             val baseline = userPointRepository.findByUserId(userId)!!.balance
 
-            val status = service.handleCallback(params("s3", token, 1000, mdChk = "wrong"), now)
+            val status = service.handleCallback(OfferwallPlatform.ANDROID, params("s3", token, 1000, mdChk = "wrong"), now)
 
             status shouldBe TnkOfferwallStatus.REJECTED_BAD_SIGNATURE
             userPointRepository.findByUserId(userId)!!.balance shouldBe baseline
             // 서명 검증을 DB 쓰기 앞에서 수행하므로 원장 행이 생기지 않는다(미검증 요청 차단).
-            callbackRepository.findBySeqId("s3") shouldBe null
+            callbackRepository.findByPlatformAndSeqId(OfferwallPlatform.ANDROID, "s3") shouldBe null
             pointTransactionRepository.count() shouldBe 0L
         }
 
         test("unknown token records REJECTED_UNKNOWN_USER and credits nothing") {
-            val status = service.handleCallback(params("s4", "ghost-token", 1000), now)
+            val status = service.handleCallback(OfferwallPlatform.ANDROID, params("s4", "ghost-token", 1000), now)
 
             status shouldBe TnkOfferwallStatus.REJECTED_UNKNOWN_USER
-            val row = callbackRepository.findBySeqId("s4")!!
+            val row = callbackRepository.findByPlatformAndSeqId(OfferwallPlatform.ANDROID, "s4")!!
             row.status shouldBe TnkOfferwallStatus.REJECTED_UNKNOWN_USER
             row.userId shouldBe null
             pointTransactionRepository.count() shouldBe 0L
@@ -113,11 +127,11 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             val (userId, token) = newUserWithToken("nonpos")
             val baseline = userPointRepository.findByUserId(userId)!!.balance
 
-            val status = service.handleCallback(params("s7", token, -1000), now)
+            val status = service.handleCallback(OfferwallPlatform.ANDROID, params("s7", token, -1000), now)
 
             status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
             userPointRepository.findByUserId(userId)!!.balance shouldBe baseline
-            callbackRepository.findBySeqId("s7")!!.status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
+            callbackRepository.findByPlatformAndSeqId(OfferwallPlatform.ANDROID, "s7")!!.status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
             pointTransactionRepository.count() shouldBe 0L
         }
 
@@ -126,11 +140,11 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             val (userId, token) = newUserWithToken("zero")
             val baseline = userPointRepository.findByUserId(userId)!!.balance
 
-            val status = service.handleCallback(params("s8", token, 0), now)
+            val status = service.handleCallback(OfferwallPlatform.ANDROID, params("s8", token, 0), now)
 
             status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
             userPointRepository.findByUserId(userId)!!.balance shouldBe baseline
-            callbackRepository.findBySeqId("s8")!!.status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
+            callbackRepository.findByPlatformAndSeqId(OfferwallPlatform.ANDROID, "s8")!!.status shouldBe TnkOfferwallStatus.REJECTED_NON_POSITIVE
             pointTransactionRepository.count() shouldBe 0L
         }
 
@@ -139,11 +153,11 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             val (userId, token) = newUserWithToken("zerocoin")
             val baseline = userPointRepository.findByUserId(userId)!!.balance
 
-            val status = service.handleCallback(params("s9", token, 1), now)
+            val status = service.handleCallback(OfferwallPlatform.ANDROID, params("s9", token, 1), now)
 
             status shouldBe TnkOfferwallStatus.GRANTED
             userPointRepository.findByUserId(userId)!!.balance shouldBe baseline
-            val row = callbackRepository.findBySeqId("s9")!!
+            val row = callbackRepository.findByPlatformAndSeqId(OfferwallPlatform.ANDROID, "s9")!!
             row.status shouldBe TnkOfferwallStatus.GRANTED
             row.coinAmount shouldBe 0L
             pointTransactionRepository.count() shouldBe 0L
@@ -153,8 +167,8 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             val (userId, token) = newUserWithToken("dup")
             val baseline = userPointRepository.findByUserId(userId)!!.balance
 
-            service.handleCallback(params("s5", token, 1000), now)
-            val second = service.handleCallback(params("s5", token, 1000), now)
+            service.handleCallback(OfferwallPlatform.ANDROID, params("s5", token, 1000), now)
+            val second = service.handleCallback(OfferwallPlatform.ANDROID, params("s5", token, 1000), now)
 
             second shouldBe TnkOfferwallStatus.GRANTED // 이미 GRANTED 상태를 멱등 반환
             userPointRepository.findByUserId(userId)!!.balance shouldBe baseline + 500L
@@ -172,7 +186,7 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             repeat(threads) {
                 pool.submit {
                     ready.countDown(); go.await()
-                    try { service.handleCallback(params("s6", token, 1000), now) } catch (e: Throwable) { failures.add(e) }
+                    try { service.handleCallback(OfferwallPlatform.ANDROID, params("s6", token, 1000), now) } catch (e: Throwable) { failures.add(e) }
                 }
             }
             ready.await(); go.countDown(); pool.shutdown()
@@ -182,6 +196,23 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             userPointRepository.findByUserId(userId)!!.balance shouldBe baseline + 500L
             pointTransactionRepository.count() shouldBe 1L
             callbackRepository.count() shouldBe 1L
+        }
+
+        test("same seq_id on different platforms credits independently") {
+            val (userId, token) = newUserWithToken("multiplat")
+            val baseline = userPointRepository.findByUserId(userId)!!.balance
+
+            // 동일 seq_id "dup-seq" 를 android, ios 양쪽으로. 각 콜백의 md_chk 는 해당 플랫폼 키로 서명되어
+            // 플랫폼별 키 검증이 양쪽 모두 통과해야 하고, 멱등 단위가 (platform, seq_id) 이므로 둘 다 적립된다.
+            service.handleCallback(OfferwallPlatform.ANDROID, params("dup-seq", token, 1000), now) shouldBe TnkOfferwallStatus.GRANTED
+            service.handleCallback(OfferwallPlatform.IOS, params("dup-seq", token, 1000, platform = OfferwallPlatform.IOS), now) shouldBe TnkOfferwallStatus.GRANTED
+
+            // 1000 * 0.5 = 500 씩 두 번
+            userPointRepository.findByUserId(userId)!!.balance shouldBe baseline + 1000L
+            callbackRepository.findByPlatformAndSeqId(OfferwallPlatform.ANDROID, "dup-seq")!!.platform shouldBe OfferwallPlatform.ANDROID
+            callbackRepository.findByPlatformAndSeqId(OfferwallPlatform.IOS, "dup-seq")!!.platform shouldBe OfferwallPlatform.IOS
+            callbackRepository.count() shouldBe 2L
+            pointTransactionRepository.count() shouldBe 2L
         }
     }
 
@@ -197,7 +228,8 @@ class TnkOfferwallServiceIntegrationTest : FunSpec() {
             registry.add("spring.datasource.username", mysql::getUsername)
             registry.add("spring.datasource.password", mysql::getPassword)
             registry.add("spring.datasource.driver-class-name", mysql::getDriverClassName)
-            registry.add("app.offerwall.tnk.app-key") { "test-app-key" }
+            registry.add("app.offerwall.tnk.android.app-key") { "android-test-key" }
+            registry.add("app.offerwall.tnk.ios.app-key") { "ios-test-key" }
             registry.add("app.offerwall.tnk.point-to-coin-ratio") { "0.5" }
         }
     }

@@ -273,34 +273,40 @@ jobs:
           IOS_GOOGLE_CLIENT_ID: ${{ secrets.IOS_GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_ID:     ${{ secrets.GOOGLE_CLIENT_ID }}
           API_SERVER_BASE_URL:  ${{ secrets.API_SERVER_BASE_URL }}
-          ADMOB_APP_ID:         ${{ secrets.ADMOB_APP_ID }}
-          ADMOB_REWARDED_AD_UNIT_ID: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID }}
+          # AdMob 시크릿은 iOS 전용(IOS_ 접두) — Android(ADMOB_*)와 분리한다.
+          ADMOB_APP_ID:                  ${{ secrets.IOS_ADMOB_APP_ID }}
+          ADMOB_BANNER_AD_UNIT_ID:       ${{ secrets.IOS_ADMOB_BANNER_AD_UNIT_ID }}
+          ADMOB_INTERSTITIAL_AD_UNIT_ID: ${{ secrets.IOS_ADMOB_INTERSTITIAL_AD_UNIT_ID }}
+          ADMOB_NATIVE_AD_UNIT_ID:       ${{ secrets.IOS_ADMOB_NATIVE_AD_UNIT_ID }}
+          ADMOB_REWARDED_AD_UNIT_ID:     ${{ secrets.IOS_ADMOB_REWARDED_AD_UNIT_ID }}
+          TNK_APP_ID_IOS:       ${{ secrets.TNK_APP_ID_IOS }}
         run: |
-          # AdMob 실 ID 시크릿이 없으면 Google 공식 테스트 ID로 폴백 (빌드 실패 방지)
+          # AdMob 실 ID 시크릿이 없으면 Google 공식 iOS 테스트 ID로 폴백 (빌드 실패 방지)
           ADMOB_APP_ID="${ADMOB_APP_ID:-ca-app-pub-3940256099942544~1458002511}"
+          ADMOB_BANNER_AD_UNIT_ID="${ADMOB_BANNER_AD_UNIT_ID:-ca-app-pub-3940256099942544/2934735716}"
+          ADMOB_INTERSTITIAL_AD_UNIT_ID="${ADMOB_INTERSTITIAL_AD_UNIT_ID:-ca-app-pub-3940256099942544/4411468910}"
+          ADMOB_NATIVE_AD_UNIT_ID="${ADMOB_NATIVE_AD_UNIT_ID:-ca-app-pub-3940256099942544/3986624511}"
           ADMOB_REWARDED_AD_UNIT_ID="${ADMOB_REWARDED_AD_UNIT_ID:-ca-app-pub-3940256099942544/1712485313}"
-          cat > CashChatIOS/CashChatIOS/Secrets.swift << 'SWIFT_EOF'
+          # Heredoc 안에서 env 변수를 직접 주입한다 (별도 sed 치환 불필요).
+          cat > CashChatIOS/CashChatIOS/Secrets.swift << SWIFT_EOF
           // Auto-generated — do not commit
           enum Secrets {
-              static let googleIOSClientId = "IOS_GOOGLE_CLIENT_ID_PLACEHOLDER"
-              static let googleWebClientId = "GOOGLE_CLIENT_ID_PLACEHOLDER"
-              static let apiBaseUrl        = "API_SERVER_BASE_URL_PLACEHOLDER"
-              static let admobAppId        = "ADMOB_APP_ID_PLACEHOLDER"
-              static let admobRewardedAdUnitId = "ADMOB_REWARDED_AD_UNIT_ID_PLACEHOLDER"
+              static let googleIOSClientId = "${IOS_GOOGLE_CLIENT_ID}"
+              static let googleWebClientId = "${GOOGLE_CLIENT_ID}"
+              static let apiBaseUrl        = "${API_SERVER_BASE_URL}"
+              static let admobAppId        = "${ADMOB_APP_ID}"
+              static let admobBannerAdUnitId = "${ADMOB_BANNER_AD_UNIT_ID}"
+              static let admobInterstitialAdUnitId = "${ADMOB_INTERSTITIAL_AD_UNIT_ID}"
+              static let admobNativeAdUnitId = "${ADMOB_NATIVE_AD_UNIT_ID}"
+              static let admobRewardedAdUnitId = "${ADMOB_REWARDED_AD_UNIT_ID}"
+              static let tnkAppId          = "${TNK_APP_ID_IOS}"
           }
           SWIFT_EOF
-          sed -i '' \
-            -e "s|IOS_GOOGLE_CLIENT_ID_PLACEHOLDER|${IOS_GOOGLE_CLIENT_ID}|g" \
-            -e "s|GOOGLE_CLIENT_ID_PLACEHOLDER|${GOOGLE_CLIENT_ID}|g" \
-            -e "s|API_SERVER_BASE_URL_PLACEHOLDER|${API_SERVER_BASE_URL}|g" \
-            -e "s|ADMOB_APP_ID_PLACEHOLDER|${ADMOB_APP_ID}|g" \
-            -e "s|ADMOB_REWARDED_AD_UNIT_ID_PLACEHOLDER|${ADMOB_REWARDED_AD_UNIT_ID}|g" \
-            CashChatIOS/CashChatIOS/Secrets.swift
 
       - name: Create local.xcconfig
         env:
           IOS_GOOGLE_CLIENT_ID: ${{ secrets.IOS_GOOGLE_CLIENT_ID }}
-          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+          ADMOB_APP_ID: ${{ secrets.IOS_ADMOB_APP_ID }}
         run: |
           REVERSED=$(echo "$IOS_GOOGLE_CLIENT_ID" | awk -F'.' '{for(i=NF;i>=1;i--) printf "%s%s",$i,(i==1?"\n":".")}')
           # AdMob 실 App ID 시크릿이 없으면 Config.xcconfig의 테스트 ID 기본값을 사용한다.

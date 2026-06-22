@@ -12,21 +12,25 @@ import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 
 /**
- * TNK 서버 포스트백 원장. seq_id 당 1행(UNIQUE). 멱등 INSERT 로 PENDING 상태로 먼저 생성한 뒤
- * 행 락(SELECT ... FOR UPDATE)을 잡고 검증·적립을 진행해 동일 seq_id 동시/중복 콜백을 직렬화한다.
+ * TNK 서버 포스트백 원장. (platform, seq_id) 당 1행(UNIQUE). 멱등 INSERT 로 PENDING 상태로 먼저 생성한 뒤
+ * 행 락(SELECT ... FOR UPDATE)을 잡고 검증·적립을 진행해 동일 (platform, seq_id) 동시/중복 콜백을 직렬화한다.
  * status 는 향후 CANCELED 등 환수 상태로 확장 가능(현재 자동 환수는 범위 외).
  */
 @Entity
 @Table(
     name = "tnk_offerwall_callbacks",
     uniqueConstraints = [
-        UniqueConstraint(name = "uk_tnk_offerwall_callbacks_seq_id", columnNames = ["seq_id"])
+        UniqueConstraint(name = "uk_tnk_offerwall_callbacks_platform_seq_id", columnNames = ["platform", "seq_id"])
     ]
 )
 class TnkOfferwallCallback(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long = 0,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "platform", nullable = false, length = 16)
+    val platform: OfferwallPlatform,
 
     @Column(name = "seq_id", nullable = false, length = 128)
     val seqId: String,
