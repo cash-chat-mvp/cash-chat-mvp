@@ -20,7 +20,8 @@ struct CashChatIOSApp: App {
         // 앱 생명주기당 1회 호출. shared Koin 그래프 초기화(데이터 레이어 접근 다리).
         KoinIosKt.doInitKoin(
             baseUrl: AppConfig.apiBaseUrl,
-            tokenProvider: KeychainTokenProvider()
+            tokenProvider: KeychainTokenProvider(),
+            adChatInterval: Int64(AppConfig.adChatInterval)
         )
         // AdMob 초기화 (리워드 광고). 앱 생명주기당 1회.
         MobileAds.shared.start(completionHandler: nil)

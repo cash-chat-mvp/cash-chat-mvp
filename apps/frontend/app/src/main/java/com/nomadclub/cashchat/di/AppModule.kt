@@ -84,6 +84,12 @@ val appModule = module {
 
     // AppConfig: RC(활성값)→BuildConfig→테스트ID 계층 폴백
     single { com.nomadclub.cashchat.config.AppConfig.resolve(get()) }
+    // 네이티브 광고 삽입 빈도(ad_chat_interval). ChatStore(shared)가 get()으로 요구한다.
+    single<com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider> {
+        com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider {
+            get<com.nomadclub.cashchat.config.AppConfig>().adChatInterval
+        }
+    }
     single { com.nomadclub.cashchat.ads.RewardedAdManager(get()) }
 
     single { com.nomadclub.cashchat.offerwall.TnkOfferwallManager(get()) }
