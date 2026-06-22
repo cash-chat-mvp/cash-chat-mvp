@@ -106,7 +106,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
         val repository = mock<GoogleAdSsvEventRepository>()
         // SSV user_id 는 서버 발급 nonce(비숫자)다. 숫자 강제 없이 그대로 검증·저장돼야 한다.
-        val callbackNonce = callback(userId = "f0e1d2c3b4a596870123456789abcdef")
+        val callbackNonce = callback(userId = nonceUserId)
         whenever(parser.parse(rawQuery)).thenReturn(callbackNonce)
         whenever(repository.findByTransactionId(callbackNonce.transactionId)).thenReturn(null)
         whenever(repository.saveAndFlush(any<GoogleAdSsvEvent>())).thenAnswer { it.arguments[0] }
@@ -118,7 +118,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         verify(signatureVerifier).verify(callbackNonce.signedPayload, callbackNonce.signature, callbackNonce.keyId)
         val eventCaptor = argumentCaptor<GoogleAdSsvEvent>()
         verify(repository).saveAndFlush(eventCaptor.capture())
-        eventCaptor.firstValue.userId shouldBe "f0e1d2c3b4a596870123456789abcdef"
+        eventCaptor.firstValue.userId shouldBe nonceUserId
     }
 
     test("existing transaction id validates signature before returning success without save") {

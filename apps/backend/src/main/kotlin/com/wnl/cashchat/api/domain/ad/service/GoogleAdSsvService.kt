@@ -45,6 +45,13 @@ class GoogleAdSsvService(
                 logIfCoreFieldsDiffer(callback, duplicateEvent)
                 GoogleAdSsvVerificationResult(callback, newlyStored = false)
             } else {
+                // transaction_id 중복이 아닌 예기치 못한 제약 위반 — 멱등 복구가 불가능하므로
+                // 진단을 위해 ERROR 로 남기고 그대로 전파한다(상위에서 처리/관측).
+                logger.error(
+                    "Unexpected DataIntegrityViolationException for Google Ad SSV transaction {}",
+                    callback.transactionId,
+                    exception,
+                )
                 throw exception
             }
         }
