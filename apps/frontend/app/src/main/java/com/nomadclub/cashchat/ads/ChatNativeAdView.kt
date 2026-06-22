@@ -1,5 +1,6 @@
 package com.nomadclub.cashchat.ads
 
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -9,6 +10,7 @@ import android.widget.RatingBar
 import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -16,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -41,15 +44,25 @@ fun ChatNativeAdView(
     var ad by remember { mutableStateOf<NativeAd?>(null) }
 
     DisposableEffect(Unit) {
+        var disposed = false
         nativeAdManager.load(
             context = context,
-            onLoaded = { loaded -> ad = loaded },
-            onFailed = { /* 빈 자리 유지 */ },
+            onLoaded = { loaded ->
+                // 컴포저블이 이미 사라진 뒤 도착한 광고는 즉시 해제해 누수를 막는다.
+                if (disposed) loaded.destroy() else ad = loaded
+            },
+            onFailed = { code -> Log.w("ChatNativeAdView", "네이티브 광고 로드 실패: $code") },
         )
-        onDispose { ad?.destroy() }
+        onDispose {
+            disposed = true
+            ad?.destroy()
+        }
     }
 
     val current = ad ?: return
+
+    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant.toArgb()
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
 
     AndroidView(
         modifier = modifier.fillMaxWidth().padding(end = 48.dp),
@@ -57,11 +70,12 @@ fun ChatNativeAdView(
             val density = ctx.resources.displayMetrics.density
             fun dp(v: Int) = (v * density).toInt()
 
-            val headline = TextView(ctx).apply { textSize = 14f; maxLines = 2 }
-            val advertiser = TextView(ctx).apply { textSize = 11f; alpha = 0.7f }
+            val headline = TextView(ctx).apply { textSize = 14f; maxLines = 2; setTextColor(onSurfaceVariant) }
+            val advertiser = TextView(ctx).apply { textSize = 11f; alpha = 0.7f; setTextColor(onSurfaceVariant) }
             val adBadge = TextView(ctx).apply {
                 text = "Ad"; textSize = 10f
                 setPadding(dp(4), dp(1), dp(4), dp(1))
+                setTextColor(onSurfaceVariant)
             }
             val rating = RatingBar(ctx, null, android.R.attr.ratingBarStyleSmall).apply {
                 numStars = 5; stepSize = 0.1f; isClickable = false
@@ -96,6 +110,12 @@ fun ChatNativeAdView(
             val container = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(12), dp(10), dp(12), dp(10))
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(surfaceVariant)
+                    val r = dp(16).toFloat(); val s = dp(4).toFloat()
+                    // 좌상, 우상, 우하, 좌하 (각 모서리 x,y 쌍)
+                    cornerRadii = floatArrayOf(r, r, r, r, r, r, s, s)
+                }
                 addView(topRow)
                 addView(mediaView)
                 addView(cta)
