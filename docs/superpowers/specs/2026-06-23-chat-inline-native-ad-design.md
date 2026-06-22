@@ -21,7 +21,7 @@
 | D1 | 빈도 | **N회마다**. `ad_chat_interval`(RemoteConfig) 재사용. 값 ≤ 0이면 광고 비활성. |
 | D2 | 카운팅 기준 | **AI(assistant) 응답 완료 1건 = 1카운트.** `interval=3`이면 3·6·9번째 응답 *뒤에* 광고 삽입. 사용자 메시지는 세지 않음. |
 | D3 | 책임 분리 | 삽입 *타이밍/위치*는 shared `ChatStore`가 결정해 `ChatItem.NativeAd(id)` placeholder만 리스트에 넣는다. 실제 광고 로딩·렌더링은 각 플랫폼 UI가 placeholder를 만나 수행. |
-| D4 | UI 스타일 | **메시지 버블 스타일** — 좌측 정렬, AI 응답과 유사한 버블 안에 네이티브 광고. AdMob 정책상 `Ad` 라벨 필수. 아이콘·헤드라인·광고주·본문·CTA 버튼 포함. |
+| D4 | UI 스타일 | **메시지 버블 스타일 — "이미지 + CTA 버튼" 시안(B)**. 좌측 정렬, AI 응답과 유사한 버블. 레이아웃: ① 상단 행 = 아이콘(32px) + 헤드라인 + 광고주명·별점 + `Ad` 라벨, ② 중간 = 미디어 이미지(약 96dp 높이), ③ 하단 = 풀폭 CTA 버튼. AdMob 정책상 `Ad`/광고 라벨 + 광고주명 표기 필수. |
 | D5 | 플랫폼 범위 | Android + iOS 동시. 정책 로직 shared, UI는 각 플랫폼. |
 | D6 | 실패 처리 | 광고 로딩 실패 시 자리를 조용히 비움(스킵), 채팅 흐름 방해 안 함. `ad_failed`(ad_type=native) 애널리틱스 로깅. |
 | D7 | 플레이스먼트명 | 애널리틱스/식별용 `chat_inline`. 기존 `BannerAdSlot.CHAT_TOP` 명명 컨벤션과 정렬. |
@@ -37,13 +37,13 @@
 ### 3.2 Android (`:app`)
 
 - **`ads/NativeAdManager.kt`** — `play-services-ads`의 `AdLoader`로 `NativeAd` 로딩. ad unit ID는 `AppConfig`의 계층형 폴백(RemoteConfig→빌드타임→Google 테스트 네이티브 ID `ca-app-pub-3940256099942544/2247696110`)에서 획득. 로딩 결과를 콜백/`Flow`로 노출. 사용 후 `NativeAd.destroy()`로 해제.
-- **`ads/NativeAdView.kt`** (Compose) — `ChatItem.NativeAd`를 받아 위 매니저로 광고를 로딩하고 버블 스타일로 렌더링. `NativeAdView`(AdMob의 네이티브 광고 컨테이너)에 헤드라인/아이콘/CTA를 바인딩(`AndroidView` interop). 로딩 전/실패 시 빈 자리(또는 미표시).
+- **`ads/NativeAdView.kt`** (Compose) — `ChatItem.NativeAd`를 받아 위 매니저로 광고를 로딩하고 시안 B 버블로 렌더링. `NativeAdView`(AdMob 네이티브 광고 컨테이너, `AndroidView` interop)에 아이콘(`icon`)·헤드라인(`headline`)·광고주/별점(`advertiser`/`starRating`)·미디어(`MediaView`)·CTA(`callToAction`)를 바인딩. 로딩 전/실패 시 빈 자리(또는 미표시).
 - **`ChatScreen.kt`** — `LazyColumn`의 `items` 분기에 `is ChatItem.NativeAd -> NativeAdView(...)` 추가.
 
 ### 3.3 iOS (`CashChatIOS`)
 
 - **`Ads/NativeAdManager.swift`** — `GADAdLoader`로 `GADNativeAd` 로딩. ad unit ID는 iOS `AppConfig`의 동일 계층형 폴백(테스트 네이티브 ID `ca-app-pub-3940256099942544/3986624511`).
-- **`Ads/NativeAdCardView.swift`** (SwiftUI) — `GADNativeAdView`(UIKit) 래핑해 버블 스타일 렌더링. 로딩 전/실패 시 미표시.
+- **`Ads/NativeAdCardView.swift`** (SwiftUI) — `GADNativeAdView`(UIKit) 래핑해 시안 B 버블 렌더링(아이콘·헤드라인·advertiser/star·`GADMediaView`·CTA 바인딩). 로딩 전/실패 시 미표시.
 - **`ChatScreen.swift`** — 채팅 리스트에서 `ChatItem.NativeAd` 케이스에 위 뷰 연결.
 
 ## 4. 데이터 흐름
