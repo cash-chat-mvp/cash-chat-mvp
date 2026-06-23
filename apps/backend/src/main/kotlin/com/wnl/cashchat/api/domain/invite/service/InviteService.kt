@@ -15,6 +15,7 @@ import com.wnl.cashchat.api.domain.point.service.UserPointService
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Isolation
 import org.springframework.transaction.annotation.Transactional
 import java.time.Duration
 import java.time.Instant
@@ -44,7 +45,11 @@ class InviteService(
             rewardEnergy = properties.inviteeRewardEnergy,
         )
 
-    @Transactional
+    // READ_COMMITTED: REPEATABLE READ 스냅샷이 FOR UPDATE 락 취득 전에 찍히면
+    // 그 이후에 실행되는 일반 SELECT(countByInviterUserIdAndStatus)가 이전 스냅샷을 바라봐
+    // 다른 스레드가 이미 커밋한 GRANTED 행을 보지 못해 cap을 초과할 수 있다.
+    // READ_COMMITTED는 매 SELECT마다 현재 커밋된 데이터를 읽으므로 이 문제가 없다.
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     fun redeem(inviteeUserId: Long, rawCode: String, now: Instant): RedeemResult {
         val code = rawCode.trim().uppercase()
         val inviteCode = inviteCodeRepository.findByCode(code) ?: throw InvalidCodeException()
@@ -52,6 +57,12 @@ class InviteService(
         if (inviterUserId == inviteeUserId) throw SelfReferralException()
         if (inviteRedemptionRepository.existsByInviteeUserId(inviteeUserId)) throw AlreadyRedeemedException()
         if (!isWithinWindow(inviteeUserId, now)) throw NotEligibleException()
+
+        // 초대자(invite_codes) 행을 비관락으로 잡아 같은 코드의 동시 redeem 을 초대자별로 직렬화한다.
+        // 이 락이 없으면 서로 다른 가입자가 동시에 cap 검사를 통과해 상한을 초과 적립할 수 있다
+        // (invitee_user_id UNIQUE 는 초대자 상한 경합을 막지 못함).
+        inviteCodeRepository.findForUpdate(inviterUserId)
+            ?: throw IllegalStateException("invite_codes row missing for inviterUserId=$inviterUserId")
 
         val grantsCoin = inviteRedemptionRepository
             .countByInviterUserIdAndStatus(inviterUserId, InviteRedemptionStatus.GRANTED) < properties.inviterCap

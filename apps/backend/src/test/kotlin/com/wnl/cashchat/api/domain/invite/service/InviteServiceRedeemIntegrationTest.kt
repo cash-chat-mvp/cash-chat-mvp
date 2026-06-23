@@ -28,6 +28,10 @@ import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.containers.MySQLContainer
 import java.time.Duration
 import java.time.Instant
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @SpringBootTest
 class InviteServiceRedeemIntegrationTest : FunSpec() {
@@ -111,6 +115,47 @@ class InviteServiceRedeemIntegrationTest : FunSpec() {
             val pastWindow = Instant.now().plus(Duration.ofDays(properties.redeemWindowDays.toLong() + 1))
 
             shouldThrow<NotEligibleException> { inviteService.redeem(invitee.id, code, pastWindow) }
+        }
+
+        test("concurrent redeems of one code never exceed the inviter cap") {
+            // inviter-cap=1 (DynamicPropertySource). 4 distinct invitees redeem A's code at once;
+            // exactly one must get GRANTED (+coin once), the rest GRANTED_INVITER_CAPPED.
+            val inviter = newUser("inviter")
+            val code = codeOf(inviter.id)
+            val inviterCoinBefore = userPointService.getBalance(inviter.id)
+            val invitees = (1..4).map { newUser("invitee$it") }
+
+            val pool = Executors.newFixedThreadPool(invitees.size)
+            val ready = CountDownLatch(invitees.size)
+            val go = CountDownLatch(1)
+            val statuses = ConcurrentLinkedQueue<InviteRedemptionStatus>()
+            val failures = ConcurrentLinkedQueue<Throwable>()
+            invitees.forEach { invitee ->
+                pool.submit {
+                    ready.countDown(); go.await()
+                    try { statuses.add(inviteService.redeem(invitee.id, code, Instant.now()).status) }
+                    catch (e: Throwable) { failures.add(e) }
+                }
+            }
+            ready.await(); go.countDown(); pool.shutdown()
+            pool.awaitTermination(30, TimeUnit.SECONDS) shouldBe true
+
+            failures.map { "${it::class.simpleName}: ${it.message}" } shouldBe emptyList()
+            statuses.count { it == InviteRedemptionStatus.GRANTED } shouldBe 1
+            statuses.count { it == InviteRedemptionStatus.GRANTED_INVITER_CAPPED } shouldBe 3
+            userPointService.getBalance(inviter.id) shouldBe inviterCoinBefore + properties.inviterRewardCoin
+            inviteRedemptionRepository.countByInviterUserId(inviter.id) shouldBe 4L
+        }
+
+        test("redeem normalizes the code via trim and uppercase") {
+            val inviter = newUser("inviter")
+            val invitee = newUser("invitee")
+            val code = codeOf(inviter.id)
+
+            val result = inviteService.redeem(invitee.id, "  ${code.lowercase()}  ", Instant.now())
+
+            result.status shouldBe InviteRedemptionStatus.GRANTED
+            inviteRedemptionRepository.existsByInviteeUserId(invitee.id) shouldBe true
         }
 
         test("over-cap redeem still grants invitee energy but no inviter coin") {
