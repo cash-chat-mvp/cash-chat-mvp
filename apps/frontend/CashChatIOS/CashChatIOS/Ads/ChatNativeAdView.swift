@@ -13,7 +13,9 @@ struct ChatNativeAdView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.trailing, 48)
             } else {
-                EmptyView()
+                // 로딩 전/실패 시 시각적으로 비어있지만 레이아웃에는 존재해야
+                // .onAppear 가 발화한다(EmptyView면 발화 안 해 load()가 영영 안 불림).
+                Color.clear.frame(width: 1, height: 1)
             }
         }
         .onAppear { if loader.nativeAd == nil { loader.load() } }
@@ -50,7 +52,8 @@ private struct NativeAdContainer: UIViewRepresentable {
 
         let media = MediaView()
         media.translatesAutoresizingMaskIntoConstraints = false
-        media.heightAnchor.constraint(equalToConstant: 96).isActive = true
+        // AdMob 권장 최소 미디어 크기는 120x120pt — 미만이면 영상 광고에서 경고가 뜬다.
+        media.heightAnchor.constraint(equalToConstant: 120).isActive = true
 
         let cta = UIButton(type: .system)
         cta.isUserInteractionEnabled = false
@@ -88,6 +91,19 @@ private struct NativeAdContainer: UIViewRepresentable {
         adView.layer.cornerRadius = 14
         adView.clipsToBounds = true
         return adView
+    }
+
+    /// SwiftUI에 실제 높이를 알려준다. 이게 없으면 순수 Auto Layout으로 구성된
+    /// NativeAdView가 리스트 안에서 높이 0으로 붕괴해 광고가 보이지 않는다(배너는
+    /// 고정 adSize라 intrinsic size가 있어 이 문제가 없음).
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: NativeAdView, context: Context) -> CGSize? {
+        let targetWidth = proposal.width ?? UIScreen.main.bounds.width
+        let fitting = uiView.systemLayoutSizeFitting(
+            CGSize(width: targetWidth, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        )
+        return CGSize(width: targetWidth, height: fitting.height)
     }
 
     func updateUIView(_ adView: NativeAdView, context: Context) {

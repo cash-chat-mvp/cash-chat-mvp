@@ -81,8 +81,10 @@ fun ChatNativeAdView(
                 numStars = 5; stepSize = 0.1f; isClickable = false
             }
             val mediaView = MediaView(ctx).apply {
+                // AdMob 권장 최소 미디어 크기는 120x120dp — 미만이면 영상 광고에서
+                // "media too small" 경고가 뜬다. 너비는 MATCH_PARENT(버블 폭)라 충분.
                 layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, dp(96),
+                    ViewGroup.LayoutParams.MATCH_PARENT, dp(120),
                 )
             }
             val icon = ImageView(ctx).apply {
