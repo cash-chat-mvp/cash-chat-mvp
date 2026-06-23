@@ -4,6 +4,7 @@ import UIKit
 
 /// 채팅 리스트에 메시지 버블처럼 삽입되는 네이티브 광고(시안 B).
 struct ChatNativeAdView: View {
+    let adId: String
     @StateObject private var loader = ChatNativeAdLoader()
 
     var body: some View {
@@ -18,7 +19,8 @@ struct ChatNativeAdView: View {
                 Color.clear.frame(width: 1, height: 1)
             }
         }
-        .onAppear { if loader.nativeAd == nil { loader.load() } }
+        // adId별 캐시를 사용하므로 스크롤로 재진입해도 같은 광고를 재사용한다.
+        .onAppear { if loader.nativeAd == nil { loader.load(adId: adId) } }
     }
 }
 

@@ -32,6 +32,8 @@ struct ChatScreen: View {
         }
         .background(Color(.systemGroupedBackground))
         .onAppear { vm.load() }
+        // 채팅 화면을 떠나면 캐시된 네이티브 광고를 해제한다(스크롤 재진입 시 재사용하던 캐시).
+        .onDisappear { ChatNativeAdCache.shared.clear() }
         .sheet(isPresented: $showConversations) {
             conversationListSheet
         }
@@ -227,9 +229,9 @@ struct ChatScreen: View {
                     ProductCardView(product: product)
                 }
             }
-        } else if item is ChatItemNativeAd {
+        } else if let adItem = item as? ChatItemNativeAd {
             HStack {
-                ChatNativeAdView()
+                ChatNativeAdView(adId: adItem.id)
                 Spacer(minLength: 0)
             }
         }

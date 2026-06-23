@@ -10,33 +10,59 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.nomadclub.cashchat.config.AppConfig
 
 /**
- * AdMob 네이티브 광고 1회성 로딩 헬퍼.
- * 채팅 리스트의 ChatItem.NativeAd placeholder 1개당 1회 호출해 광고를 받아온다.
+ * AdMob 네이티브 광고 로딩·캐시 헬퍼(앱 싱글톤).
+ *
+ * 채팅 리스트의 ChatItem.NativeAd placeholder는 고유 [adId]를 가진다. LazyColumn 안에서
+ * 스크롤로 화면을 벗어났다 돌아오면 Composable이 재생성되는데, 그때마다 새 광고를 로딩하면
+ * 과도한 광고 요청 → AdMob 정책 위반/계정 정지 위험이 있다. 그래서 adId별로 로딩된 광고를
+ * 캐시해 두고 재진입 시 같은 광고를 재사용한다. 채팅 화면을 떠날 때 [clear]로 일괄 해제한다.
  */
 class NativeAdManager(
     private val appConfig: AppConfig,
 ) {
     companion object { private const val TAG = "NativeAdManager" }
 
+    // adId → 로딩 완료된 광고. (모든 접근은 메인 스레드 — AdMob 콜백/Compose 모두 메인)
+    private val cache = mutableMapOf<String, NativeAd>()
+    // adId → 로딩 진행 중 대기 콜백. 동일 adId 동시 요청을 1회로 합쳐 중복 요청을 막는다.
+    private val pending = mutableMapOf<String, MutableList<(NativeAd) -> Unit>>()
+
     /**
-     * 네이티브 광고를 로딩한다.
-     * @param onLoaded 성공 시 NativeAd 전달. 호출자는 화면에서 사라질 때 [NativeAd.destroy] 책임.
+     * [adId] 광고를 로딩하거나 캐시된 광고를 반환한다.
+     * @param onLoaded 성공 시(또는 캐시 적중 시) NativeAd 전달. 해제 책임은 [NativeAdManager]에 있다.
      * @param onFailed 실패 시 errorCode 전달(빈 자리 처리 + 로깅용).
      */
     fun load(
+        adId: String,
         context: Context,
         onLoaded: (NativeAd) -> Unit,
         onFailed: (Int) -> Unit,
     ) {
+        cache[adId]?.let { onLoaded(it); return }
+        // 이미 로딩 중이면 콜백만 큐에 추가(중복 광고 요청 방지).
+        pending[adId]?.let { it.add(onLoaded); return }
+        pending[adId] = mutableListOf(onLoaded)
+
         val loader = AdLoader.Builder(context, appConfig.admobNativeAdUnitId)
-            .forNativeAd { ad -> onLoaded(ad) }
+            .forNativeAd { ad ->
+                cache[adId] = ad
+                pending.remove(adId)?.forEach { it(ad) }
+            }
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     Log.w(TAG, "네이티브 광고 로드 실패: ${error.message}")
+                    pending.remove(adId)
                     onFailed(error.code)
                 }
             })
             .build()
         loader.loadAd(AdRequest.Builder().build())
+    }
+
+    /** 채팅 화면 이탈 시 호출 — 캐시된 광고를 모두 해제한다. */
+    fun clear() {
+        cache.values.forEach { it.destroy() }
+        cache.clear()
+        pending.clear()
     }
 }

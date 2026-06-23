@@ -34,6 +34,7 @@ import org.koin.compose.koinInject
  */
 @Composable
 fun ChatNativeAdView(
+    adId: String,
     modifier: Modifier = Modifier,
     nativeAdManager: NativeAdManager = koinInject(),
     appConfig: AppConfig = koinInject(),
@@ -41,26 +42,24 @@ fun ChatNativeAdView(
     if (!appConfig.adsEnabled) return
 
     val context = LocalContext.current
-    var ad by remember { mutableStateOf<NativeAd?>(null) }
+    var ad by remember(adId) { mutableStateOf<NativeAd?>(null) }
 
-    DisposableEffect(Unit) {
-        var disposed = false
+    // 광고 로딩/해제는 NativeAdManager(캐시)가 책임진다. 스크롤로 재진입해도 같은 adId면
+    // 캐시된 광고를 즉시 반환하므로 재로딩하지 않는다(AdMob 정책 위반 방지).
+    DisposableEffect(adId) {
         nativeAdManager.load(
+            adId = adId,
             context = context,
-            onLoaded = { loaded ->
-                // 컴포저블이 이미 사라진 뒤 도착한 광고는 즉시 해제해 누수를 막는다.
-                if (disposed) loaded.destroy() else ad = loaded
-            },
+            onLoaded = { loaded -> ad = loaded },
             onFailed = { code -> Log.w("ChatNativeAdView", "네이티브 광고 로드 실패: $code") },
         )
-        onDispose {
-            disposed = true
-            ad?.destroy()
-        }
+        onDispose { /* 광고 해제는 NativeAdManager.clear()에서 일괄 처리 */ }
     }
 
     val current = ad ?: return
 
+    // 테마 색상은 Composable에서 읽어 update 블록으로 전달한다. 다크/라이트 모드가 바뀌면
+    // recomposition으로 update 가 다시 돌아 색상이 실시간 갱신된다(factory 는 1회만 실행됨).
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant.toArgb()
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
 
@@ -70,12 +69,12 @@ fun ChatNativeAdView(
             val density = ctx.resources.displayMetrics.density
             fun dp(v: Int) = (v * density).toInt()
 
-            val headline = TextView(ctx).apply { textSize = 14f; maxLines = 2; setTextColor(onSurfaceVariant) }
-            val advertiser = TextView(ctx).apply { textSize = 11f; alpha = 0.7f; setTextColor(onSurfaceVariant) }
+            val headline = TextView(ctx).apply { tag = TAG_HEADLINE; textSize = 14f; maxLines = 2 }
+            val advertiser = TextView(ctx).apply { tag = TAG_ADVERTISER; textSize = 11f; alpha = 0.7f }
             val adBadge = TextView(ctx).apply {
+                tag = TAG_AD_BADGE
                 text = "Ad"; textSize = 10f
                 setPadding(dp(4), dp(1), dp(4), dp(1))
-                setTextColor(onSurfaceVariant)
             }
             val rating = RatingBar(ctx, null, android.R.attr.ratingBarStyleSmall).apply {
                 numStars = 5; stepSize = 0.1f; isClickable = false
@@ -110,14 +109,9 @@ fun ChatNativeAdView(
             }
 
             val container = LinearLayout(ctx).apply {
+                tag = TAG_CONTAINER
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(12), dp(10), dp(12), dp(10))
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    setColor(surfaceVariant)
-                    val r = dp(16).toFloat(); val s = dp(4).toFloat()
-                    // 좌상, 우상, 우하, 좌하 (각 모서리 x,y 쌍)
-                    cornerRadii = floatArrayOf(r, r, r, r, r, r, s, s)
-                }
                 addView(topRow)
                 addView(mediaView)
                 addView(cta)
@@ -134,6 +128,21 @@ fun ChatNativeAdView(
             }
         },
         update = { adView ->
+            val density = adView.resources.displayMetrics.density
+            fun dp(v: Int) = (v * density).toInt()
+
+            // 테마 색상 적용(다크/라이트 전환 실시간 반영).
+            adView.findViewWithTag<LinearLayout>(TAG_CONTAINER)?.background =
+                android.graphics.drawable.GradientDrawable().apply {
+                    setColor(surfaceVariant)
+                    val r = dp(16).toFloat(); val s = dp(4).toFloat()
+                    // 좌상, 우상, 우하, 좌하 (각 모서리 x,y 쌍)
+                    cornerRadii = floatArrayOf(r, r, r, r, r, r, s, s)
+                }
+            adView.findViewWithTag<TextView>(TAG_HEADLINE)?.setTextColor(onSurfaceVariant)
+            adView.findViewWithTag<TextView>(TAG_ADVERTISER)?.setTextColor(onSurfaceVariant)
+            adView.findViewWithTag<TextView>(TAG_AD_BADGE)?.setTextColor(onSurfaceVariant)
+
             (adView.headlineView as TextView).text = current.headline
             (adView.advertiserView as TextView).apply {
                 text = current.advertiser ?: current.store ?: ""
@@ -152,3 +161,8 @@ fun ChatNativeAdView(
         },
     )
 }
+
+private const val TAG_CONTAINER = "ad_container"
+private const val TAG_HEADLINE = "ad_headline"
+private const val TAG_ADVERTISER = "ad_advertiser"
+private const val TAG_AD_BADGE = "ad_badge"
