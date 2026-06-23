@@ -42,6 +42,9 @@ fun ChatNativeAdView(
     if (!appConfig.adsEnabled) return
 
     val context = LocalContext.current
+    // dp 변환은 factory/update 양쪽에서 쓰므로 Composable 스코프에 한 번만 정의해 공유한다.
+    val density = context.resources.displayMetrics.density
+    fun dp(v: Int) = (v * density).toInt()
     var ad by remember(adId) { mutableStateOf<NativeAd?>(null) }
 
     // 광고 로딩/해제는 NativeAdManager(캐시)가 책임진다. 스크롤로 재진입해도 같은 adId면
@@ -66,9 +69,6 @@ fun ChatNativeAdView(
     AndroidView(
         modifier = modifier.fillMaxWidth().padding(end = 48.dp),
         factory = { ctx ->
-            val density = ctx.resources.displayMetrics.density
-            fun dp(v: Int) = (v * density).toInt()
-
             val headline = TextView(ctx).apply { tag = TAG_HEADLINE; textSize = 14f; maxLines = 2 }
             val advertiser = TextView(ctx).apply { tag = TAG_ADVERTISER; textSize = 11f; alpha = 0.7f }
             val adBadge = TextView(ctx).apply {
@@ -128,9 +128,6 @@ fun ChatNativeAdView(
             }
         },
         update = { adView ->
-            val density = adView.resources.displayMetrics.density
-            fun dp(v: Int) = (v * density).toInt()
-
             // 테마 색상 적용(다크/라이트 전환 실시간 반영).
             adView.findViewWithTag<LinearLayout>(TAG_CONTAINER)?.background =
                 android.graphics.drawable.GradientDrawable().apply {

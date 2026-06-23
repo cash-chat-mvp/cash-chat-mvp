@@ -69,7 +69,8 @@ class ChatStore(
     private var streamJob: Job? = null
 
     // 네이티브 광고 삽입용 — 정상 종료된 assistant 응답 누적 수. reset/대화전환 시 초기화.
-    private var assistantResponseCount = 0
+    // interval(Long)과 비교하므로 Long으로 선언해 타입 불일치/오버플로우를 예방한다.
+    private var assistantResponseCount = 0L
 
     @Throws(Exception::class)
     suspend fun openConversation(id: Long) {
@@ -85,7 +86,7 @@ class ChatStore(
         _items.value = history
         blockedMessageId = null
         _energyGateVisible.value = false
-        assistantResponseCount = 0
+        assistantResponseCount = 0L
     }
 
     fun startNewConversation() {
@@ -94,7 +95,7 @@ class ChatStore(
         _items.value = emptyList()
         blockedMessageId = null
         _energyGateVisible.value = false
-        assistantResponseCount = 0
+        assistantResponseCount = 0L
     }
 
     /** 로그아웃/세션 종료 시 다음 사용자에게 이전 대화·게이트 상태가 노출되지 않도록 초기화한다. */
@@ -107,7 +108,7 @@ class ChatStore(
         _energyGateVisible.value = false
         _streamCompletedCount.value = 0
         _gateInfo.value = null
-        assistantResponseCount = 0
+        assistantResponseCount = 0L
     }
 
     fun sendMessage(text: String) {
