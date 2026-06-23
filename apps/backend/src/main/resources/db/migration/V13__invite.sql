@@ -26,4 +26,6 @@ CREATE TABLE invite_redemptions (
     CONSTRAINT fk_invite_redemptions_inviter FOREIGN KEY (inviter_user_id) REFERENCES users (id)
 );
 
-CREATE INDEX idx_invite_redemptions_inviter ON invite_redemptions (inviter_user_id);
+-- (inviter_user_id, status) 복합 인덱스: cap 카운트 countByInviterUserIdAndStatus(GRANTED) 가속.
+-- 선두 컬럼이 inviter_user_id 이므로 invitedCount(countByInviterUserId) 조회도 함께 커버한다.
+CREATE INDEX idx_invite_redemptions_inviter_status ON invite_redemptions (inviter_user_id, status);
