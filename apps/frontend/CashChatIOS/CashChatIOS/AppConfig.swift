@@ -23,8 +23,9 @@ enum AppConfig {
 
     // Feature flags / 정책 (Remote Config)
     static let offerwallEnabled: Bool = RemoteConfigManager.shared.bool(RemoteConfigKeys.offerwallEnabled)
-    static let adChatInterval: Int = RemoteConfigManager.shared.number(RemoteConfigKeys.adChatInterval).intValue
-    static let rewardChatInterval: Int = RemoteConfigManager.shared.number(RemoteConfigKeys.rewardChatInterval).intValue
+    // RC 오입력(0/음수) 방어 — 간격은 최소 1 이상이어야 한다(modulo/카운트 계산 안전).
+    static let adChatInterval: Int = max(1, RemoteConfigManager.shared.number(RemoteConfigKeys.adChatInterval).intValue)
+    static let rewardChatInterval: Int = max(1, RemoteConfigManager.shared.number(RemoteConfigKeys.rewardChatInterval).intValue)
     static let rewardRequired: Bool = RemoteConfigManager.shared.bool(RemoteConfigKeys.rewardRequired)
     static let interstitialTriggerAction: String = RemoteConfigManager.shared.string(RemoteConfigKeys.interstitialTriggerAction)
 

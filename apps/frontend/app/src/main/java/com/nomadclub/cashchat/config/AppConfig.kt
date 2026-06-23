@@ -66,8 +66,9 @@ data class AppConfig(
             sentryDsn = BuildConfig.SENTRY_DSN,
             tnkAppId = BuildConfig.TNK_APP_ID,
             offerwallEnabled = rc.getBoolean(RemoteConfigKeys.OFFERWALL_ENABLED),
-            adChatInterval = rc.getLong(RemoteConfigKeys.AD_CHAT_INTERVAL),
-            rewardChatInterval = rc.getLong(RemoteConfigKeys.REWARD_CHAT_INTERVAL),
+            // RC 오입력(0/음수) 방어 — 간격은 최소 1 이상이어야 한다(modulo/카운트 계산 안전).
+            adChatInterval = rc.getLong(RemoteConfigKeys.AD_CHAT_INTERVAL).coerceAtLeast(1L),
+            rewardChatInterval = rc.getLong(RemoteConfigKeys.REWARD_CHAT_INTERVAL).coerceAtLeast(1L),
             rewardRequired = rc.getBoolean(RemoteConfigKeys.REWARD_REQUIRED),
             interstitialTriggerAction = rc.getString(RemoteConfigKeys.INTERSTITIAL_TRIGGER_ACTION),
         )
