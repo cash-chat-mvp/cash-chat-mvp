@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class RemoteConfigManager(
     private val appVersionName: String,
     private val remoteConfig: FirebaseRemoteConfig = FirebaseRemoteConfig.getInstance(),
-    isDebug: Boolean = BuildConfig.DEBUG,
+    private val isDebug: Boolean = BuildConfig.DEBUG,
 ) {
     private val _gateState = MutableStateFlow<AppGateState>(AppGateState.None)
     val gateState: StateFlow<AppGateState> = _gateState.asStateFlow()
@@ -62,6 +62,9 @@ class RemoteConfigManager(
     }
 
     private fun isUpdateRequired(): Boolean {
+        // 디버그 빌드(로컬 개발/QA)는 강제 업데이트 게이트로 차단하지 않는다.
+        // dev 빌드 버전이 RC의 최소 버전보다 낮게 잡혀 개발 중 막히는 것을 방지.
+        if (isDebug) return false
         val min = getString(RemoteConfigKeys.FORCE_UPDATE_MIN_VERSION).trim()
         if (min.isEmpty()) return false
         return compareVersions(appVersionName, min) < 0
