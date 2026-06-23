@@ -25,7 +25,12 @@ class NativeAdManager(
     // adId → 로딩 완료된 광고. (모든 접근은 메인 스레드 — AdMob 콜백/Compose 모두 메인)
     private val cache = mutableMapOf<String, NativeAd>()
     // adId → 로딩 진행 중 대기 콜백. 동일 adId 동시 요청을 1회로 합쳐 중복 요청을 막는다.
-    private val pending = mutableMapOf<String, MutableList<(NativeAd) -> Unit>>()
+    private val pending = mutableMapOf<String, PendingCallbacks>()
+
+    private class PendingCallbacks {
+        val onLoaded = mutableListOf<(NativeAd) -> Unit>()
+        val onFailed = mutableListOf<(Int) -> Unit>()
+    }
 
     /**
      * [adId] 광고를 로딩하거나 캐시된 광고를 반환한다.
@@ -39,20 +44,19 @@ class NativeAdManager(
         onFailed: (Int) -> Unit,
     ) {
         cache[adId]?.let { onLoaded(it); return }
-        // 이미 로딩 중이면 콜백만 큐에 추가(중복 광고 요청 방지).
-        pending[adId]?.let { it.add(onLoaded); return }
-        pending[adId] = mutableListOf(onLoaded)
+        // 이미 로딩 중이면 콜백만 큐에 추가(중복 광고 요청 방지). 성공/실패 모두 대기자 전원에게 통지한다.
+        pending[adId]?.let { it.onLoaded.add(onLoaded); it.onFailed.add(onFailed); return }
+        pending[adId] = PendingCallbacks().also { it.onLoaded.add(onLoaded); it.onFailed.add(onFailed) }
 
         val loader = AdLoader.Builder(context, appConfig.admobNativeAdUnitId)
             .forNativeAd { ad ->
                 cache[adId] = ad
-                pending.remove(adId)?.forEach { it(ad) }
+                pending.remove(adId)?.onLoaded?.forEach { it(ad) }
             }
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     Log.w(TAG, "네이티브 광고 로드 실패: ${error.message}")
-                    pending.remove(adId)
-                    onFailed(error.code)
+                    pending.remove(adId)?.onFailed?.forEach { it(error.code) }
                 }
             })
             .build()

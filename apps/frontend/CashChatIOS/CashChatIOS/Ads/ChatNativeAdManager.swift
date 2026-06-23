@@ -13,10 +13,20 @@ final class ChatNativeAdCache {
     private init() {}
 
     private var cache: [String: NativeAd] = [:]
+    // 로딩 진행 중인 adId. 첫 요청 완료 전 .onAppear가 다시 발화해도 중복 요청을 막는다.
+    private var loadingIds: Set<String> = []
 
     func ad(for id: String) -> NativeAd? { cache[id] }
     func store(_ ad: NativeAd, for id: String) { cache[id] = ad }
-    func clear() { cache.removeAll() }
+
+    /// 로딩을 시작해도 되는지 여부. 캐시에 있거나 이미 로딩 중이면 false(중복 요청 차단).
+    func beginLoading(_ id: String) -> Bool {
+        if cache[id] != nil || loadingIds.contains(id) { return false }
+        loadingIds.insert(id)
+        return true
+    }
+    func finishLoading(_ id: String) { loadingIds.remove(id) }
+    func clear() { cache.removeAll(); loadingIds.removeAll() }
 }
 
 /// 채팅 인라인 네이티브 광고 로딩 헬퍼.
@@ -34,8 +44,10 @@ final class ChatNativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDelega
             nativeAd = cached
             return
         }
-        guard AppConfig.adsEnabled else { return }
-        guard let root = Self.rootViewController() else { return }
+        // 첫 요청 완료 전 .onAppear가 다시 발화해도 중복 네트워크 요청을 막는다.
+        guard ChatNativeAdCache.shared.beginLoading(adId) else { return }
+        guard AppConfig.adsEnabled else { ChatNativeAdCache.shared.finishLoading(adId); return }
+        guard let root = Self.rootViewController() else { ChatNativeAdCache.shared.finishLoading(adId); return }
         let loader = AdLoader(
             adUnitID: AppConfig.admobNativeAdUnitId,
             rootViewController: root,
@@ -49,10 +61,12 @@ final class ChatNativeAdLoader: NSObject, ObservableObject, NativeAdLoaderDelega
 
     func adLoader(_ adLoader: AdLoader, didReceive nativeAd: NativeAd) {
         ChatNativeAdCache.shared.store(nativeAd, for: adId)
+        ChatNativeAdCache.shared.finishLoading(adId)
         self.nativeAd = nativeAd
     }
 
     func adLoader(_ adLoader: AdLoader, didFailToReceiveAdWithError error: Error) {
+        ChatNativeAdCache.shared.finishLoading(adId)
         print("네이티브 광고 로드 실패: \(error.localizedDescription)")
     }
 
