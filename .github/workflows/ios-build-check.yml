@@ -91,6 +91,32 @@ jobs:
               static let tnkAppId = "00000000-0000-0000-0000-000000000000"
           }
           EOF
+      - name: Write GoogleService-Info.plist (더미 — 컴파일/번들 검증용)
+        env:
+          IOS_GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.IOS_GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          # 실 plist 시크릿이 있으면 그대로, 없으면 더미로 폴백 (build-check는 실행하지 않으므로 내용은 무관)
+          if [ -n "$IOS_GOOGLE_SERVICE_INFO_PLIST" ]; then
+            echo "$IOS_GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > CashChatIOS/GoogleService-Info.plist
+          else
+            cat > CashChatIOS/GoogleService-Info.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>API_KEY</key><string>DUMMY_API_KEY</string>
+            <key>GCM_SENDER_ID</key><string>000000000000</string>
+            <key>BUNDLE_ID</key><string>com.nomadlab.cashchat</string>
+            <key>PROJECT_ID</key><string>cash-chat-dummy</string>
+            <key>STORAGE_BUCKET</key><string>cash-chat-dummy.appspot.com</string>
+            <key>GOOGLE_APP_ID</key><string>1:000000000000:ios:0000000000000000000000</string>
+            <key>IS_ANALYTICS_ENABLED</key><false/>
+            <key>IS_ADS_ENABLED</key><false/>
+            <key>IS_SIGNIN_ENABLED</key><true/>
+          </dict>
+          </plist>
+          EOF
+          fi
       - name: Build iOS app (simulator, 검증용)
         run: |
           xcodebuild \
