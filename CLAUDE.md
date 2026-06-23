@@ -74,6 +74,24 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 - `feature/*` — 기능 개발 (개인 Fork에서 작업)
 - `hot-fix/*` — 긴급 수정
 
+**작업 시작 전 dev 동기화 (필수)**:
+다른 작업자가 통합 `dev`에 먼저 머지하면, 나중에 PR을 올릴 때
+`This branch is out-of-date with the base branch` 가 뜹니다. 이를 줄이려면
+**브랜치를 항상 최신 upstream `dev`에서 분기**합니다. (origin은 fork라 origin/dev 는 뒤처져 있을 수 있으니
+반드시 **upstream(parent) 저장소의 dev**를 기준으로 합니다.)
+```bash
+# upstream 리모트가 없으면 1회 등록 (gh repo view --json parent 로 parent 확인)
+git remote add upstream https://github.com/<upstream-owner>/<repo>.git
+
+# 작업 시작 전: upstream 의 최신 dev 를 받아 그 위에서 새 브랜치 분기
+git fetch upstream
+git switch -c <branch> upstream/dev
+
+# 이미 진행 중인 브랜치가 뒤처졌다면(PR out-of-date): 최신 dev 를 병합
+git fetch upstream
+git merge upstream/dev    # 충돌 해결 후 커밋·push
+```
+
 **커밋 메시지 형식**:
 ```
 type(scope?): description
@@ -86,6 +104,25 @@ type(scope?): description
 
 **PR 제목**: `[ISSUE-#] Summary`
 GitHub Issue는 사용하지 않으며, **Jira로 작업 관리**. PR 생성 시 Jira Issue가 자동으로 `In Review`로 전환됨.
+
+**Fork 환경에서 PR 생성 (중요)**:
+작업용 origin이 통합 저장소의 **fork**인 경우(개인 fork에서 작업하는 경우),
+PR은 **fork 브랜치 → upstream의 통합 브랜치(`dev`)** 로 올립니다.
+`gh pr create`를 인자 없이 쓰면 base 저장소/head ref를 잘못 잡아
+`No commits between ...` / `Head ref must be a branch` 오류가 납니다. **반드시 base 저장소와 fork head를 명시**하세요:
+```bash
+# 저장소 관계 확인 (isFork, parent 로 upstream 식별)
+gh repo view --json name,isFork,parent
+
+# 1) fork(origin)에 먼저 푸시
+git push -u origin <branch>
+# 2) base 저장소·base 브랜치·fork head 를 모두 명시해 PR 생성
+gh pr create --repo <upstream-owner>/<repo> \
+  --base dev --head <fork-owner>:<branch> \
+  --title "[ISSUE-#] Summary" --body "..."
+```
+- `--repo`에는 **upstream(parent) 저장소**, `--head`에는 **`<fork-owner>:<branch>` 형식**을 넣습니다.
+- 워크트리 **디렉터리 이름과 브랜치 이름은 일치할 필요 없습니다**(독립적). 브랜치만 `git branch -m`으로 바꾸면 됩니다.
 
 ## Infrastructure
 
