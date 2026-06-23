@@ -19,7 +19,7 @@ interface InviteCodeRepository : JpaRepository<InviteCode, Long> {
      * 호출 측은 직후 findForUpdate(userId) 가 null 인지로 코드 충돌을 감지해 재시도한다.
      */
     @Transactional
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query(
         value = "INSERT INTO invite_codes (user_id, code, created_at, updated_at) " +
             "VALUES (:userId, :code, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)) " +
