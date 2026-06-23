@@ -66,6 +66,16 @@ fun ChatNativeAdView(
     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant.toArgb()
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
 
+    // 버블 배경 drawable은 색상이 바뀔 때만 재생성한다(update 블록은 매 상태변경마다 호출되므로).
+    val containerBackground = remember(surfaceVariant, density) {
+        android.graphics.drawable.GradientDrawable().apply {
+            setColor(surfaceVariant)
+            val r = dp(16).toFloat(); val s = dp(4).toFloat()
+            // 좌상, 우상, 우하, 좌하 (각 모서리 x,y 쌍)
+            cornerRadii = floatArrayOf(r, r, r, r, r, r, s, s)
+        }
+    }
+
     AndroidView(
         modifier = modifier.fillMaxWidth().padding(end = 48.dp),
         factory = { ctx ->
@@ -128,14 +138,8 @@ fun ChatNativeAdView(
             }
         },
         update = { adView ->
-            // 테마 색상 적용(다크/라이트 전환 실시간 반영).
-            adView.findViewWithTag<LinearLayout>(TAG_CONTAINER)?.background =
-                android.graphics.drawable.GradientDrawable().apply {
-                    setColor(surfaceVariant)
-                    val r = dp(16).toFloat(); val s = dp(4).toFloat()
-                    // 좌상, 우상, 우하, 좌하 (각 모서리 x,y 쌍)
-                    cornerRadii = floatArrayOf(r, r, r, r, r, r, s, s)
-                }
+            // 테마 색상 적용(다크/라이트 전환 실시간 반영). 배경 drawable은 remember로 캐시된 인스턴스 재사용.
+            adView.findViewWithTag<LinearLayout>(TAG_CONTAINER)?.background = containerBackground
             adView.findViewWithTag<TextView>(TAG_HEADLINE)?.setTextColor(onSurfaceVariant)
             adView.findViewWithTag<TextView>(TAG_ADVERTISER)?.setTextColor(onSurfaceVariant)
             adView.findViewWithTag<TextView>(TAG_AD_BADGE)?.setTextColor(onSurfaceVariant)
