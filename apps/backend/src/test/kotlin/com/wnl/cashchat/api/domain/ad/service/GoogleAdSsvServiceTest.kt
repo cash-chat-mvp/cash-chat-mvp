@@ -186,40 +186,40 @@ class GoogleAdSsvServiceTest : FunSpec({
         verify(ledgerService, never()).recordRevenue(any(), any(), any(), any())
     }
 
-    test("existing transaction id with ad unit mismatch is rejected before verifier and save") {
+    test("ad unit mismatch verifies signature then accepts (200) without storing or crediting") {
         val parser = mock<GoogleAdSsvQueryParser>()
         val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
         val repository = mock<GoogleAdSsvEventRepository>()
         val ledgerService = ledgerMock()
         val callback = callback(adUnit = "unexpected-ad-unit")
         whenever(parser.parse(rawQuery)).thenReturn(callback)
-        whenever(repository.findByTransactionId(callback.transactionId)).thenReturn(event())
         val service = service(parser, signatureVerifier, repository, ledgerService = ledgerService)
 
-        shouldThrow<InvalidGoogleAdSsvCallbackException> {
-            service.verifyAndStore(rawQuery)
-        }
+        val result = service.verifyAndStore(rawQuery)
 
-        verify(signatureVerifier, never()).verify(any(), any(), any())
+        result.newlyStored shouldBe false
+        verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
         verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
+        verify(repository, never()).findByTransactionId(any())
         verify(ledgerService, never()).recordRevenue(any(), any(), any(), any())
     }
 
-    test("ad unit mismatch rejects and does not save") {
+    test("invalid signature is rejected even when ad_unit also mismatches (signature checked first)") {
         val parser = mock<GoogleAdSsvQueryParser>()
         val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
         val repository = mock<GoogleAdSsvEventRepository>()
         val ledgerService = ledgerMock()
         val callback = callback(adUnit = "unexpected-ad-unit")
         whenever(parser.parse(rawQuery)).thenReturn(callback)
-        whenever(repository.findByTransactionId(callback.transactionId)).thenReturn(null)
+        doThrow(InvalidGoogleAdSsvCallbackException("Invalid Google AdMob SSV signature"))
+            .whenever(signatureVerifier)
+            .verify(callback.signedPayload, callback.signature, callback.keyId)
         val service = service(parser, signatureVerifier, repository, ledgerService = ledgerService)
 
         shouldThrow<InvalidGoogleAdSsvCallbackException> {
             service.verifyAndStore(rawQuery)
         }
 
-        verify(signatureVerifier, never()).verify(any(), any(), any())
         verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
         verify(ledgerService, never()).recordRevenue(any(), any(), any(), any())
     }
