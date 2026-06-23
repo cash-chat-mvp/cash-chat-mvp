@@ -22,8 +22,9 @@ CashChatIOS/local.xcconfig
 # iOS 민감 값 파일 (Secrets.swift.example을 복사해서 실제 값 입력)
 CashChatIOS/CashChatIOS/Secrets.swift
 
-# Firebase 서비스 계정 키 (CI에서 secret으로 주입)
+# Firebase 설정 파일 (CI에서 secret으로 주입)
 **/google-services.json
+**/GoogleService-Info.plist
 service-account.json
 
 # Android 릴리즈 서명 키

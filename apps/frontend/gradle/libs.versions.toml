@@ -19,6 +19,8 @@ koin = "3.5.6"
 koinCompose = "3.5.6"
 admob = "23.6.0"
 securityCrypto = "1.1.0"
+googleServices = "4.4.2"
+firebaseBom = "33.7.0"
 # ── shared 모듈(KMM) 전용 — iOS 연동 시점에 :shared 포함 후 활성화 ──
 ktor = "2.3.12"
 kotlinxSerializationJson = "1.7.3"
@@ -55,6 +57,9 @@ koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = 
 koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koinCompose" }
 play-services-ads = { group = "com.google.android.gms", name = "play-services-ads", version.ref = "admob" }
 security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-config = { group = "com.google.firebase", name = "firebase-config" }
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 markdown-renderer-m3 = { group = "com.mikepenz", name = "multiplatform-markdown-renderer-m3", version.ref = "markdownRenderer" }
 
 # ── shared 모듈(KMM) 전용 라이브러리 — iOS 연동 시점에 :shared 포함 후 사용 ──
@@ -80,3 +85,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
