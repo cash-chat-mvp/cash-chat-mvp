@@ -38,6 +38,8 @@ class ApiChatGateway(private val api: ChatApi) : ChatGateway {
 class ChatStore(
     private val gateway: ChatGateway,
     private val scope: CoroutineScope,
+    private val adIntervalProvider: com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider =
+        com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider { 0L },
 ) {
     private val _items = MutableStateFlow<List<ChatItem>>(emptyList())
     val items: StateFlow<List<ChatItem>> = _items.asStateFlow()
@@ -66,6 +68,10 @@ class ChatStore(
     // 진행 중인 스트리밍 Job — 대화 전환/재시도/초기화 시 명시적으로 취소해 백그라운드 누수를 막는다.
     private var streamJob: Job? = null
 
+    // 네이티브 광고 삽입용 — 정상 종료된 assistant 응답 누적 수. reset/대화전환 시 초기화.
+    // interval(Long)과 비교하므로 Long으로 선언해 타입 불일치/오버플로우를 예방한다.
+    private var assistantResponseCount = 0L
+
     @Throws(Exception::class)
     suspend fun openConversation(id: Long) {
         streamJob?.cancel()
@@ -80,6 +86,7 @@ class ChatStore(
         _items.value = history
         blockedMessageId = null
         _energyGateVisible.value = false
+        assistantResponseCount = 0L
     }
 
     fun startNewConversation() {
@@ -88,6 +95,7 @@ class ChatStore(
         _items.value = emptyList()
         blockedMessageId = null
         _energyGateVisible.value = false
+        assistantResponseCount = 0L
     }
 
     /** 로그아웃/세션 종료 시 다음 사용자에게 이전 대화·게이트 상태가 노출되지 않도록 초기화한다. */
@@ -100,6 +108,7 @@ class ChatStore(
         _energyGateVisible.value = false
         _streamCompletedCount.value = 0
         _gateInfo.value = null
+        assistantResponseCount = 0L
     }
 
     fun sendMessage(text: String) {
@@ -167,6 +176,7 @@ class ChatStore(
                         updateUser(messageId) { it.copy(status = ChatItem.SendStatus.CONFIRMED) }
                         if (assistantAdded) updateAssistant(assistantId) { it.copy(isStreaming = false) }
                         _streamCompletedCount.update { it + 1 }
+                        if (assistantAdded) maybeInsertNativeAd()
                     }
                     is ChatStreamEvent.ProductCards -> {
                         _items.update { it + ChatItem.ProductCards("p${currentTimeMillis()}", event.products) }
@@ -201,6 +211,17 @@ class ChatStore(
         } finally {
             _isStreaming.value = false
         }
+    }
+
+    /** 정상 응답마다 카운트하고, interval 배수에 도달하면 네이티브 광고 placeholder를 1개 덧붙인다. */
+    private fun maybeInsertNativeAd() {
+        val interval = adIntervalProvider.get()
+        if (interval <= 0) return
+        assistantResponseCount += 1
+        if (assistantResponseCount % interval != 0L) return
+        if (_items.value.lastOrNull() is ChatItem.NativeAd) return
+        // id는 LazyColumn key·광고 캐시 key로 쓰이므로, 같은 ms 충돌을 피하려 카운터를 덧붙여 유일하게 만든다.
+        _items.update { it + ChatItem.NativeAd("ad${currentTimeMillis()}_$assistantResponseCount") }
     }
 
     private fun updateUser(id: String, transform: (ChatItem.UserMessage) -> ChatItem.UserMessage) {

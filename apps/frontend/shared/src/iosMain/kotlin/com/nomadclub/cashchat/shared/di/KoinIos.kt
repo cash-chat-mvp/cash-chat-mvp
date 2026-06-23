@@ -10,10 +10,15 @@ import org.koin.dsl.module
  * 브랜치 DI 규약: sharedDataModule(baseUrl) 는 소비측이 먼저 TokenProvider 를 등록한다는
  * 전제로 동작한다. engineProvider 파라미터 없음(Darwin 은 actual 로 배선됨).
  */
-fun doInitKoin(baseUrl: String, tokenProvider: TokenProvider) {
+fun doInitKoin(baseUrl: String, tokenProvider: TokenProvider, adChatInterval: Long) {
     startKoin {
         modules(
-            module { single<TokenProvider> { tokenProvider } },
+            module {
+                single<TokenProvider> { tokenProvider }
+                single<com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider> {
+                    com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider { adChatInterval }
+                }
+            },
             sharedDataModule(baseUrl),
         )
     }
