@@ -31,4 +31,17 @@ class UserEvolutionTest : FunSpec({
     test("constructor rejects a level below 1") {
         shouldThrow<IllegalArgumentException> { UserEvolution(user = user(), level = 0) }
     }
+
+    test("addExp accumulates experience") {
+        val evo = UserEvolution(user = user())
+        evo.exp shouldBe 0
+        evo.addExp(1)
+        evo.addExp(4)
+        evo.exp shouldBe 5
+    }
+
+    test("addExp rejects negative amount") {
+        val evo = UserEvolution(user = user())
+        shouldThrow<IllegalArgumentException> { evo.addExp(-1) }
+    }
 })

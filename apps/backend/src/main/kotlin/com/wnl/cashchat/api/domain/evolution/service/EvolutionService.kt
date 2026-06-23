@@ -48,6 +48,14 @@ class EvolutionService(
         )
     }
 
+    /** 채팅 완료 보상: 진화 경험치 적립(개정 모델 CC-283 R1). */
+    @Transactional
+    fun addExp(userId: Long, amount: Long) {
+        val evo = userEvolutionRepository.findByUserIdForUpdate(userId)
+            ?: throw IllegalStateException("UserEvolution not initialized for userId=$userId")
+        evo.addExp(amount)
+    }
+
     @Transactional
     fun attempt(userId: Long, idempotencyKey: String): EvolutionAttemptResult {
         val evo = userEvolutionRepository.findByUserIdForUpdate(userId)

@@ -38,8 +38,18 @@ class UserEvolution(
     var level: Int = level
         private set
 
+    /** 채팅 완료 시마다 적립되는 성장 경험치(개정 모델 CC-283). 진화 시도에 소비(R2). */
+    @Column(name = "evolution_exp", nullable = false)
+    var exp: Long = 0
+        private set
+
     init {
         require(level in 1..MAX_LEVEL) { "Evolution level must be in 1..$MAX_LEVEL" }
+    }
+
+    fun addExp(amount: Long) {
+        require(amount >= 0) { "Exp amount must be non-negative" }
+        exp = Math.addExact(exp, amount)
     }
 
     fun isMaxLevel(): Boolean = level >= MAX_LEVEL
