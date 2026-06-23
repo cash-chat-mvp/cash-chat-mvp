@@ -101,7 +101,6 @@ jobs:
           APPLE_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
           APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
           APPLE_REDIRECT_URI: ${{ secrets.APPLE_REDIRECT_URI }}
-          APP_SWAGGER_ENABLED: ${{ secrets.APP_SWAGGER_ENABLED }}
           APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID }}
           APP_OFFERWALL_TNK_ANDROID_APP_KEY: ${{ secrets.APP_OFFERWALL_TNK_ANDROID_APP_KEY }}
           APP_OFFERWALL_TNK_IOS_APP_KEY: ${{ secrets.APP_OFFERWALL_TNK_IOS_APP_KEY }}
@@ -114,11 +113,6 @@ jobs:
           SPRING_PROFILE="${BACKEND_SPRING_PROFILES_ACTIVE}"
           if [ -z "${SPRING_PROFILE}" ]; then
             SPRING_PROFILE="prod"
-          fi
-
-          SWAGGER_ENABLED="${APP_SWAGGER_ENABLED}"
-          if [ -z "${SWAGGER_ENABLED}" ]; then
-            SWAGGER_ENABLED="false"
           fi
 
           if [ "${SPRING_PROFILE}" = "prod" ]; then
@@ -187,7 +181,6 @@ jobs:
             write_env "APPLE_KEY_ID" "${APPLE_KEY_ID}"
             write_env "APPLE_PRIVATE_KEY" "${APPLE_PRIVATE_KEY}"
             write_env "APPLE_REDIRECT_URI" "${APPLE_REDIRECT_URI}"
-            write_env "APP_SWAGGER_ENABLED" "${SWAGGER_ENABLED}"
             write_env "APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID" "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID}"
             write_env "APP_OFFERWALL_TNK_ANDROID_APP_KEY" "${APP_OFFERWALL_TNK_ANDROID_APP_KEY}"
             write_env "APP_OFFERWALL_TNK_IOS_APP_KEY" "${APP_OFFERWALL_TNK_IOS_APP_KEY}"
