@@ -220,7 +220,8 @@ class ChatStore(
         assistantResponseCount += 1
         if (assistantResponseCount % interval != 0L) return
         if (_items.value.lastOrNull() is ChatItem.NativeAd) return
-        _items.update { it + ChatItem.NativeAd("ad${currentTimeMillis()}") }
+        // id는 LazyColumn key·광고 캐시 key로 쓰이므로, 같은 ms 충돌을 피하려 카운터를 덧붙여 유일하게 만든다.
+        _items.update { it + ChatItem.NativeAd("ad${currentTimeMillis()}_$assistantResponseCount") }
     }
 
     private fun updateUser(id: String, transform: (ChatItem.UserMessage) -> ChatItem.UserMessage) {
