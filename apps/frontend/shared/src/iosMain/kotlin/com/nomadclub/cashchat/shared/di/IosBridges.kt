@@ -2,6 +2,10 @@ package com.nomadclub.cashchat.shared.di
 
 import com.nomadclub.cashchat.shared.ads.AdRewardQuotaDto
 import com.nomadclub.cashchat.shared.ads.AdRewardStore
+import com.nomadclub.cashchat.shared.invite.InviteStore
+import com.nomadclub.cashchat.shared.invite.InviteStatus
+import com.nomadclub.cashchat.shared.roulette.RouletteStore
+import com.nomadclub.cashchat.shared.roulette.RouletteStatus
 import com.nomadclub.cashchat.shared.attendance.AttendanceStore
 import com.nomadclub.cashchat.shared.attendance.AttendanceUiState
 import com.nomadclub.cashchat.shared.attendance.CheckInRewardEvent
@@ -30,18 +34,24 @@ class KoinHelper : KoinComponent {
     private val hud: HudStore by inject()
     private val evolution: EvolutionStore by inject()
     private val adReward: AdRewardStore by inject()
+    private val roulette: RouletteStore by inject()
+    private val invite: InviteStore by inject()
     private val chatApiInstance: ChatApi by inject()
     private val shopApiInstance: ShopApi by inject()
+    private val offerwallApiInstance: com.nomadclub.cashchat.shared.offerwall.OfferwallApi by inject()
     private val sessionResetter: SessionResetter by inject()
 
     fun chatStore(): ChatStore = chat
     fun chatApi(): ChatApi = chatApiInstance
     fun shopApi(): ShopApi = shopApiInstance
+    fun offerwallApi(): com.nomadclub.cashchat.shared.offerwall.OfferwallApi = offerwallApiInstance
     fun attendanceStore(): AttendanceStore = attendance
     fun pointsRepository(): PointsRepository = points
     fun hudStore(): HudStore = hud
     fun evolutionStore(): EvolutionStore = evolution
     fun adRewardStore(): AdRewardStore = adReward
+    fun rouletteStore(): RouletteStore = roulette
+    fun inviteStore(): InviteStore = invite
 
     /** 로그아웃/세션 만료 시 공유 스토어를 일괄 초기화 (계정 전환 후 이전 사용자 데이터 노출 방지). */
     fun resetSession() = sessionResetter.reset()
@@ -94,6 +104,14 @@ class FlowCollector {
 
     fun collectQuota(store: AdRewardStore, onEach: (AdRewardQuotaDto?) -> Unit) {
         scope.launch { store.quota.collect { onEach(it) } }
+    }
+
+    fun collectRouletteStatus(store: RouletteStore, onEach: (RouletteStatus?) -> Unit) {
+        scope.launch { store.status.collect { onEach(it) } }
+    }
+
+    fun collectInviteStatus(store: InviteStore, onEach: (InviteStatus?) -> Unit) {
+        scope.launch { store.status.collect { onEach(it) } }
     }
 
     fun cancel() {

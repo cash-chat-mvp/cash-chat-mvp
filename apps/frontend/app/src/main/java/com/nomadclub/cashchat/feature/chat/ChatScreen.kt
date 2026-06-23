@@ -194,6 +194,10 @@ fun ChatScreen(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
 
+        com.nomadclub.cashchat.ads.BannerAd(
+            slot = com.nomadclub.cashchat.shared.ads.BannerAdSlot.CHAT_TOP,
+        )
+
         // ── 메시지 리스트
         Box(Modifier.weight(1f)) {
             if (items.isEmpty()) {

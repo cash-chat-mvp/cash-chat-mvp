@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>리워드 광고 SSV (Google AdMob) — 구조와 흐름</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2029;
+    --panel-2: #232b36;
+    --border: #313a47;
+    --text: #e6edf3;
+    --muted: #9aa7b4;
+    --accent: #4a9eff;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 80px; }
+  header.hero {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+    margin-bottom: 8px;
+  }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 {
+    font-size: 20px; margin: 44px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--accent); letter-spacing: -0.2px;
+  }
+  h3 { font-size: 15px; color: var(--muted); margin: 22px 0 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  p, li { color: var(--text); }
+  .sub { color: var(--muted); font-size: 14px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--panel-2); padding: 2px 6px; border-radius: 5px;
+    font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.88em; color: #ffd9a0;
+  }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+  .badge {
+    font-size: 12.5px; padding: 5px 11px; border-radius: 20px; border: 1px solid var(--border);
+    background: var(--panel); display: inline-flex; align-items: center; gap: 6px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .ok { background: var(--green); } .warn { background: var(--amber); } .plan { background: var(--muted); }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 22px; margin: 16px 0;
+  }
+  .mermaid-box {
+    background: #fbfdff; border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; margin: 16px 0; overflow-x: auto; text-align: center;
+  }
+  .callout {
+    border-radius: 10px; padding: 14px 18px; margin: 18px 0; border: 1px solid;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .callout .ic { font-size: 18px; line-height: 1.4; }
+  .callout.gap { background: rgba(210,153,34,.10); border-color: rgba(210,153,34,.4); }
+  .callout.info { background: rgba(74,158,255,.08); border-color: rgba(74,158,255,.35); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px; }
+  tr:last-child td { border-bottom: none; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 14px 0; }
+  .card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card h4 { margin: 0 0 6px; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .card p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+  .tag.granted { background: rgba(63,185,80,.16); color: var(--green); }
+  .tag.reject { background: rgba(248,81,73,.14); color: var(--red); }
+  .tag.verified { background: rgba(74,158,255,.14); color: var(--accent); }
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps li { counter-increment: s; position: relative; padding: 8px 0 8px 44px; border-bottom: 1px dashed var(--border); }
+  .steps li:last-child { border-bottom: none; }
+  .steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 8px;
+    width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;
+  }
+  .footer { margin-top: 50px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+  .legend { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>리워드 광고 SSV (Google AdMob)</h1>
+    <p class="sub">구조와 동작 흐름을 시각적으로 — 광고 시청 → 서버 서명 검증 → 코인 적립</p>
+    <div class="badges">
+      <span class="badge"><span class="dot ok"></span> 백엔드 검증·저장·적립: 구현 완료</span>
+      <span class="badge"><span class="dot warn"></span> 프론트 nonce 전달 위치: 수정 필요</span>
+      <span class="badge"><span class="dot plan"></span> AdMob 콘솔/인프라: 설정 예정</span>
+    </div>
+    <p class="sub" style="margin-top:14px">상세 문서: <a href="./architecture.md">architecture.md</a> · <a href="./manual.md">manual.md</a></p>
+  </header>
+
+  <div class="callout info">
+    <span class="ic">🔑</span>
+    <div><strong>한 줄 요약.</strong> 클라이언트가 "광고를 봤다"는 주장을 믿지 않는다. AdMob 서버가 우리 백엔드로 직접 보내는 <strong>Google 서명된 콜백</strong>만 신뢰한다. 그리고 "누구에게 적립할지"는 클라가 채운 <code>user_id</code>를 직접 믿는 대신, <strong>서버가 발급한 단일 사용 nonce</strong>로만 해석한다.</div>
+  </div>
+
+  <h2>1. 구성 요소</h2>
+  <div class="mermaid-box">
+  <pre class="mermaid">
+flowchart LR
+    subgraph Client["앱 클라이언트"]
+        FE["혜택존 화면"]
+        SDK["AdMob SDK"]
+    end
+    subgraph Backend["CashChat 백엔드"]
+        NonceApi["nonce 발급 API"]
+        Ssv["SSV 검증·저장<br/>GoogleAdSsvService"]
+        Grant["적립<br/>AdRewardService"]
+        Point["코인 적립<br/>UserPointService"]
+    end
+    subgraph DB["DB"]
+        Events["google_ad_ssv_events"]
+        Nonce["ad_reward_nonce"]
+        Quota["ad_reward_daily_quota"]
+    end
+    GKeys["Google 공개키<br/>verifier-keys.json"]
+    AdMob["AdMob 서버"]
+
+    FE -->|1 nonce 요청| NonceApi
+    NonceApi <--> Nonce
+    NonceApi -->|2 nonce| FE
+    FE -->|3 setUserId nonce| SDK
+    SDK <-->|광고 로드| AdMob
+    AdMob -->|4 SSV 콜백 GET| Ssv
+    Ssv -->|서명 검증| GKeys
+    Ssv <--> Events
+    Ssv -->|5 검증 결과| Grant
+    Grant -->|nonce→userId| Nonce
+    Grant <--> Quota
+    Grant --> Point
+  </pre>
+  </div>
+
+  <table>
+    <thead><tr><th>주체</th><th>역할</th></tr></thead>
+    <tbody>
+      <tr><td>앱 클라이언트</td><td>광고 시청 직전 nonce 발급받아 SSV <code>user_id</code>에 설정하고 보상형 광고 노출</td></tr>
+      <tr><td>AdMob SDK / 서버</td><td>광고 제공, 시청 완료 시 백엔드로 서명된 SSV 콜백(GET) 전송</td></tr>
+      <tr><td>CashChat 백엔드</td><td>nonce 발급, 콜백 서명 검증·이벤트 저장, nonce→userId 해석·한도·코인 적립</td></tr>
+      <tr><td>Google 공개키 서버</td><td>ECDSA 공개키 묶음 제공(<code>verifier-keys.json</code>), 백엔드가 캐시</td></tr>
+      <tr><td>DB</td><td><code>google_ad_ssv_events</code> · <code>ad_reward_nonce</code> · <code>ad_reward_daily_quota</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>2. 동작 흐름 (시퀀스)</h2>
+  <div class="mermaid-box">
+  <pre class="mermaid">
+sequenceDiagram
+    actor User as 사용자
+    participant FE as 앱 클라이언트
+    participant SDK as AdMob SDK
+    participant AdMob as AdMob 서버
+    participant API as CashChat 백엔드
+    participant DB as DB
+
+    Note over User,DB: 1단계 — nonce 발급 (동기, 시청 직전)
+    User->>FE: 혜택존 지금 시청
+    FE->>API: GET /api/ads/reward/quota
+    API-->>FE: usedToday, remaining
+    FE->>API: POST /api/ads/reward/issue-nonce (JWT)
+    API->>DB: ad_reward_nonce INSERT (used=false)
+    API-->>FE: nonce, expiresAt
+    FE->>SDK: setUserId(nonce) 후 광고 노출
+    User->>SDK: 광고 끝까지 시청
+
+    Note over User,DB: 2단계 — SSV 콜백 검증·저장 (무트랜잭션)
+    AdMob->>API: GET /api/ads/google/ssv?...signature...key_id
+    API->>API: 파싱 → ad_unit 검증 → 공개키 조회 → ECDSA 서명 검증
+    alt 서명/파싱 실패
+        API-->>AdMob: 400 (미저장)
+    else 공개키 조회 불가
+        API-->>AdMob: 503
+    else 검증 성공
+        API->>DB: google_ad_ssv_events UPSERT (VERIFIED)
+        Note over API,DB: 3단계 — 적립 (단일 TX · 락: event→nonce→quota→point)
+        API->>DB: ad_reward_nonce 락 조회 (user_id=nonce)
+        alt nonce 없음/만료/used
+            API->>DB: status=REJECTED_INVALID_NONCE
+            API-->>AdMob: 200
+        else nonce 유효
+            API->>DB: daily_quota 락 조회/생성
+            alt 한도 초과
+                API->>DB: nonce.used=true; status=REJECTED_OVER_QUOTA
+                API-->>AdMob: 200
+            else 한도 내
+                API->>DB: quota+1; nonce.used=true
+                API->>API: recordTransaction(코인, key=admob:reward:txId)
+                API->>DB: status=GRANTED
+                API-->>AdMob: 200
+            end
+        end
+    end
+
+    Note over User,DB: 4단계 — 앱 반영 (별도 조회)
+    User->>FE: 광고 종료/복귀
+    FE->>API: GET quota · 잔액 조회
+    API-->>FE: 갱신된 값
+  </pre>
+  </div>
+
+  <h3>핵심 단계</h3>
+  <ol class="steps">
+    <li><strong>nonce 발급</strong> — 시청 직전 <code>POST /api/ads/reward/issue-nonce</code> → <code>{ nonce, expiresAt }</code>. nonce↔userId 매핑을 서버가 보관.</li>
+    <li><strong>광고 노출</strong> — nonce를 SSV <code>user_id</code>에 실어 보상형 광고 present.</li>
+    <li><strong>SSV 콜백</strong> — AdMob 서버가 <code>GET /api/ads/google/ssv</code>로 서명된 콜백 전송.</li>
+    <li><strong>검증·저장</strong> — 서명(<code>SHA256withECDSA</code>) 검증 후 이벤트 저장(<code>VERIFIED</code>). 적립 안 함.</li>
+    <li><strong>적립</strong> — nonce→userId 해석 → 일일 한도 확인 → 코인 적립 → <code>GRANTED</code>.</li>
+    <li><strong>앱 반영</strong> — 비동기라 즉시 안 뜸 → 잔액/quota 재조회.</li>
+  </ol>
+
+  <h2>3. 이벤트 상태 전이</h2>
+  <div class="mermaid-box">
+  <pre class="mermaid">
+stateDiagram-v2
+    [*] --> VERIFIED: 서명 검증·저장
+    VERIFIED --> GRANTED: nonce 유효 · 한도 내 · 코인 적립
+    VERIFIED --> REJECTED_INVALID_NONCE: nonce 없음/만료/이미 사용
+    VERIFIED --> REJECTED_OVER_QUOTA: 일일 한도 초과
+    GRANTED --> [*]
+    REJECTED_INVALID_NONCE --> [*]
+    REJECTED_OVER_QUOTA --> [*]
+  </pre>
+  </div>
+  <div class="grid">
+    <div class="card"><h4><span class="tag verified">VERIFIED</span></h4><p>서명 검증·저장 완료, 적립 미결정 상태. 적립 실패로 남으면 AdMob 재전송 시 재시도된다.</p></div>
+    <div class="card"><h4><span class="tag granted">GRANTED</span></h4><p>코인 적립 완료(종결). 재전송돼도 멱등하게 건너뜀.</p></div>
+    <div class="card"><h4><span class="tag reject">REJECTED_INVALID_NONCE</span></h4><p>nonce가 없거나 만료/이미 사용됨. 위조·재사용 차단. 200 반환(적립 X).</p></div>
+    <div class="card"><h4><span class="tag reject">REJECTED_OVER_QUOTA</span></h4><p>오늘 시청 한도 초과. 유효 nonce는 소모 처리. 200 반환(적립 X).</p></div>
+  </div>
+
+  <h2>4. 보안·정합성 설계</h2>
+  <div class="grid">
+    <div class="card"><h4>🔏 서명 검증 우선</h4><p><code>key_id</code>의 Google 공개키로 <code>SHA256withECDSA</code> 검증. 페이로드는 <code>signature</code> 앞 원본 쿼리스트링 → 파서가 <code>signature</code>·<code>key_id</code>를 마지막 두 파라미터로 강제.</p></div>
+    <div class="card"><h4>🎫 nonce 신뢰 모델</h4><p>SSV <code>user_id</code>는 클라가 임의로 채우는 값 → 직접 신뢰 X. 서버 발급 단일 사용 nonce로만 <code>nonce→userId</code> 해석. 타인 계정 적립 위조 차단.</p></div>
+    <div class="card"><h4>♻️ 멱등 이중 방어</h4><p><code>transaction_id</code> UNIQUE dedup + 적립 멱등키 <code>admob:reward:{transactionId}</code>. 재전송에도 1회만 적립.</p></div>
+    <div class="card"><h4>🔒 락 순서 고정</h4><p>데드락 방지: <code>event → nonce → daily_quota → user_point</code> 비관적 쓰기 락. 동시 콜백의 상태 덮어쓰기·중복 적립(TOCTOU) 차단.</p></div>
+    <div class="card"><h4>🔁 재시도 폭주 방지</h4><p>서명만 통과하면 거절 케이스도 <strong>200</strong> 반환. 적립 실패도 5xx 안 던짐 → AdMob 무한 재전송 방지. (서명 실패만 400, 공개키 불가 503.)</p></div>
+    <div class="card"><h4>🎯 광고단위 검증(선택)</h4><p><code>rewarded-ad-unit-id</code> 설정 시 콜백 <code>ad_unit</code> 일치 강제. 빈 값이면 스킵.</p></div>
+  </div>
+
+  <h2>5. 엔드포인트</h2>
+  <table>
+    <thead><tr><th>Method</th><th>Path</th><th>인증</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td>POST</td><td><code>/api/ads/reward/issue-nonce</code></td><td>JWT</td><td>단일 사용·단기 nonce 발급</td></tr>
+      <tr><td>GET</td><td><code>/api/ads/reward/quota</code></td><td>JWT</td><td>오늘 남은 시청 횟수</td></tr>
+      <tr><td>GET</td><td><code>/api/ads/google/ssv</code></td><td>public</td><td>AdMob SSV 콜백(AdMob 서버가 호출)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>6. ⚠️ 현재 핵심 갭 & 설계 이력</h2>
+  <div class="callout gap">
+    <span class="ic">⚠️</span>
+    <div>
+      <strong>프론트–백엔드 위치 불일치.</strong> 백엔드는 nonce를 SSV <code>user_id</code>에서 읽지만, 현재 앱 클라이언트는 nonce를 <code>custom_data</code>(<code>setCustomData</code>/<code>customRewardText</code>)로 싣는다.
+      이를 <code>setUserId</code>/<code>userIdentifier</code>로 바꾸기 전까지 <strong>실제 적립은 end-to-end로 동작하지 않는다.</strong> → <a href="./manual.md">manual.md §2</a>
+    </div>
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:0">적립 경로 정리 (왜 이렇게 됐나)</h3>
+    <p style="font-size:14px">초기엔 두 적립 경로가 같은 콜백에 얽혀 있었다 — <strong>① 코인 경로</strong>(nonce 기반, 40코인 고정)와 <strong>② ledger 경로</strong>(후행 추가, <code>reward_amount</code> 기반 회계 분배). ledger 경로가 <code>user_id</code>를 숫자로 강제(<code>toLongOrNull</code>)하면서 nonce·이메일 입력에 <strong>400</strong>을 유발했다.</p>
+    <p style="font-size:14px; margin-bottom:0"><strong>결정:</strong> 정본 = <strong>코인 경로(nonce)</strong>. <code>GoogleAdSsvService</code>에서 숫자 강제·ledger 적립 제거(검증+저장만). 리워드 광고는 <strong>코인만</strong> 적립(energy·매출회계 없음). <code>LedgerService</code>는 휴면 상태로 보존.</p>
+  </div>
+
+  <div class="footer">
+    참고 — Google SSV: <a href="https://developers.google.com/admob/android/ssv">Android</a> · <a href="https://developers.google.com/admob/ios/ssv">iOS</a> ·
+    공개키: <a href="https://www.gstatic.com/admob/reward/verifier-keys.json">verifier-keys.json</a><br/>
+    설계: <code>docs/superpowers/specs/2026-05-31-reward-be3-ad-reward-design.md</code> · Jira CC-242 / CC-288<br/>
+    <span class="legend">※ 다이어그램은 mermaid CDN을 사용하므로 렌더링에 인터넷 연결이 필요합니다. 오프라인이면 본문 텍스트로도 내용 파악 가능.</span>
+  </div>
+
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "neutral",
+    themeVariables: { fontSize: "14px", fontFamily: "Segoe UI, Malgun Gothic, sans-serif" },
+    sequence: { useMaxWidth: true, wrap: true },
+    flowchart: { useMaxWidth: true, htmlLabels: true }
+  });
+</script>
+</body>
+</html>

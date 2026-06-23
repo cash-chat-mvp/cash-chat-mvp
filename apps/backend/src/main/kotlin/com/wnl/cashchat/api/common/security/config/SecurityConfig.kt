@@ -66,7 +66,7 @@ class SecurityConfig(
                 }
                 it.requestMatchers("/api/auth/logout").authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/ads/google/ssv").permitAll()
-                    .requestMatchers(HttpMethod.POST, "/api/offerwall/tnk/callback").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/offerwall/tnk/callback/*").permitAll()
                     .requestMatchers(*publicPaths.toTypedArray()).permitAll()
                     .anyRequest().authenticated()
             }
