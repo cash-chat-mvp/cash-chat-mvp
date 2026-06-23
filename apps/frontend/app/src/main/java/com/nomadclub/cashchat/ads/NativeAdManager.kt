@@ -26,6 +26,8 @@ class NativeAdManager(
     private val cache = mutableMapOf<String, NativeAd>()
     // adId → 로딩 진행 중 대기 콜백. 동일 adId 동시 요청을 1회로 합쳐 중복 요청을 막는다.
     private val pending = mutableMapOf<String, PendingCallbacks>()
+    // adId → 진행 중인 AdLoader. 로딩 완료 전 GC되면 콜백이 영영 안 오므로 완료/실패까지 강참조로 유지한다.
+    private val loaders = mutableMapOf<String, AdLoader>()
 
     private class PendingCallbacks {
         val onLoaded = mutableListOf<(NativeAd) -> Unit>()
@@ -52,14 +54,17 @@ class NativeAdManager(
             .forNativeAd { ad ->
                 cache[adId] = ad
                 pending.remove(adId)?.onLoaded?.forEach { it(ad) }
+                loaders.remove(adId)
             }
             .withAdListener(object : AdListener() {
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     Log.w(TAG, "네이티브 광고 로드 실패: ${error.message}")
                     pending.remove(adId)?.onFailed?.forEach { it(error.code) }
+                    loaders.remove(adId)
                 }
             })
             .build()
+        loaders[adId] = loader
         loader.loadAd(AdRequest.Builder().build())
     }
 
@@ -68,5 +73,6 @@ class NativeAdManager(
         cache.values.forEach { it.destroy() }
         cache.clear()
         pending.clear()
+        loaders.clear()
     }
 }
