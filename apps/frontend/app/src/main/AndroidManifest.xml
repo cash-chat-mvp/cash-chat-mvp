@@ -18,6 +18,14 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="${admobAppId}" />
+
+        <!-- AdMob(play-services-ads)와 Firebase Analytics(play-services-measurement)가
+             둘 다 AD_SERVICES_CONFIG 프로퍼티를 선언해 매니페스트 병합이 충돌한다.
+             AdMob(GMA) 설정을 우선 적용한다. -->
+        <property
+            android:name="android.adservices.AD_SERVICES_CONFIG"
+            android:resource="@xml/gma_ad_services_config"
+            tools:replace="android:resource" />
         <meta-data
             android:name="tnkad_app_id"
             android:value="${tnkAppId}" />

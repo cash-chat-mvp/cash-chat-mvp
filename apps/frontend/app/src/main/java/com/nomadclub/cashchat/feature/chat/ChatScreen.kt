@@ -37,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nomadclub.cashchat.ads.ChatNativeAdView
 import com.nomadclub.cashchat.ads.RewardedAdManager
 import com.nomadclub.cashchat.core.data.CharacterPreferenceStore
 import com.nomadclub.cashchat.feature.chat.components.AdGateCard
@@ -74,9 +76,13 @@ fun ChatScreen(
     onOpenEvolution: () -> Unit,
     viewModel: ChatViewModel = koinViewModel(),
     adManager: RewardedAdManager = koinInject(),
+    nativeAdManager: com.nomadclub.cashchat.ads.NativeAdManager = koinInject(),
     characterStore: CharacterPreferenceStore = koinInject(),
 ) {
     val context = LocalContext.current
+
+    // 채팅 화면을 떠나면 캐시된 네이티브 광고를 모두 해제한다(스크롤 재진입 시 재사용하던 캐시).
+    DisposableEffect(Unit) { onDispose { nativeAdManager.clear() } }
     val characterName by characterStore.name.collectAsStateWithLifecycle(initialValue = "미래")
     val gateInfo by viewModel.chatStore.gateInfo.collectAsStateWithLifecycle()
     val items by viewModel.chatStore.items.collectAsStateWithLifecycle()
@@ -230,7 +236,9 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(items, key = { it.id }) { item ->
-                        if (item is ChatItem.AssistantMessage && item.gated && !item.isStreaming) {
+                        if (item is ChatItem.NativeAd) {
+                            ChatNativeAdView(adId = item.id)
+                        } else if (item is ChatItem.AssistantMessage && item.gated && !item.isStreaming) {
                             AdGateCard(
                                 fullText = item.text,
                                 teaserChars = gateInfo?.teaserChars ?: 80,
