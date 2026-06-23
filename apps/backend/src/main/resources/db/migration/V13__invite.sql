@@ -23,6 +23,7 @@ CREATE TABLE invite_redemptions (
     PRIMARY KEY (id),
     CONSTRAINT uq_invite_redemptions_invitee UNIQUE (invitee_user_id),
     CONSTRAINT fk_invite_redemptions_invitee FOREIGN KEY (invitee_user_id) REFERENCES users (id),
-    CONSTRAINT fk_invite_redemptions_inviter FOREIGN KEY (inviter_user_id) REFERENCES users (id),
-    INDEX idx_invite_redemptions_inviter (inviter_user_id)
+    CONSTRAINT fk_invite_redemptions_inviter FOREIGN KEY (inviter_user_id) REFERENCES users (id)
 );
+
+CREATE INDEX idx_invite_redemptions_inviter ON invite_redemptions (inviter_user_id);
