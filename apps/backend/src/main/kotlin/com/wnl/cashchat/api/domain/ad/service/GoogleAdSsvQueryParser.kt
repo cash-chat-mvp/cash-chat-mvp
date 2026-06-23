@@ -19,10 +19,15 @@ class GoogleAdSsvQueryParser {
             key to decode(parameterValue(part))
         }
 
-        val signedPayload = rawQuery.substringBefore("&signature=")
-        if (signedPayload == rawQuery) {
+        val rawSignedPayload = rawQuery.substringBefore("&signature=")
+        if (rawSignedPayload == rawQuery) {
             throw InvalidGoogleAdSsvCallbackException("Google Ad SSV query string must include signature")
         }
+        // Google 은 percent-encoding 된 전송 문자열이 아니라 URL 디코딩된 콘텐츠에 서명한다
+        // (예: reward_item 이 한글 '에너지' 면 %EC%97%90.. 가 아니라 '에너지' 에 서명). 따라서
+        // 서명 검증용 페이로드는 raw 가 아니라 디코딩한 값으로 재구성한다. 구조 구분자(&, =)는
+        // percent-encoding 대상이 아니므로 그대로 유지되고, 값의 %XX 만 디코딩된다.
+        val signedPayload = decode(rawSignedPayload)
 
         return GoogleAdSsvCallback(
             adUnit = required(parameters, "ad_unit"),
