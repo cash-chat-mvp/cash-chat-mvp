@@ -317,12 +317,17 @@ private fun openPlayStore(context: Context) {
         )
     }.onFailure { e ->
         if (e is ActivityNotFoundException) {
-            context.startActivity(
-                Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
-                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
+            // 웹 폴백도 브라우저 핸들러 부재/제한 환경에서 예외가 날 수 있으므로 감싸 크래시를 막는다.
+            runCatching {
+                context.startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://play.google.com/store/apps/details?id=$packageName")
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }.onFailure { fallbackError ->
+                Log.e("CashChatGate", "Play 스토어 웹 폴백 실행 실패", fallbackError)
+            }
         }
     }
 }
