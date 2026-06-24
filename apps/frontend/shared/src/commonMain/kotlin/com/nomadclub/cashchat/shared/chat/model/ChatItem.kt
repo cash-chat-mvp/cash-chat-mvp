@@ -32,4 +32,7 @@ sealed interface ChatItem {
     ) : ChatItem
 
     data class ProductCards(override val id: String, val products: List<ProductDto>) : ChatItem
+
+    /** 채팅 인라인 네이티브 광고 placeholder. 실제 광고는 플랫폼 UI가 로딩·렌더한다. */
+    data class NativeAd(override val id: String) : ChatItem
 }

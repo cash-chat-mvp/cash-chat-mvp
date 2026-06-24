@@ -36,9 +36,9 @@ class SecurityConfig(
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
-        val isSwaggerEnabled =
-            !environment.activeProfiles.contains(PROD_PROFILE) ||
-                environment.getProperty("app.swagger.enabled", Boolean::class.java, false)
+        // Swagger 경로는 비-prod 프로필에서만 인증 없이 접근 가능하게 둔다.
+        // prod에서는 springdoc 자체가 비활성화되며(application-prod.yaml), 경로도 공개하지 않는다.
+        val isSwaggerEnabled = !environment.activeProfiles.contains(PROD_PROFILE)
 
         http
             .csrf { it.disable() }

@@ -16,6 +16,11 @@ import org.springframework.transaction.annotation.Transactional
  * 적립은 본 서비스가 하지 않는다. 컨트롤러가 검증 성공 결과를 AdRewardService.grantFromCallback 에 전달하면,
  * 거기서 callback.userId(=서버 발급 nonce)를 내부 userId 로 해석해 일일 한도·단일 사용 nonce 를 검증하며 코인을 적립한다.
  * 따라서 여기서는 callback.userId 를 숫자로 강제하지 않는다(nonce 는 비숫자 opaque 토큰).
+ *
+ * HTTP 응답 정책: 서명이 유효한 콜백에는 200 을 반환한다. ad_unit 불일치는 거절(400)이 아니라
+ * '수신하되 적립하지 않음'(미저장, 200)으로 처리한다 — AdMob 콜백 URL '확인' 핑이 placeholder ad_unit 을
+ * 싣기 때문에 400 으로 막으면 URL 등록이 불가능하고, 잘못된 ad_unit 의 (서명 유효) 콜백을 400 으로
+ * 돌려주면 Google 이 재시도를 반복한다. 따라서 서명 검증을 먼저(보안 경계) 수행한 뒤 ad_unit 을 판정한다.
  */
 @Service
 class GoogleAdSsvService(
@@ -31,8 +36,22 @@ class GoogleAdSsvService(
             throw InvalidGoogleAdSsvCallbackException("Google Ad SSV raw query string is null or blank")
         }
         val callback = parser.parse(rawQueryString)
-        validateAdUnit(callback)
+        // 서명 검증을 가장 먼저 수행한다. 이것이 보안 경계이며, 200 응답은 'Google 이 우리 계정용으로
+        // 서명한 진짜 콜백'에만 부여된다. AdMob 콜백 URL '확인' 핑도 유효 서명을 싣고 오므로 통과한다.
         signatureVerifier.verify(callback.signedPayload, callback.signature, callback.keyId)
+
+        // ad_unit 불일치는 거절(400)이 아니라 '수신하되 적립하지 않음(200)' 으로 처리한다(미저장).
+        // AdMob URL '확인' 핑은 실제 광고 단위가 아닌 placeholder ad_unit 을 싣기 때문에 400 으로 막으면
+        // URL 등록이 불가능하고, 잘못된 ad_unit 의 (서명 유효) 콜백을 400 으로 돌려주면 Google 이 재시도를 반복한다.
+        // 실제 ad_unit 값을 로그로 남겨 AdMob 확인 핑이 보내는 값을 관측할 수 있게 한다.
+        if (!isAdUnitMatched(callback)) {
+            logger.warn(
+                "Google Ad SSV ad_unit mismatch — accepted without crediting (callback ad_unit={}, configured={})",
+                callback.adUnit,
+                properties.rewardedAdUnitId,
+            )
+            return GoogleAdSsvVerificationResult(callback, newlyStored = false)
+        }
 
         val existingEvent = repository.findByTransactionId(callback.transactionId)
         if (existingEvent != null) {
@@ -61,13 +80,11 @@ class GoogleAdSsvService(
         }
     }
 
-    private fun validateAdUnit(callback: GoogleAdSsvCallback) {
+    private fun isAdUnitMatched(callback: GoogleAdSsvCallback): Boolean {
         if (!properties.isRewardedAdUnitValidationEnabled()) {
-            return
+            return true
         }
-        if (callback.adUnit != properties.rewardedAdUnitId) {
-            throw InvalidGoogleAdSsvCallbackException("Google Ad SSV ad_unit does not match configured rewarded ad unit")
-        }
+        return callback.adUnit == properties.rewardedAdUnitId
     }
 
     private fun GoogleAdSsvCallback.toEntity(): GoogleAdSsvEvent =
