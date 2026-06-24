@@ -3,7 +3,7 @@ import GoogleMobileAds
 import UIKit
 
 /// AdMob 보상형 광고 사전 로드/노출 관리. Android RewardedAdManager와 동형.
-/// SSV(서버 검증)용 nonce는 customData로 전달한다.
+/// SSV(서버 검증)용 nonce는 user_id(userIdentifier)로 전달한다.
 @MainActor
 final class RewardedAdManager: NSObject {
     private var rewardedAd: RewardedAd?
@@ -46,9 +46,9 @@ final class RewardedAdManager: NSObject {
             return
         }
         if let nonce {
-            // customRewardText 가 SSV 콜백의 custom_data 파라미터로 전달된다(서버 nonce 검증용).
+            // userIdentifier 가 SSV 콜백의 user_id 파라미터로 전달된다(백엔드가 user_id 에서 nonce 를 읽음).
             let options = ServerSideVerificationOptions()
-            options.customRewardText = nonce
+            options.userIdentifier = nonce
             ad.serverSideVerificationOptions = options
         }
         self.onRewarded = onRewarded

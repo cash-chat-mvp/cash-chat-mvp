@@ -68,7 +68,7 @@ class RewardedAdManager(
      * 보상형 광고를 노출합니다.
      *
      * @param activity 광고를 표시할 Activity
-     * @param nonce 서버 SSV(Server-Side Verification) 검증용 nonce — customData로 전달
+     * @param nonce 서버 SSV(Server-Side Verification) 검증용 nonce — userId로 전달
      * @param onRewarded 광고 시청 완료 시 호출 (지급할 포인트 양 전달)
      * @param onDismissed 광고 닫힘 시 호출 (보상 미지급 포함, 항상 호출됨)
      * @param onNotReady 광고가 준비되지 않았을 때 호출
@@ -88,8 +88,9 @@ class RewardedAdManager(
         }
 
         nonce?.let {
+            // nonce 는 SSV 콜백의 user_id 파라미터로 전달돼야 한다(백엔드가 user_id 에서 nonce 를 읽음).
             ad.setServerSideVerificationOptions(
-                ServerSideVerificationOptions.Builder().setCustomData(it).build()
+                ServerSideVerificationOptions.Builder().setUserId(it).build()
             )
         }
 
