@@ -37,6 +37,7 @@ class ChatService(
     private val userRepository: UserRepository,
     private val llmProvider: LlmProvider,
     private val chatModelRouter: ChatModelRouter,
+    private val chatRewardService: ChatRewardService,
     transactionManager: PlatformTransactionManager,
 ) {
     private val log = LoggerFactory.getLogger(ChatService::class.java)
@@ -144,7 +145,7 @@ class ChatService(
 
         return llmProvider.stream(streamContext.providerMessages)
             .doOnNext { chunk -> buffer.append(chunk) }
-            .doFinally { signalType -> finalizeAssistantMessage(signalType, streamContext.assistantMessageId, buffer) }
+            .doFinally { signalType -> finalizeAssistantMessage(signalType, userId, streamContext.assistantMessageId, buffer) }
     }
 
     /**
@@ -166,8 +167,17 @@ class ChatService(
         } ?: error("Failed to load chat history")
     }
 
+    /**
+     * 스트림 종료 시 assistant 메시지를 확정하고 채팅 보상을 정산한다(개정 모델 CC-283 R1).
+     *
+     * 상태 가드: 재진입(이미 확정된 메시지)에서는 정산/환불을 건너뛴다 — STREAMING 일 때만 1회 처리하여
+     * 예약 밥의 이중 정산·환불과 진화 경험치 이중 적립을 막는다. 메시지 확정과 보상 정산은 한 트랜잭션이다.
+     *  - COMPLETED → chatRewardService.settle (예약 밥 소진 + cashablePt + 진화 경험치)
+     *  - FAILED    → chatRewardService.refund (예약 밥 환불)
+     */
     private fun finalizeAssistantMessage(
         signalType: SignalType,
+        userId: Long,
         assistantMessageId: Long,
         buffer: StringBuilder,
     ) {
@@ -181,9 +191,19 @@ class ChatService(
         transactionTemplate.executeWithoutResult {
             val assistantMessage = chatMessageRepository.findById(assistantMessageId)
                 .orElseThrow { IllegalArgumentException("Assistant message not found") }
+
+            // 상태 가드: STREAMING 일 때만 확정·정산한다(멱등). 이미 확정된 메시지면 아무것도 하지 않는다.
+            if (assistantMessage.status != MessageStatus.STREAMING) return@executeWithoutResult
+
             assistantMessage.content = buffer.toString()
             assistantMessage.status = status
             chatMessageRepository.save(assistantMessage)
+
+            when (status) {
+                MessageStatus.COMPLETED -> chatRewardService.settle(userId, assistantMessageId)
+                MessageStatus.FAILED -> chatRewardService.refund(userId)
+                else -> Unit
+            }
         }
     }
 

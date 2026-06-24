@@ -45,6 +45,7 @@ class ChatServiceTest : FunSpec() {
     private lateinit var userRepository: UserRepository
     private lateinit var llmProvider: LlmProvider
     private lateinit var chatModelRouter: ChatModelRouter
+    private lateinit var chatRewardService: ChatRewardService
     private lateinit var chatService: ChatService
     private lateinit var savedMessages: MutableList<SavedMessageSnapshot>
     private lateinit var savedMessageEntities: MutableMap<Long, ChatMessage>
@@ -57,6 +58,7 @@ class ChatServiceTest : FunSpec() {
             userRepository = mock()
             llmProvider = mock()
             chatModelRouter = mock()
+            chatRewardService = mock()
             savedMessages = mutableListOf()
             savedMessageEntities = mutableMapOf()
             nextMessageId = 100L
@@ -66,6 +68,7 @@ class ChatServiceTest : FunSpec() {
                 userRepository = userRepository,
                 llmProvider = llmProvider,
                 chatModelRouter = chatModelRouter,
+                chatRewardService = chatRewardService,
                 transactionManager = NoOpTransactionManager(),
             )
         }
@@ -306,6 +309,49 @@ class ChatServiceTest : FunSpec() {
                 status = MessageStatus.COMPLETED,
                 content = "hi",
             )
+        }
+
+        test("stream settles chat reward when streaming completes normally") {
+            val conversation = conversation(ownerId = 1L)
+
+            stubConversation(conversation)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi", " there"))
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .expectNext("hi", " there")
+                .verifyComplete()
+
+            verify(chatRewardService).settle(eq(1L), any())
+            verify(chatRewardService, never()).refund(any())
+        }
+
+        test("stream refunds reserved energy when the provider errors") {
+            val conversation = conversation(ownerId = 1L)
+
+            stubConversation(conversation)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.error(IllegalStateException("boom")))
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .expectErrorMessage("boom")
+                .verify()
+
+            verify(chatRewardService).refund(1L)
+            verify(chatRewardService, never()).settle(any(), any())
+        }
+
+        test("stream neither settles nor refunds when the energy gate triggers") {
+            val conversation = conversation(ownerId = 1L)
+
+            whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
+            whenever(chatModelRouter.routeAndConsume(eq(1L), any()))
+                .thenThrow(InsufficientEnergyException())
+
+            shouldThrow<InsufficientEnergyException> {
+                chatService.stream(userId = 1L, conversationId = 1L, content = "hello")
+            }
+
+            verify(chatRewardService, never()).settle(any(), any())
+            verify(chatRewardService, never()).refund(any())
         }
 
         test("getHistory returns owned conversation messages ordered by creation time") {
