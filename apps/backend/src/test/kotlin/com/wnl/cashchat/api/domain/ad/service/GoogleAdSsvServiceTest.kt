@@ -34,6 +34,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         rewardItem: String = "coin",
         adUnit: String = "rewarded-ad-unit",
         keyId: Long = 12345L,
+        customData: String? = "custom-nonce",
     ) = GoogleAdSsvCallback(
         adUnit = adUnit,
         rewardAmount = rewardAmount,
@@ -41,6 +42,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         timestamp = 1710000000123L,
         transactionId = transactionId,
         userId = userId,
+        customData = customData,
         signature = "sig",
         keyId = keyId,
         rawQueryString = rawQuery,
@@ -99,6 +101,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         eventCaptor.firstValue.adUnit shouldBe callback.adUnit
         eventCaptor.firstValue.keyId shouldBe callback.keyId
         eventCaptor.firstValue.rawQueryString shouldBe rawQuery
+        eventCaptor.firstValue.customData shouldBe callback.customData
     }
 
     test("non-numeric nonce userId is accepted, verified, and stored") {

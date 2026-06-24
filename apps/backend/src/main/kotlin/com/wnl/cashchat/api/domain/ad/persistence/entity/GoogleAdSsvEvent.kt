@@ -46,6 +46,9 @@ class GoogleAdSsvEvent(
 
     @Column(name = "raw_query_string", nullable = false, columnDefinition = "TEXT")
     val rawQueryString: String,
+
+    @Column(name = "custom_data", nullable = true, length = 1024)
+    val customData: String? = null,
 ) : BaseEntity() {
     @Enumerated(EnumType.STRING)
     @Column(name = "reward_status", nullable = false)

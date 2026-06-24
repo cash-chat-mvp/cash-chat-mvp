@@ -96,6 +96,7 @@ class GoogleAdSsvService(
             adUnit = adUnit,
             keyId = keyId,
             rawQueryString = rawQueryString,
+            customData = customData,
         )
 
     private fun logIfCoreFieldsDiffer(
@@ -115,7 +116,8 @@ class GoogleAdSsvService(
             rewardAmount == callback.rewardAmount &&
             rewardItem == callback.rewardItem &&
             adUnit == callback.adUnit &&
-            keyId == callback.keyId
+            keyId == callback.keyId &&
+            customData == callback.customData
 
     companion object {
         private val logger = LoggerFactory.getLogger(GoogleAdSsvService::class.java)

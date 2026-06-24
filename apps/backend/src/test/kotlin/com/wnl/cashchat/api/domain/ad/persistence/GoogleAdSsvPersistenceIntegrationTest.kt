@@ -59,6 +59,26 @@ class GoogleAdSsvPersistenceIntegrationTest : FunSpec() {
             persisted?.rawQueryString shouldBe "ad_network=google&transaction_id=txn-123&reward_amount=10"
         }
 
+        test("custom_data is persisted") {
+            googleAdSsvEventRepository.saveAndFlush(
+                GoogleAdSsvEvent(
+                    transactionId = "txn-cd",
+                    userId = "user-9",
+                    rewardAmount = 5,
+                    rewardItem = "coin",
+                    adUnit = "rewarded-ad-unit",
+                    keyId = 3,
+                    rawQueryString = "transaction_id=txn-cd",
+                    customData = "nonce-1",
+                )
+            )
+            entityManager.clear()
+
+            val persisted = googleAdSsvEventRepository.findByTransactionId("txn-cd")
+
+            persisted?.customData shouldBe "nonce-1"
+        }
+
         test("duplicate google ad ssv transaction id is rejected") {
             googleAdSsvEventRepository.saveAndFlush(
                 GoogleAdSsvEvent(

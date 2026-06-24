@@ -162,4 +162,14 @@ class GoogleAdSsvQueryParserTest : FunSpec({
         callback.userId shouldBe "user+42"
         callback.signedPayload shouldBe signedPayload
     }
+
+    test("custom_data is extracted and url-decoded") {
+        val rawQuery =
+            "ad_unit=au&reward_amount=1&reward_item=coin&timestamp=1&transaction_id=t" +
+                "&custom_data=nonce%2Babc&user_id=u&signature=sig&key_id=1"
+
+        val callback = parser.parse(rawQuery)
+
+        callback.customData shouldBe "nonce+abc"
+    }
 })
