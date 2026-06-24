@@ -1,6 +1,7 @@
 package com.wnl.cashchat.api.domain.evolution.persistence.entity
 
 import com.wnl.cashchat.api.common.entity.BaseEntity
+import com.wnl.cashchat.api.domain.evolution.exception.InsufficientEvolutionExpException
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -50,6 +51,13 @@ class UserEvolution(
     fun addExp(amount: Long) {
         require(amount >= 0) { "Exp amount must be non-negative" }
         exp = Math.addExact(exp, amount)
+    }
+
+    /** 진화 시도 비용으로 경험치를 차감한다(개정 모델 CC-283 R2). 잔액 부족 시 차감하지 않고 예외. */
+    fun spendExp(amount: Long) {
+        require(amount >= 0) { "Exp amount must be non-negative" }
+        if (exp < amount) throw InsufficientEvolutionExpException()
+        exp -= amount
     }
 
     fun isMaxLevel(): Boolean = level >= MAX_LEVEL
