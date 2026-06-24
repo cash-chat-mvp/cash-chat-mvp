@@ -66,7 +66,7 @@ class GoogleAdSsvQueryParserTest : FunSpec({
                 "&user_id=1"
     }
 
-    test("missing user_id is rejected") {
+    test("missing user_id yields null (user_id is optional)") {
         val rawQuery =
             "ad_unit=ad-unit" +
                 "&reward_amount=10" +
@@ -76,9 +76,9 @@ class GoogleAdSsvQueryParserTest : FunSpec({
                 "&signature=sig" +
                 "&key_id=12345"
 
-        shouldThrow<InvalidGoogleAdSsvCallbackException> {
-            parser.parse(rawQuery)
-        }
+        val callback = parser.parse(rawQuery)
+
+        callback.userId shouldBe null
     }
 
     test("key_id before signature is rejected") {
@@ -171,5 +171,16 @@ class GoogleAdSsvQueryParserTest : FunSpec({
         val callback = parser.parse(rawQuery)
 
         callback.customData shouldBe "nonce+abc"
+    }
+
+    test("user_id is optional and absent yields null userId") {
+        val rawQuery =
+            "ad_unit=au&reward_amount=1&reward_item=coin&timestamp=1&transaction_id=t" +
+                "&custom_data=nonce123&signature=sig&key_id=1"
+
+        val callback = parser.parse(rawQuery)
+
+        callback.userId shouldBe null
+        callback.customData shouldBe "nonce123"
     }
 })

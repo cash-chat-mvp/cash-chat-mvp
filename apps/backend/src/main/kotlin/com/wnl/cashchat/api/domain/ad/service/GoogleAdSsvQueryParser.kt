@@ -37,7 +37,7 @@ class GoogleAdSsvQueryParser {
             timestamp = required(parameters, "timestamp").toLongOrNull()
                 ?: throw InvalidGoogleAdSsvCallbackException("Google Ad SSV timestamp must be numeric"),
             transactionId = required(parameters, "transaction_id"),
-            userId = required(parameters, "user_id"),
+            userId = parameters["user_id"]?.takeIf { it.isNotBlank() },
             customData = parameters["custom_data"]?.takeIf { it.isNotBlank() },
             signature = required(parameters, "signature"),
             keyId = required(parameters, "key_id").toLongOrNull()

@@ -29,8 +29,8 @@ class GoogleAdSsvEvent(
     @Column(name = "transaction_id", nullable = false)
     val transactionId: String,
 
-    @Column(name = "user_id", nullable = false)
-    val userId: String,
+    @Column(name = "user_id", nullable = true, length = 128)
+    val userId: String?,
 
     @Column(name = "reward_amount", nullable = false)
     val rewardAmount: Int,
@@ -68,7 +68,6 @@ class GoogleAdSsvEvent(
 
     init {
         require(transactionId.isNotBlank()) { "Transaction id must not be blank" }
-        require(userId.isNotBlank()) { "User id must not be blank" }
         require(rewardAmount > 0) { "Reward amount must be positive" }
         require(rewardItem.isNotBlank()) { "Reward item must not be blank" }
         require(adUnit.isNotBlank()) { "Ad unit must not be blank" }
