@@ -8,7 +8,7 @@ import io.kotest.matchers.shouldBe
 class GoogleAdSsvQueryParserTest : FunSpec({
     val parser = GoogleAdSsvQueryParser()
 
-    test("valid parse decodes the signed payload to match Google's signed content") {
+    test("valid parse keeps the signed payload raw (undecoded)") {
         val rawSignedPayload =
             "ad_unit=ca-app-pub-3940256099942544%2F5224354917" +
                 "&reward_amount=10" +
@@ -29,19 +29,11 @@ class GoogleAdSsvQueryParserTest : FunSpec({
         callback.signature shouldBe "MEUCIQDabc+def"
         callback.keyId shouldBe 12345L
         callback.rawQueryString shouldBe rawQuery
-        // Google 은 percent-encoding 된 전송 문자열이 아니라 URL 디코딩된 콘텐츠에 서명한다.
-        callback.signedPayload shouldBe
-            "ad_unit=ca-app-pub-3940256099942544/5224354917" +
-                "&reward_amount=10" +
-                "&reward_item=coin pack" +
-                "&timestamp=1710000000123" +
-                "&transaction_id=txn-123" +
-                "&user_id=user+42"
+        // 검증기가 raw·decoded 둘 다 시도하므로 파서는 원문(raw)을 그대로 보존한다.
+        callback.signedPayload shouldBe rawSignedPayload
     }
 
-    test("signed payload decodes non-ascii reward_item (real AdMob verification ping case)") {
-        // 실제 AdMob 확인 핑: reward_item 이 한글 '에너지' → %EC%97%90%EB%84%88%EC%A7%80 로 전송된다.
-        // Google 은 디코딩된 '에너지' 에 서명하므로 검증 페이로드도 디코딩돼야 한다.
+    test("signed payload keeps non-ascii reward_item percent-encoded (raw)") {
         val rawQuery =
             "ad_network=5450213213286189855" +
                 "&ad_unit=1234567890" +
@@ -56,11 +48,12 @@ class GoogleAdSsvQueryParserTest : FunSpec({
         val callback = parser.parse(rawQuery)
 
         callback.rewardItem shouldBe "에너지"
+        // 파서는 디코딩하지 않고 raw 를 보존한다(검증기가 raw·decoded 둘 다 시도).
         callback.signedPayload shouldBe
             "ad_network=5450213213286189855" +
                 "&ad_unit=1234567890" +
                 "&reward_amount=1" +
-                "&reward_item=에너지" +
+                "&reward_item=%EC%97%90%EB%84%88%EC%A7%80" +
                 "&timestamp=1782250214931" +
                 "&transaction_id=123456789" +
                 "&user_id=1"
