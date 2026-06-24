@@ -14,8 +14,8 @@ import org.springframework.transaction.annotation.Transactional
  * Google AdMob SSV 콜백을 검증(서명·광고단위)하고 멱등하게 저장한다.
  *
  * 적립은 본 서비스가 하지 않는다. 컨트롤러가 검증 성공 결과를 AdRewardService.grantFromCallback 에 전달하면,
- * 거기서 callback.userId(=서버 발급 nonce)를 내부 userId 로 해석해 일일 한도·단일 사용 nonce 를 검증하며 코인을 적립한다.
- * 따라서 여기서는 callback.userId 를 숫자로 강제하지 않는다(nonce 는 비숫자 opaque 토큰).
+ * 거기서 callback.customData(=서버 발급 nonce)를 내부 userId 로 해석해 일일 한도·단일 사용 nonce 를 검증하며 코인을 적립한다.
+ * FE 는 SSV custom_data 로 nonce 를 싣고 user_id 는 보내지 않으므로, 여기서는 user_id 를 강제하지 않는다(옵셔널).
  *
  * HTTP 응답 정책: 서명이 유효한 콜백에는 200 을 반환한다. ad_unit 불일치는 거절(400)이 아니라
  * '수신하되 적립하지 않음'(미저장, 200)으로 처리한다 — AdMob 콜백 URL '확인' 핑이 placeholder ad_unit 을
