@@ -7,10 +7,13 @@ import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.content.TextContent
 import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertNull
 
 private object NoAuth : TokenProvider {
@@ -48,6 +51,10 @@ class EvolutionApiTest {
         val engine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals("/api/evolution/attempt", request.url.encodedPath)
+            val body = (request.body as TextContent).text
+            assertTrue(body.contains(""""idempotencyKey":"key""""))
+            assertTrue(body.contains(""""sessionId":"s1""""))
+            assertTrue(body.contains(""""releasedAtMs":1432"""))
             respond(
                 """{"success":true,"fromLevel":2,"resultLevel":3,"cost":1200,"timingGrade":"PERFECT","timingBonusRate":0.10,"baseSuccessRate":0.65,"finalSuccessRate":0.75}""",
                 HttpStatusCode.OK,
@@ -73,6 +80,11 @@ class EvolutionApiTest {
         val engine = MockEngine { request ->
             assertEquals(HttpMethod.Post, request.method)
             assertEquals("/api/evolution/attempt", request.url.encodedPath)
+            val body = (request.body as TextContent).text
+            assertEquals("""{"idempotencyKey":"legacy-key"}""", body)
+            assertFalse(body.contains(""""timing""""))
+            assertFalse(body.contains(""""sessionId""""))
+            assertFalse(body.contains(""""releasedAtMs""""))
             respond(
                 """{"success":false,"fromLevel":3,"resultLevel":2,"cost":1500}""",
                 HttpStatusCode.OK,

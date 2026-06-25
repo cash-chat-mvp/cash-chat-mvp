@@ -58,9 +58,14 @@ data class TimingAttempt(
 )
 
 @Serializable
-private data class EvolutionAttemptRequest(
+private data class LegacyEvolutionAttemptRequest(
     val idempotencyKey: String,
-    val timing: TimingAttempt? = null,
+)
+
+@Serializable
+private data class TimingEvolutionAttemptRequest(
+    val idempotencyKey: String,
+    val timing: TimingAttempt,
 )
 
 class EvolutionApi(private val client: HttpClient, private val baseUrl: String) {
@@ -76,7 +81,10 @@ class EvolutionApi(private val client: HttpClient, private val baseUrl: String) 
     suspend fun attempt(idempotencyKey: String, timing: TimingAttempt? = null): EvolutionAttemptDto =
         client.post("$baseUrl/api/evolution/attempt") {
             contentType(ContentType.Application.Json)
-            setBody(EvolutionAttemptRequest(idempotencyKey, timing))
+            setBody(
+                if (timing == null) LegacyEvolutionAttemptRequest(idempotencyKey)
+                else TimingEvolutionAttemptRequest(idempotencyKey, timing)
+            )
         }.body()
 
     /** P3-1 — FeatureFlags.EVOLUTION_HISTORY 활성 전 호출 금지. */
