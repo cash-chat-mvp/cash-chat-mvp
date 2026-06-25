@@ -61,6 +61,19 @@ class EvolutionStoreTest {
     }
 
     @Test
+    fun `supported detection exposes timing session and reset clears it`() = runTest {
+        val gateway = FakeEvolutionGateway(session = session)
+        val store = EvolutionStore.fromGateway(gateway)
+
+        store.detectTimingCapability()
+        assertEquals(session, store.timingSession.value)
+
+        store.reset()
+        assertEquals(null, store.timingSession.value)
+        assertEquals(TimingCapability.UNKNOWN, store.timingCapability.value)
+    }
+
+    @Test
     fun `timing attempt sends session data`() = runTest {
         val gateway = FakeEvolutionGateway(session = session)
         val store = EvolutionStore.fromGateway(gateway)

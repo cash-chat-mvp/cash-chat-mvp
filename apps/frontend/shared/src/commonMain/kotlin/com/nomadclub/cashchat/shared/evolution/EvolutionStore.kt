@@ -23,9 +23,12 @@ class EvolutionStore private constructor(private val api: EvolutionGateway) {
     private val _timingCapability = MutableStateFlow(TimingCapability.UNKNOWN)
     val timingCapability: StateFlow<TimingCapability> = _timingCapability.asStateFlow()
 
+    /** SUPPORTED 감지 시 발급된 타이밍 세션. UI가 게이지 윈도우·시도 payload 구성에 사용. */
+    private val _timingSession = MutableStateFlow<TimingSessionDto?>(null)
+    val timingSession: StateFlow<TimingSessionDto?> = _timingSession.asStateFlow()
+
     private var currentAttemptKey: String? = null
     private var currentAttemptTiming: TimingAttempt? = null
-    private var currentTimingSession: TimingSessionDto? = null
 
     private val _history = MutableStateFlow<List<EvolutionAttemptRecordDto>>(emptyList())
     val history: StateFlow<List<EvolutionAttemptRecordDto>> = _history.asStateFlow()
@@ -38,11 +41,11 @@ class EvolutionStore private constructor(private val api: EvolutionGateway) {
         runCatching { api.createTimingSession() }
             .fold(
                 onSuccess = { session ->
-                    currentTimingSession = session
+                    _timingSession.value = session
                     TimingCapability.SUPPORTED
                 },
                 onFailure = {
-                    currentTimingSession = null
+                    _timingSession.value = null
                     TimingCapability.UNSUPPORTED
                 },
             ).also { _timingCapability.value = it }
@@ -59,7 +62,7 @@ class EvolutionStore private constructor(private val api: EvolutionGateway) {
         val key = newUuidLike().also { currentAttemptKey = it }
         val requestTiming = timing?.takeIf {
             _timingCapability.value == TimingCapability.SUPPORTED &&
-                currentTimingSession?.sessionId == it.sessionId
+                _timingSession.value?.sessionId == it.sessionId
         }
         currentAttemptTiming = requestTiming
         return api.attempt(key, requestTiming)
@@ -77,9 +80,9 @@ class EvolutionStore private constructor(private val api: EvolutionGateway) {
         _state.value = null
         _history.value = emptyList()
         _timingCapability.value = TimingCapability.UNKNOWN
+        _timingSession.value = null
         currentAttemptKey = null
         currentAttemptTiming = null
-        currentTimingSession = null
     }
 
     // commonMain에는 UUID API가 없어 시간+난수 조합으로 충분한 유일성 확보(서버 max 255자)
