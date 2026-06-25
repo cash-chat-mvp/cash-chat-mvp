@@ -16,6 +16,7 @@ data class EvolutionStateDto(
     val isMaxLevel: Boolean,
     val nextAttemptCost: Long? = null,
     val nextSuccessRate: Double? = null,
+    val currentExp: Long? = null, // BE 미배포 시 null → UI 미표시. 배포 시 자동 노출(전방 호환).
 )
 
 @Serializable
