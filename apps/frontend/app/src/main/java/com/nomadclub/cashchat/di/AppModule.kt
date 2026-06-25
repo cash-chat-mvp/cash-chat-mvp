@@ -65,7 +65,7 @@ val appModule = module {
 
     viewModel { SettingsViewModel(get()) }
 
-    viewModel { com.nomadclub.cashchat.feature.chat.ChatViewModel(get(), get(), get(), get(), get()) }
+    viewModel { com.nomadclub.cashchat.feature.chat.ChatViewModel(get(), get(), get()) }
 
     viewModel { com.nomadclub.cashchat.feature.chat.evolution.EvolutionViewModel(get(), get()) }
 

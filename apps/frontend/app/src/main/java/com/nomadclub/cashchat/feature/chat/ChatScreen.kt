@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -30,7 +29,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
@@ -89,10 +87,8 @@ fun ChatScreen(
     val isStreaming by viewModel.chatStore.isStreaming.collectAsStateWithLifecycle()
     val gateVisible by viewModel.chatStore.energyGateVisible.collectAsStateWithLifecycle()
     val hud by viewModel.hudStore.state.collectAsStateWithLifecycle()
-    val attendance by viewModel.attendance.collectAsStateWithLifecycle()
-    val checkInResult by viewModel.checkInResult.collectAsStateWithLifecycle()
+    val rewardTick by viewModel.rewardBurstTick.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
-    var showAttendance by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     // 사용자가 위로 스크롤해 과거 메시지를 읽는 중인지 판단(맨 아래 근처면 자동 추적 유지).
@@ -155,11 +151,6 @@ fun ChatScreen(
                 }
             }
             Spacer(Modifier.weight(1f))
-            if (attendance != null) {
-                IconButton(onClick = { showAttendance = true }) {
-                    Icon(Icons.Filled.CalendarMonth, contentDescription = "출석 캘린더")
-                }
-            }
             Box {
                 var showMenu by remember { mutableStateOf(false) }
                 IconButton(onClick = { showMenu = true }) {
@@ -306,18 +297,6 @@ fun ChatScreen(
 
     if (gateVisible) {
         EnergyGateBottomSheet(viewModel = viewModel)
-    }
-
-    checkInResult?.let { result ->
-        CheckInRewardDialog(result = result, onDismiss = { viewModel.dismissCheckIn() })
-    }
-
-    if (showAttendance) {
-        attendance?.let { monthly ->
-            ModalBottomSheet(onDismissRequest = { showAttendance = false }) {
-                AttendanceCalendar(monthly)
-            }
-        }
     }
 }
 
