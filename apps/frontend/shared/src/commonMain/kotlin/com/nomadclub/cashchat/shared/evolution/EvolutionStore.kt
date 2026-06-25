@@ -7,18 +7,45 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlin.random.Random
 
 /** 진화 상태 + 시도 (스펙 §3.3). 버튼 1탭 = 새 idempotencyKey, 재시도는 같은 키. */
-class EvolutionStore(private val api: EvolutionApi) {
+enum class TimingCapability { UNKNOWN, SUPPORTED, UNSUPPORTED }
+
+class EvolutionStore private constructor(private val api: EvolutionGateway) {
+
+    constructor(api: EvolutionApi) : this(api as EvolutionGateway)
+
+    companion object {
+        internal fun fromGateway(api: EvolutionGateway): EvolutionStore = EvolutionStore(api)
+    }
 
     private val _state = MutableStateFlow<EvolutionStateDto?>(null)
     val state: StateFlow<EvolutionStateDto?> = _state.asStateFlow()
 
+    private val _timingCapability = MutableStateFlow(TimingCapability.UNKNOWN)
+    val timingCapability: StateFlow<TimingCapability> = _timingCapability.asStateFlow()
+
     private var currentAttemptKey: String? = null
+    private var currentAttemptTiming: TimingAttempt? = null
+    private var currentTimingSession: TimingSessionDto? = null
 
     private val _history = MutableStateFlow<List<EvolutionAttemptRecordDto>>(emptyList())
     val history: StateFlow<List<EvolutionAttemptRecordDto>> = _history.asStateFlow()
 
     @Throws(Exception::class)
     suspend fun refresh(): EvolutionStateDto = api.getState().also { _state.value = it }
+
+    @Throws(Exception::class)
+    suspend fun detectTimingCapability(): TimingCapability =
+        runCatching { api.createTimingSession() }
+            .fold(
+                onSuccess = { session ->
+                    currentTimingSession = session
+                    TimingCapability.SUPPORTED
+                },
+                onFailure = {
+                    currentTimingSession = null
+                    TimingCapability.UNSUPPORTED
+                },
+            ).also { _timingCapability.value = it }
 
     /** P3-1 — FeatureFlags.EVOLUTION_HISTORY 활성 시에만 호출. */
     @Throws(Exception::class)
@@ -28,23 +55,31 @@ class EvolutionStore(private val api: EvolutionApi) {
 
     /** 새 시도 시작 — 새 idempotencyKey 발급 후 호출. */
     @Throws(Exception::class)
-    suspend fun attempt(): EvolutionAttemptDto {
+    suspend fun attempt(timing: TimingAttempt? = null): EvolutionAttemptDto {
         val key = newUuidLike().also { currentAttemptKey = it }
-        return api.attempt(key)
+        val requestTiming = timing?.takeIf {
+            _timingCapability.value == TimingCapability.SUPPORTED &&
+                currentTimingSession?.sessionId == it.sessionId
+        }
+        currentAttemptTiming = requestTiming
+        return api.attempt(key, requestTiming)
     }
 
     /** 직전 시도의 네트워크 재시도 — 같은 키 재사용(서버 멱등 보장). */
     @Throws(Exception::class)
     suspend fun retryLastAttempt(): EvolutionAttemptDto {
         val key = currentAttemptKey ?: return attempt()
-        return api.attempt(key)
+        return api.attempt(key, currentAttemptTiming)
     }
 
     /** 로그아웃/세션 종료 시 다음 사용자에게 이전 진화 상태·기록이 노출되지 않도록 초기화한다. */
     fun reset() {
         _state.value = null
         _history.value = emptyList()
+        _timingCapability.value = TimingCapability.UNKNOWN
         currentAttemptKey = null
+        currentAttemptTiming = null
+        currentTimingSession = null
     }
 
     // commonMain에는 UUID API가 없어 시간+난수 조합으로 충분한 유일성 확보(서버 max 255자)

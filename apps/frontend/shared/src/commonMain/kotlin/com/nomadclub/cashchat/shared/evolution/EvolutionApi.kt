@@ -68,17 +68,31 @@ private data class TimingEvolutionAttemptRequest(
     val timing: TimingAttempt,
 )
 
-class EvolutionApi(private val client: HttpClient, private val baseUrl: String) {
+interface EvolutionGateway {
     @Throws(Exception::class)
-    suspend fun getState(): EvolutionStateDto = client.get("$baseUrl/api/evolution/me").body()
+    suspend fun getState(): EvolutionStateDto
 
     @Throws(Exception::class)
-    suspend fun createTimingSession(): TimingSessionDto =
+    suspend fun createTimingSession(): TimingSessionDto
+
+    @Throws(Exception::class)
+    suspend fun attempt(idempotencyKey: String, timing: TimingAttempt? = null): EvolutionAttemptDto
+
+    @Throws(Exception::class)
+    suspend fun getAttempts(limit: Int = 20): EvolutionAttemptsDto
+}
+
+class EvolutionApi(private val client: HttpClient, private val baseUrl: String) : EvolutionGateway {
+    @Throws(Exception::class)
+    override suspend fun getState(): EvolutionStateDto = client.get("$baseUrl/api/evolution/me").body()
+
+    @Throws(Exception::class)
+    override suspend fun createTimingSession(): TimingSessionDto =
         client.post("$baseUrl/api/evolution/timing-sessions").body()
 
     /** 버튼 1탭 = 새 idempotencyKey. 같은 탭의 네트워크 재시도는 같은 키 재사용(서버 멱등). */
     @Throws(Exception::class)
-    suspend fun attempt(idempotencyKey: String, timing: TimingAttempt? = null): EvolutionAttemptDto =
+    override suspend fun attempt(idempotencyKey: String, timing: TimingAttempt?): EvolutionAttemptDto =
         client.post("$baseUrl/api/evolution/attempt") {
             contentType(ContentType.Application.Json)
             setBody(
@@ -89,6 +103,6 @@ class EvolutionApi(private val client: HttpClient, private val baseUrl: String) 
 
     /** P3-1 — FeatureFlags.EVOLUTION_HISTORY 활성 전 호출 금지. */
     @Throws(Exception::class)
-    suspend fun getAttempts(limit: Int = 20): EvolutionAttemptsDto =
+    override suspend fun getAttempts(limit: Int): EvolutionAttemptsDto =
         client.get("$baseUrl/api/evolution/attempts") { parameter("limit", limit) }.body()
 }
