@@ -27,6 +27,7 @@ struct ChatScreen: View {
             BannerAdView(slotName: "chat_top")
                 .frame(height: 50)
             messageList
+                .overlay { RewardBurstOverlay(tick: vm.rewardBurstTick) }
             inputBar
         }
         .background(Color(.systemGroupedBackground))
@@ -69,6 +70,9 @@ struct ChatScreen: View {
             if vm.hudLoaded {
                 if let p = vm.points {
                     chip("🪙", "\(p)")
+                }
+                if let e = vm.exp {
+                    chip("⭐", "\(e)")
                 }
                 VStack(alignment: .trailing, spacing: 2) {
                     chip("⚡", "\(vm.energy)/\(vm.maxEnergy)", warning: vm.energy == 0)

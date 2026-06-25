@@ -18,6 +18,8 @@ final class ChatViewModel: ObservableObject {
     @Published var energy: Int = 0
     @Published var maxEnergy: Int = 0
     @Published var points: Int64? = nil
+    @Published var exp: Int64? = nil
+    @Published var rewardBurstTick: Int = 0
     @Published var nextRecoverAt: String? = nil
     @Published var hudLoaded = false
 
@@ -66,15 +68,17 @@ final class ChatViewModel: ObservableObject {
                 self.energy = Int(s.energy)
                 self.maxEnergy = Int(s.maxEnergy)
                 self.points = s.points?.int64Value
+                self.exp = s.exp?.int64Value
                 self.nextRecoverAt = s.nextRecoverAt
                 self.hudLoaded = s.isLoaded
             }
         }
-        // 스트림 정상 종료 시 에너지(밥) 소모 반영 위해 재조회.
+        // 스트림 정상 종료 시 전체 HUD 재조회 + 보상 연출 트리거.
         collector.collectStreamCompleted(store: store) { [weak self] count in
             Task { @MainActor in
                 guard let self, count.intValue > 0 else { return }
-                try? await self.hudStore.refreshEnergyOnly()
+                try? await self.hudStore.refreshNow()
+                self.rewardBurstTick += 1
             }
         }
         collector.collectGateInfo(store: store) { [weak self] info in
