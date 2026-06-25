@@ -26,8 +26,15 @@ class ChatRewardService(
     private val evolutionService: EvolutionService,
     private val props: ChatRewardProperties,
 ) {
-    /** 정상 완료: 예약 밥 정산 + 현금성 포인트 적립 + 진화 경험치 적립. */
+    /**
+     * 정상 완료: 진화 경험치 적립 + 예약 밥 정산 + 현금성 포인트 적립.
+     *
+     * 락 획득 순서를 user_evolution → user_energy 로 잡는다. EvolutionService.attempt 도
+     * 동일하게 user_evolution(findByUserIdForUpdate) → user_energy(applyPostEvolutionBoost) 순으로
+     * 잡으므로, 같은 사용자가 채팅 정산과 진화 시도를 동시에 수행해도 ABBA 데드락이 발생하지 않는다.
+     */
     fun settle(userId: Long, assistantMessageId: Long) {
+        evolutionService.addExp(userId, props.evolutionExpPerChat)
         energyService.settleReserved(userId)
         userPointService.recordTransaction(
             userId = userId,
@@ -35,7 +42,6 @@ class ChatRewardService(
             reason = PointTransactionReason.CHAT_REWARD,
             idempotencyKey = "chat:reward:$assistantMessageId",
         )
-        evolutionService.addExp(userId, props.evolutionExpPerChat)
     }
 
     /** 실패/취소: 예약 밥 환불. */

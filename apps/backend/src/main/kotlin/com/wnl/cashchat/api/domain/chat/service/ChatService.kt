@@ -22,7 +22,9 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
 import reactor.core.publisher.SignalType
+import reactor.core.scheduler.Schedulers
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -142,10 +144,30 @@ class ChatService(
         } ?: error("Failed to initialize chat stream")
 
         val buffer = StringBuilder()
+        val assistantMessageId = streamContext.assistantMessageId
 
+        // 메시지 확정·정산은 블로킹 JPA 트랜잭션이라 Netty 이벤트 루프 스레드를 막으면 안 된다.
+        // boundedElastic 로 오프로딩하되, 정상 완료/에러는 스트림에 합류시켜(concatWith/onErrorResume)
+        // 구독자가 종료 신호를 받기 전에 정산이 끝나도록 보장한다. 취소는 다운스트림이 더 듣지 않으므로
+        // doOnCancel 에서 best-effort 로 오프로딩한다(상태 가드가 1회 정산을 보장).
         return llmProvider.stream(streamContext.providerMessages)
             .doOnNext { chunk -> buffer.append(chunk) }
-            .doFinally { signalType -> finalizeAssistantMessage(signalType, userId, streamContext.assistantMessageId, buffer) }
+            .concatWith(
+                Mono.fromRunnable<String> {
+                    finalizeAssistantMessage(SignalType.ON_COMPLETE, userId, assistantMessageId, buffer)
+                }.subscribeOn(Schedulers.boundedElastic())
+            )
+            .onErrorResume { error ->
+                Mono.fromRunnable<String> {
+                    finalizeAssistantMessage(SignalType.ON_ERROR, userId, assistantMessageId, buffer)
+                }.subscribeOn(Schedulers.boundedElastic())
+                    .then(Mono.error(error))
+            }
+            .doOnCancel {
+                Schedulers.boundedElastic().schedule {
+                    finalizeAssistantMessage(SignalType.CANCEL, userId, assistantMessageId, buffer)
+                }
+            }
     }
 
     /**

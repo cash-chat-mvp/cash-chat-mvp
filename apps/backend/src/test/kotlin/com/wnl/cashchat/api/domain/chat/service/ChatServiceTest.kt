@@ -18,6 +18,7 @@ import com.wnl.cashchat.api.domain.energy.exception.InsufficientEnergyException
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
+import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
@@ -38,6 +39,7 @@ import reactor.core.publisher.Flux
 import reactor.test.StepVerifier
 import java.util.Optional
 import java.util.UUID
+import kotlin.time.Duration.Companion.seconds
 
 class ChatServiceTest : FunSpec() {
     private lateinit var conversationRepository: ConversationRepository
@@ -286,11 +288,14 @@ class ChatServiceTest : FunSpec() {
                 .thenCancel()
                 .verify()
 
-            savedMessages shouldContain SavedMessageSnapshot(
-                role = MessageRole.ASSISTANT,
-                status = MessageStatus.FAILED,
-                content = "",
-            )
+            // 취소 시 확정·정산은 boundedElastic 으로 오프로딩되므로 비동기 완료를 기다린다.
+            eventually(2.seconds) {
+                savedMessages shouldContain SavedMessageSnapshot(
+                    role = MessageRole.ASSISTANT,
+                    status = MessageStatus.FAILED,
+                    content = "",
+                )
+            }
         }
 
         test("stream keeps partial assistant content when cancelled after a chunk arrives") {
@@ -304,11 +309,14 @@ class ChatServiceTest : FunSpec() {
                 .thenCancel()
                 .verify()
 
-            savedMessages shouldContain SavedMessageSnapshot(
-                role = MessageRole.ASSISTANT,
-                status = MessageStatus.COMPLETED,
-                content = "hi",
-            )
+            // 취소 시 확정·정산은 boundedElastic 으로 오프로딩되므로 비동기 완료를 기다린다.
+            eventually(2.seconds) {
+                savedMessages shouldContain SavedMessageSnapshot(
+                    role = MessageRole.ASSISTANT,
+                    status = MessageStatus.COMPLETED,
+                    content = "hi",
+                )
+            }
         }
 
         test("stream settles chat reward when streaming completes normally") {
