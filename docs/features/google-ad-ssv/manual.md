@@ -78,9 +78,9 @@ https://<도메인>/api/ads/google/ssv
 
 ### 3.2 광고 단위 ID 검증(선택이지만 권장)
 
-`app.ads.google.rewarded-ad-unit-id`(`APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID`)를 운영 광고단위 ID로 설정하면, 콜백 `ad_unit`이 그 값과 일치할 때만 통과한다(타 광고단위 콜백 차단). **빈 값이면 검증을 건너뛴다** — 운영에서는 설정 권장.
+`app.ads.google.rewarded-ad-unit-ids`(`APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS`)에 운영 광고단위 ID들을 **콤마로 구분해** 나열하면, 콜백 `ad_unit`이 목록 중 하나와 일치할 때만 적립된다(타 광고단위 콜백 차단). Android·iOS 앱은 각각 별도의 보상형 광고단위를 쓰므로 **두 ID를 모두 등록**해야 한다. **빈 값이면 검증을 건너뛴다** — 운영에서는 설정 권장.
 
-> 주의: 콘솔의 SSV **테스트 도구**는 해당 광고단위 ID로 콜백을 보낸다. 설정값과 테스트 대상 광고단위가 다르면 400이 난다.
+> 주의: 콘솔의 SSV **테스트 도구**는 해당 광고단위 ID로 콜백을 보낸다. 목록에 없는 광고단위로 테스트하면 적립되지 않는다(서명이 유효하면 200 응답이되 미적립).
 
 ### 3.3 공개키 URI
 
@@ -144,7 +144,7 @@ cd apps/backend
 | --- | --- | --- | --- |
 | `app.ads.google.ssv-public-keys-uri` | `APP_ADS_GOOGLE_SSV_PUBLIC_KEYS_URI` | gstatic verifier-keys.json | SSV 공개키 묶음 URI |
 | `app.ads.google.public-key-cache-ttl` | `APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL` | `24h` | 공개키 캐시 TTL |
-| `app.ads.google.rewarded-ad-unit-id` | `APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID` | `` (빈값) | 콜백 `ad_unit` 검증값. 빈값이면 검증 스킵 |
+| `app.ads.google.rewarded-ad-unit-ids` | `APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS` | `` (빈값) | 콜백 `ad_unit` 허용 목록(콤마 구분, Android·iOS). 빈값이면 검증 스킵 |
 | `app.ads.reward.coin-amount` | `APP_ADS_REWARD_COIN_AMOUNT` | `40` | 시청당 적립 코인(서버 고정, `reward_amount` 미신뢰) |
 | `app.ads.reward.daily-limit` | `APP_ADS_REWARD_DAILY_LIMIT` | `10` | 사용자당 1일 시청 한도(KST 자정 리셋) |
 | `app.ads.reward.nonce-ttl` | `APP_ADS_REWARD_NONCE_TTL` | `10m` | nonce 유효 시간 |
@@ -156,7 +156,8 @@ cd apps/backend
 | 증상 | 원인 | 조치 |
 | ---- | ---- | ---- |
 | 콘솔 테스트 **400** "Url error" | `user_id` 비움 → `missing user_id` | 사용자 ID 칸에 값 입력 |
-| 콜백 **400** | 서명 검증 실패 / 쿼리스트링 변형 / `ad_unit` 불일치 / percent 인코딩 깨짐 | 프록시가 쿼리스트링 원본 보존하는지, `rewarded-ad-unit-id` 설정값이 맞는지 확인 |
+| 콜백 **400** | 서명 검증 실패 / 쿼리스트링 변형 / percent 인코딩 깨짐 | 프록시가 쿼리스트링 원본 보존하는지 확인 |
+| 콜백 **200**인데 미적립 | `ad_unit`이 `rewarded-ad-unit-ids` 목록에 없음 | 설정 목록에 Android·iOS 광고단위 ID가 모두 들어있는지 확인 |
 | 콜백 **503** | 공개키(verifier-keys.json) 조회 실패 | gstatic egress 허용·일시 장애 재시도 |
 | 200인데 적립 안 됨 | `user_id`가 실제 nonce가 아님/만료/이미 used → `REJECTED_INVALID_NONCE`, 또는 한도 초과 `REJECTED_OVER_QUOTA` | DB `reward_status` 확인. 실 nonce를 TTL 내 사용 |
 | 적립이 화면에 안 뜸 | 콜백은 비동기 | 시청 후 잔액/quota 재조회 트리거 추가 |
@@ -170,7 +171,7 @@ cd apps/backend
 - [ ] 프론트 nonce 전달 위치 수정: `setUserId` / `userIdentifier` (§2.1) + 빌드 확인
 - [ ] 프론트 광고 흐름: 시청 전 `issue-nonce` 호출, 시청 후 잔액/quota 재조회 (§2.2)
 - [ ] AdMob 콘솔 SSV 콜백 URL 등록 (dev/prod) (§3.1)
-- [ ] `APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID` 운영 광고단위로 설정(권장) (§3.2)
+- [ ] `APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS` 에 Android·iOS 운영 광고단위 ID 콤마로 모두 등록(권장) (§3.2)
 - [ ] gstatic verifier-keys.json egress 허용 확인 (§3.3)
 - [ ] 콘솔 테스트 도구로 200 확인 + 실 nonce로 `GRANTED` 확인 (§4.1)
 - [ ] 실단말 end-to-end 1회 검증 (§4.4)

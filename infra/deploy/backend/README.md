@@ -28,7 +28,7 @@ This directory contains deploy assets used by `.github/workflows/backend-cicd.ym
 - `APPLE_TEAM_ID`: Apple Developer Team ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `APPLE_KEY_ID`: Sign in with Apple key ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 - `APPLE_PRIVATE_KEY`: Sign in with Apple P8 private key, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
-- `APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID`: Google AdMob rewarded ad unit ID, required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
+- `APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS`: comma-separated Google AdMob rewarded ad unit IDs (Android and iOS), required when `BACKEND_SPRING_PROFILES_ACTIVE=prod`
 
 ## Optional GitHub Secrets
 
@@ -80,7 +80,7 @@ Local env values:
 - `APPLE_KEY_ID`: Sign in with Apple key ID for local iOS callback testing
 - `APPLE_PRIVATE_KEY`: escaped one-line P8 private key for local iOS callback testing
 - `APPLE_REDIRECT_URI`: optional Apple redirect URI, defaults to empty
-- `APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID`: Google AdMob rewarded ad unit ID for local SSV configuration examples
+- `APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS`: comma-separated Google AdMob rewarded ad unit IDs for local SSV configuration examples
 
 Notes:
 

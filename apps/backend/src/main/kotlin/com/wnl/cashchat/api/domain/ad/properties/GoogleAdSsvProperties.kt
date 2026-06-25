@@ -15,7 +15,13 @@ data class GoogleAdSsvProperties(
     @field:MaxDuration(hours = 24)
     val publicKeyCacheTtl: Duration = Duration.ofHours(24),
 
-    val rewardedAdUnitId: String = "",
+    // Android·iOS 는 각각 별도의 보상형 광고 단위를 사용하므로 복수 ID 를 허용한다(콤마 구분 바인딩).
+    // 비어 있으면 ad_unit 검증을 건너뛴다.
+    val rewardedAdUnitIds: List<String> = emptyList(),
 ) {
-    fun isRewardedAdUnitValidationEnabled(): Boolean = rewardedAdUnitId.isNotBlank()
+    private val allowedAdUnitIds: Set<String> = rewardedAdUnitIds.filter { it.isNotBlank() }.toSet()
+
+    fun isRewardedAdUnitValidationEnabled(): Boolean = allowedAdUnitIds.isNotEmpty()
+
+    fun isAllowedAdUnit(adUnit: String): Boolean = adUnit in allowedAdUnitIds
 }

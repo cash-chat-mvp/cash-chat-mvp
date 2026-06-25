@@ -47,7 +47,8 @@ app:
     google:
       ssv-public-keys-uri: ${APP_ADS_GOOGLE_SSV_PUBLIC_KEYS_URI:https://www.gstatic.com/admob/reward/verifier-keys.json}
       public-key-cache-ttl: ${APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL:24h}
-      rewarded-ad-unit-id: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID:}
+      # Android·iOS 보상형 광고 단위 ID 를 콤마로 구분해 나열한다. 비어 있으면 ad_unit 검증을 건너뛴다.
+      rewarded-ad-unit-ids: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS:}
     reward:
       coin-amount: ${APP_ADS_REWARD_COIN_AMOUNT:40}
       daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}

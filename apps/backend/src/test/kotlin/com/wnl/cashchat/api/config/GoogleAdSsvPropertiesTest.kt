@@ -13,14 +13,34 @@ class GoogleAdSsvPropertiesTest : FunSpec({
 
         properties.ssvPublicKeysUri shouldBe "https://www.gstatic.com/admob/reward/verifier-keys.json"
         properties.publicKeyCacheTtl shouldBe Duration.ofHours(24)
-        properties.rewardedAdUnitId shouldBe ""
+        properties.rewardedAdUnitIds shouldBe emptyList()
         properties.isRewardedAdUnitValidationEnabled() shouldBe false
     }
 
-    test("enables rewarded ad unit validation when an ad unit id is configured") {
-        val properties = GoogleAdSsvProperties(rewardedAdUnitId = "ca-app-pub-3940256099942544/5224354917")
+    test("enables rewarded ad unit validation when at least one ad unit id is configured") {
+        val properties = GoogleAdSsvProperties(
+            rewardedAdUnitIds = listOf("ca-app-pub-3940256099942544/5224354917"),
+        )
 
         properties.isRewardedAdUnitValidationEnabled() shouldBe true
+    }
+
+    test("allows every configured ad unit (Android and iOS) and rejects unknown ones") {
+        val android = "ca-app-pub-5280178196982923/6512984753"
+        val ios = "ca-app-pub-5280178196982923/2647937531"
+        val properties = GoogleAdSsvProperties(rewardedAdUnitIds = listOf(android, ios))
+
+        properties.isRewardedAdUnitValidationEnabled() shouldBe true
+        properties.isAllowedAdUnit(android) shouldBe true
+        properties.isAllowedAdUnit(ios) shouldBe true
+        properties.isAllowedAdUnit("ca-app-pub-5280178196982923/0000000000") shouldBe false
+    }
+
+    test("treats blank-only ad unit ids as validation disabled") {
+        val properties = GoogleAdSsvProperties(rewardedAdUnitIds = listOf("", "   "))
+
+        properties.isRewardedAdUnitValidationEnabled() shouldBe false
+        properties.isAllowedAdUnit("") shouldBe false
     }
 
     test("rejects public key cache TTL longer than 24 hours") {

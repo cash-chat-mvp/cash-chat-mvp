@@ -70,7 +70,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         parser: GoogleAdSsvQueryParser = mock(),
         signatureVerifier: GoogleAdSsvSignatureVerifier = mock(),
         repository: GoogleAdSsvEventRepository = mock(),
-        properties: GoogleAdSsvProperties = GoogleAdSsvProperties(rewardedAdUnitId = "rewarded-ad-unit"),
+        properties: GoogleAdSsvProperties = GoogleAdSsvProperties(rewardedAdUnitIds = listOf("rewarded-ad-unit")),
     ) = GoogleAdSsvService(
         parser = parser,
         signatureVerifier = signatureVerifier,
@@ -224,11 +224,36 @@ class GoogleAdSsvServiceTest : FunSpec({
             parser = parser,
             signatureVerifier = signatureVerifier,
             repository = repository,
-            properties = GoogleAdSsvProperties(rewardedAdUnitId = ""),
+            properties = GoogleAdSsvProperties(rewardedAdUnitIds = emptyList()),
         )
 
         service.verifyAndStore(rawQuery)
 
+        verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
+        verify(repository).saveAndFlush(any<GoogleAdSsvEvent>())
+    }
+
+    test("accepts a callback from any configured ad unit (Android and iOS)") {
+        val parser = mock<GoogleAdSsvQueryParser>()
+        val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
+        val repository = mock<GoogleAdSsvEventRepository>()
+        val androidAdUnit = "ca-app-pub-5280178196982923/6512984753"
+        val iosAdUnit = "ca-app-pub-5280178196982923/2647937531"
+        // 콜백은 iOS 광고 단위에서 들어오지만 두 플랫폼 ID 가 모두 허용 목록에 있어야 저장된다.
+        val callback = callback(adUnit = iosAdUnit)
+        whenever(parser.parse(rawQuery)).thenReturn(callback)
+        whenever(repository.findByTransactionId(callback.transactionId)).thenReturn(null)
+        whenever(repository.saveAndFlush(any<GoogleAdSsvEvent>())).thenAnswer { it.arguments[0] }
+        val service = service(
+            parser = parser,
+            signatureVerifier = signatureVerifier,
+            repository = repository,
+            properties = GoogleAdSsvProperties(rewardedAdUnitIds = listOf(androidAdUnit, iosAdUnit)),
+        )
+
+        val result = service.verifyAndStore(rawQuery)
+
+        result.newlyStored shouldBe true
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
         verify(repository).saveAndFlush(any<GoogleAdSsvEvent>())
     }

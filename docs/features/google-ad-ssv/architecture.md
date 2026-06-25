@@ -174,7 +174,7 @@ sequenceDiagram
 - **동시성 / 락 순서** — 데드락 방지를 위해 **event → nonce → ad_reward_daily_quota → user_point** 순으로 비관적 쓰기 락을 획득한다. 동일 transactionId 동시 콜백의 상태 덮어쓰기(GRANTED→REJECTED)와, 동일 nonce 동시 요청의 중복 적립(TOCTOU)을 막는다.
 - **단일 사용 nonce** — 적립 성공 시 `used=true`. 한도 초과로 거절돼도 유효 nonce는 1회 시청에 소모된 것으로 보고 `used=true` 처리(재사용 차단). nonce 없음/만료/used → `REJECTED_INVALID_NONCE`.
 - **재시도 폭주 방지** — 서명만 통과했다면(거절 케이스 포함) AdMob에 **200**을 반환한다. 적립 실패(예: DB 예외)도 SSV 엔드포인트가 5xx를 던지지 않게 설계해 AdMob의 무한 재전송을 막는다. 단, **서명 실패는 400**, 공개키 일시 불가는 **503**.
-- **광고단위 검증(선택)** — `app.ads.google.rewarded-ad-unit-id`가 설정되면 콜백 `ad_unit`이 그 값과 일치해야 한다(불일치 400). 빈 값이면 검증을 건너뛴다.
+- **광고단위 검증(선택)** — `app.ads.google.rewarded-ad-unit-ids`(콤마 구분, Android·iOS)가 설정되면 콜백 `ad_unit`이 목록 중 하나와 일치해야 적립된다(불일치 시 200이되 미적립). 빈 값이면 검증을 건너뛴다.
 
 ## 6. 설계 이력 — 적립 경로 정리 (중요)
 

@@ -252,7 +252,7 @@ stateDiagram-v2
     <div class="card"><h4>♻️ 멱등 이중 방어</h4><p><code>transaction_id</code> UNIQUE dedup + 적립 멱등키 <code>admob:reward:{transactionId}</code>. 재전송에도 1회만 적립.</p></div>
     <div class="card"><h4>🔒 락 순서 고정</h4><p>데드락 방지: <code>event → nonce → daily_quota → user_point</code> 비관적 쓰기 락. 동시 콜백의 상태 덮어쓰기·중복 적립(TOCTOU) 차단.</p></div>
     <div class="card"><h4>🔁 재시도 폭주 방지</h4><p>서명만 통과하면 거절 케이스도 <strong>200</strong> 반환. 적립 실패도 5xx 안 던짐 → AdMob 무한 재전송 방지. (서명 실패만 400, 공개키 불가 503.)</p></div>
-    <div class="card"><h4>🎯 광고단위 검증(선택)</h4><p><code>rewarded-ad-unit-id</code> 설정 시 콜백 <code>ad_unit</code> 일치 강제. 빈 값이면 스킵.</p></div>
+    <div class="card"><h4>🎯 광고단위 검증(선택)</h4><p><code>rewarded-ad-unit-ids</code>(콤마 구분, Android·iOS) 설정 시 콜백 <code>ad_unit</code> 목록 일치 강제. 빈 값이면 스킵.</p></div>
   </div>
 
   <h2>5. 엔드포인트</h2>

@@ -48,7 +48,7 @@ class GoogleAdSsvService(
             logger.warn(
                 "Google Ad SSV ad_unit mismatch — accepted without crediting (callback ad_unit={}, configured={})",
                 callback.adUnit,
-                properties.rewardedAdUnitId,
+                properties.rewardedAdUnitIds,
             )
             return GoogleAdSsvVerificationResult(callback, newlyStored = false)
         }
@@ -84,7 +84,7 @@ class GoogleAdSsvService(
         if (!properties.isRewardedAdUnitValidationEnabled()) {
             return true
         }
-        return callback.adUnit == properties.rewardedAdUnitId
+        return properties.isAllowedAdUnit(callback.adUnit)
     }
 
     private fun GoogleAdSsvCallback.toEntity(): GoogleAdSsvEvent =
