@@ -168,7 +168,7 @@ class ChatService(
                 // 가변 StringBuilder 를 교차 스레드로 참조하지 않도록 불변 스냅샷을 전달한다.
                 val content = buffer.toString()
                 Schedulers.boundedElastic().schedule {
-                    finalizeAssistantMessage(SignalType.CANCEL, userId, assistantMessageId, StringBuilder(content))
+                    finalizeAssistantMessage(SignalType.CANCEL, userId, assistantMessageId, content)
                 }
             }
     }
@@ -204,12 +204,12 @@ class ChatService(
         signalType: SignalType,
         userId: Long,
         assistantMessageId: Long,
-        buffer: StringBuilder,
+        content: CharSequence,
     ) {
         val status = when (signalType) {
             SignalType.ON_COMPLETE -> MessageStatus.COMPLETED
             SignalType.ON_ERROR -> MessageStatus.FAILED
-            SignalType.CANCEL -> if (buffer.isNotEmpty()) MessageStatus.COMPLETED else MessageStatus.FAILED
+            SignalType.CANCEL -> if (content.isNotEmpty()) MessageStatus.COMPLETED else MessageStatus.FAILED
             else -> return
         }
 
@@ -222,7 +222,7 @@ class ChatService(
             // 상태 가드: STREAMING 일 때만 확정·정산한다(멱등). 이미 확정된 메시지면 아무것도 하지 않는다.
             if (assistantMessage.status != MessageStatus.STREAMING) return@executeWithoutResult
 
-            assistantMessage.content = buffer.toString()
+            assistantMessage.content = content.toString()
             assistantMessage.status = status
             chatMessageRepository.save(assistantMessage)
 
