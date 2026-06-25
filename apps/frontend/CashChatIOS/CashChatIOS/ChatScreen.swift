@@ -16,7 +16,6 @@ struct ChatScreen: View {
     @State private var input = ""
     @State private var showConversations = false
     @State private var showEvolution = false
-    @State private var showAttendance = false
     @State private var shareItems: String? = nil
     @FocusState private var isInputFocused: Bool
 
@@ -37,9 +36,6 @@ struct ChatScreen: View {
         .sheet(isPresented: $showConversations) {
             conversationListSheet
         }
-        .sheet(isPresented: $showAttendance) {
-            AttendanceSheet()
-        }
         .sheet(isPresented: $showEvolution) {
             EvolutionScreen()
         }
@@ -50,22 +46,6 @@ struct ChatScreen: View {
             EnergyGateSheet(vm: vm, adManager: adManager.manager)
                 .presentationDetents([.height(300)])
         }
-        .overlay(alignment: .top) {
-            if let toast = vm.checkInToast {
-                Text(toast)
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(.orange).foregroundStyle(.white)
-                    .clipShape(Capsule())
-                    .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .task(id: toast) {
-                        try? await Task.sleep(for: .seconds(2))
-                        vm.checkInToast = nil
-                    }
-            }
-        }
-        .animation(.easeInOut, value: vm.checkInToast)
     }
 
     private var header: some View {
@@ -86,10 +66,6 @@ struct ChatScreen: View {
                 }
             }
             Spacer()
-            Button { showAttendance = true } label: {
-                Image(systemName: chatSFSymbol("calendar", fallback: "calendar.circle"))
-                    .foregroundStyle(.primary)
-            }
             if vm.hudLoaded {
                 if let p = vm.points {
                     chip("🪙", "\(p)")
@@ -435,21 +411,6 @@ private struct EnergyGateSheet: View {
                 .frame(maxWidth: .infinity).padding(.vertical, 12)
                 .background(.orange).foregroundStyle(.white)
                 .clipShape(Capsule())
-        }
-    }
-}
-
-/// 출석 캘린더 시트 — BenefitZone의 AttendanceWidgetView 재사용.
-private struct AttendanceSheet: View {
-    @StateObject private var vm = AttendanceViewModel()
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                AttendanceWidgetView(vm: vm).padding()
-            }
-            .navigationTitle("출석 체크")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear { vm.load() }
         }
     }
 }

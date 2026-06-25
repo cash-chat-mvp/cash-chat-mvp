@@ -21,13 +21,6 @@ final class ChatViewModel: ObservableObject {
     @Published var nextRecoverAt: String? = nil
     @Published var hudLoaded = false
 
-    // 출석 — 채팅 진입 시 자동 체크인 (Android ChatViewModel과 동일).
-    @Published var attendanceMonth: Int = 0
-    @Published var attendanceStreak: Int = 0
-    @Published var attendanceCheckedDays: Set<Int> = []
-    @Published var attendanceTodayChecked = false
-    @Published var checkInToast: String? = nil
-
     // 에너지 게이트 리워드 광고 보상 단계 (Android RewardPhase 미러).
     enum RewardPhase { case idle, showingAd, polling, failed }
     @Published var rewardPhase: RewardPhase = .idle
@@ -39,12 +32,9 @@ final class ChatViewModel: ObservableObject {
     private let store = KoinHelper().chatStore()
     private let chatApi = KoinHelper().chatApi()
     private let hudStore = KoinHelper().hudStore()
-    private let attendanceStore = KoinHelper().attendanceStore()
     private let adRewardStore = KoinHelper().adRewardStore()
     private let collector = FlowCollector()
     private var didLoad = false
-    // 자동 출석 체크인은 세션당 1회만 시도 — 실패(네트워크/409 등) 시 무한 재시도 방지.
-    private var hasAttemptedAutoCheckIn = false
 
     deinit {
         collector.cancel()
@@ -86,24 +76,6 @@ final class ChatViewModel: ObservableObject {
                 guard let self, count.intValue > 0 else { return }
                 try? await self.hudStore.refreshEnergyOnly()
             }
-        }
-        // 출석: 월간 로드 후 미출석이면 1회 자동 체크인.
-        attendanceStore.loadMonthly(year: nil, month: nil)
-        collector.collectAttendance(store: attendanceStore) { [weak self] s in
-            Task { @MainActor in
-                guard let self else { return }
-                self.attendanceMonth = Int(s.month)
-                self.attendanceStreak = Int(s.currentStreak)
-                self.attendanceCheckedDays = Set(s.checkedDays.map { $0.intValue })
-                self.attendanceTodayChecked = s.todayChecked
-                if !s.todayChecked && !s.isCheckingIn && !self.hasAttemptedAutoCheckIn {
-                    self.hasAttemptedAutoCheckIn = true
-                    self.attendanceStore.checkIn()
-                }
-            }
-        }
-        collector.collectRewards(store: attendanceStore) { [weak self] ev in
-            Task { @MainActor in self?.checkInToast = "출석 완료! +\(ev.awardedCoin) 코인" }
         }
         collector.collectGateInfo(store: store) { [weak self] info in
             Task { @MainActor in
