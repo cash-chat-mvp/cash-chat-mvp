@@ -10,8 +10,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -54,6 +57,9 @@ class ChatStore(
     private val _streamCompletedCount = MutableStateFlow(0)
     val streamCompletedCount: StateFlow<Int> = _streamCompletedCount.asStateFlow()
 
+    private val _resourceFeedback = MutableSharedFlow<ChatResourceFeedback>(extraBufferCapacity = 8)
+    val resourceFeedback: SharedFlow<ChatResourceFeedback> = _resourceFeedback.asSharedFlow()
+
     /** Ad Gate 정보 (P2-3). gate 이벤트 수신 시 채워지고, 해제 시 null. */
     data class GateInfo(val teaserChars: Int, val rewardCoin: Int)
 
@@ -71,6 +77,7 @@ class ChatStore(
     // 네이티브 광고 삽입용 — 정상 종료된 assistant 응답 누적 수. reset/대화전환 시 초기화.
     // interval(Long)과 비교하므로 Long으로 선언해 타입 불일치/오버플로우를 예방한다.
     private var assistantResponseCount = 0L
+    private var resourceFeedbackEventId = 0L
 
     @Throws(Exception::class)
     suspend fun openConversation(id: Long) {
@@ -158,6 +165,12 @@ class ChatStore(
                     is ChatStreamEvent.Token -> {
                         if (!assistantAdded) {
                             updateUser(messageId) { it.copy(status = ChatItem.SendStatus.CONFIRMED) }
+                            publishResourceFeedback(
+                                ChatResourceFeedback.EnergySpent(
+                                    eventId = nextResourceFeedbackEventId(),
+                                    messageId = messageId,
+                                ),
+                            )
                             _items.update { it + ChatItem.AssistantMessage(assistantId, event.text, isStreaming = true) }
                             assistantAdded = true
                         } else {
@@ -176,7 +189,15 @@ class ChatStore(
                         updateUser(messageId) { it.copy(status = ChatItem.SendStatus.CONFIRMED) }
                         if (assistantAdded) updateAssistant(assistantId) { it.copy(isStreaming = false) }
                         _streamCompletedCount.update { it + 1 }
-                        if (assistantAdded) maybeInsertNativeAd()
+                        if (assistantAdded) {
+                            publishResourceFeedback(
+                                ChatResourceFeedback.RewardEarned(
+                                    eventId = nextResourceFeedbackEventId(),
+                                    messageId = assistantId,
+                                ),
+                            )
+                            maybeInsertNativeAd()
+                        }
                     }
                     is ChatStreamEvent.ProductCards -> {
                         _items.update { it + ChatItem.ProductCards("p${currentTimeMillis()}", event.products) }
@@ -230,5 +251,14 @@ class ChatStore(
 
     private fun updateAssistant(id: String, transform: (ChatItem.AssistantMessage) -> ChatItem.AssistantMessage) {
         _items.update { items -> items.map { if (it is ChatItem.AssistantMessage && it.id == id) transform(it) else it } }
+    }
+
+    private fun nextResourceFeedbackEventId(): Long {
+        resourceFeedbackEventId += 1
+        return resourceFeedbackEventId
+    }
+
+    private suspend fun publishResourceFeedback(event: ChatResourceFeedback) {
+        _resourceFeedback.emit(event)
     }
 }

@@ -2,8 +2,14 @@ package com.nomadclub.cashchat.shared.chat
 
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
 import com.nomadclub.cashchat.shared.core.network.ApiException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,7 +33,15 @@ private class FakeChatGateway : ChatGateway {
         flow { streamResult!!.invoke().collect { emit(it) } }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ChatStoreTest {
+
+    private fun TestScope.collectResourceFeedback(
+        store: ChatStore,
+        into: MutableList<ChatResourceFeedback>,
+    ): Job = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+        store.resourceFeedback.collect { into += it }
+    }
 
     @Test
     fun `전송 성공 - pending이 confirmed되고 assistant 텍스트가 누적된다`() = runTest {
@@ -49,6 +63,39 @@ class ChatStoreTest {
         assertEquals(ChatItem.SendStatus.CONFIRMED, user.status)
         assertEquals("안녕하세요", assistant.text)
         assertEquals(false, assistant.isStreaming)
+    }
+
+    @Test
+    fun `첫 토큰에서 에너지 차감 이벤트를 1회만 발행하고 완료 시 보상 이벤트를 발행한다`() = runTest {
+        val gateway = FakeChatGateway().apply {
+            streamResult = {
+                flow {
+                    emit(ChatStreamEvent.Token("응"))
+                    emit(ChatStreamEvent.Token("답"))
+                    emit(ChatStreamEvent.Done)
+                }
+            }
+        }
+        val store = ChatStore(gateway, this)
+        val events = mutableListOf<ChatResourceFeedback>()
+        val job = collectResourceFeedback(store, events)
+        testScheduler.runCurrent()
+
+        store.sendMessage("질문")
+        testScheduler.advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(2, events.size)
+
+        val energySpent = assertIs<ChatResourceFeedback.EnergySpent>(events[0])
+        assertEquals(-1, energySpent.amount)
+        assertTrue(energySpent.messageId.startsWith("u"))
+
+        val rewardEarned = assertIs<ChatResourceFeedback.RewardEarned>(events[1])
+        assertEquals(1, rewardEarned.pointDelta)
+        assertEquals(1, rewardEarned.expDelta)
+        assertTrue(rewardEarned.messageId.startsWith("a"))
+        assertTrue(rewardEarned.eventId > energySpent.eventId)
     }
 
     @Test
@@ -112,5 +159,74 @@ class ChatStoreTest {
         assertEquals("부분", assistant.text)
         assertIs<ChatItem.AssistantMessage>(assistant)
         assertEquals(true, assistant.isError)
+    }
+
+    @Test
+    fun `스트림 에러에서는 보상 이벤트를 발행하지 않는다`() = runTest {
+        val gateway = FakeChatGateway().apply {
+            streamResult = {
+                flow {
+                    emit(ChatStreamEvent.Token("부분"))
+                    emit(ChatStreamEvent.StreamError("stream failed"))
+                }
+            }
+        }
+        val store = ChatStore(gateway, this)
+        val events = mutableListOf<ChatResourceFeedback>()
+        val job = collectResourceFeedback(store, events)
+        testScheduler.runCurrent()
+
+        store.sendMessage("hi")
+        testScheduler.advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(1, events.size)
+        assertIs<ChatResourceFeedback.EnergySpent>(events.single())
+    }
+
+    @Test
+    fun `에너지 부족에서는 차감 이벤트를 발행하지 않는다`() = runTest {
+        val gateway = FakeChatGateway().apply {
+            streamResult = {
+                throw ApiException(ApiException.INSUFFICIENT_ENERGY, "에너지 부족", 409)
+            }
+        }
+        val store = ChatStore(gateway, this)
+        val events = mutableListOf<ChatResourceFeedback>()
+        val job = collectResourceFeedback(store, events)
+        testScheduler.runCurrent()
+
+        store.sendMessage("hi")
+        testScheduler.advanceUntilIdle()
+        job.cancel()
+
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `reset은 추가 리소스 피드백 이벤트를 발행하지 않는다`() = runTest {
+        val gateway = FakeChatGateway().apply {
+            streamResult = {
+                flow {
+                    emit(ChatStreamEvent.Token("응답"))
+                    emit(ChatStreamEvent.Done)
+                }
+            }
+        }
+        val store = ChatStore(gateway, this)
+        val events = mutableListOf<ChatResourceFeedback>()
+        val job = collectResourceFeedback(store, events)
+        testScheduler.runCurrent()
+
+        store.sendMessage("질문")
+        testScheduler.advanceUntilIdle()
+
+        store.reset()
+        testScheduler.advanceUntilIdle()
+        job.cancel()
+
+        assertEquals(2, events.size)
+        assertIs<ChatResourceFeedback.EnergySpent>(events[0])
+        assertIs<ChatResourceFeedback.RewardEarned>(events[1])
     }
 }
