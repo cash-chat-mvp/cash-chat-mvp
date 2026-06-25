@@ -6,6 +6,7 @@ import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import jakarta.validation.Validation
 import java.time.Duration
+import java.time.Instant
 
 class GoogleAdSsvPropertiesTest : FunSpec({
     test("uses Google SSV defaults") {
@@ -15,6 +16,8 @@ class GoogleAdSsvPropertiesTest : FunSpec({
         properties.publicKeyCacheTtl shouldBe Duration.ofHours(24)
         properties.rewardedAdUnitIds shouldBe emptyList()
         properties.isRewardedAdUnitValidationEnabled() shouldBe false
+        properties.timestampTolerance shouldBe Duration.ofHours(1)
+        properties.timestampFutureSkew shouldBe Duration.ofMinutes(5)
     }
 
     test("enables rewarded ad unit validation when at least one ad unit id is configured") {
@@ -51,5 +54,44 @@ class GoogleAdSsvPropertiesTest : FunSpec({
         )
 
         violations.map { it.propertyPath.toString() } shouldContain "publicKeyCacheTtl"
+    }
+
+    test("accepts a timestamp inside the freshness window") {
+        val properties = GoogleAdSsvProperties()
+        val now = Instant.ofEpochMilli(1710000000123L)
+
+        properties.isTimestampFresh(now.toEpochMilli(), now) shouldBe true
+        // 과거 경계(정확히 tolerance 만큼 이전) 포함
+        properties.isTimestampFresh(now.minus(Duration.ofHours(1)).toEpochMilli(), now) shouldBe true
+        // 미래 경계(정확히 future-skew 만큼 이후) 포함
+        properties.isTimestampFresh(now.plus(Duration.ofMinutes(5)).toEpochMilli(), now) shouldBe true
+    }
+
+    test("rejects a timestamp older than the tolerance") {
+        val properties = GoogleAdSsvProperties()
+        val now = Instant.ofEpochMilli(1710000000123L)
+
+        properties.isTimestampFresh(now.minus(Duration.ofHours(1).plusMillis(1)).toEpochMilli(), now) shouldBe false
+    }
+
+    test("rejects a timestamp further in the future than the skew allowance") {
+        val properties = GoogleAdSsvProperties()
+        val now = Instant.ofEpochMilli(1710000000123L)
+
+        properties.isTimestampFresh(now.plus(Duration.ofMinutes(5).plusMillis(1)).toEpochMilli(), now) shouldBe false
+    }
+
+    test("rejects non-positive freshness window durations") {
+        val validator = Validation.buildDefaultValidatorFactory().validator
+
+        val violations = validator.validate(
+            GoogleAdSsvProperties(
+                timestampTolerance = Duration.ZERO,
+                timestampFutureSkew = Duration.ofMinutes(-1),
+            ),
+        )
+
+        violations.map { it.propertyPath.toString() } shouldContain "timestampTolerance"
+        violations.map { it.propertyPath.toString() } shouldContain "timestampFutureSkew"
     }
 })
