@@ -164,8 +164,11 @@ class ChatService(
                     .then(Mono.error(error))
             }
             .doOnCancel {
+                // 취소 시점의 buffer 를 즉시 스냅샷으로 떠서 넘긴다 — boundedElastic 워커 스레드가
+                // 가변 StringBuilder 를 교차 스레드로 참조하지 않도록 불변 스냅샷을 전달한다.
+                val content = buffer.toString()
                 Schedulers.boundedElastic().schedule {
-                    finalizeAssistantMessage(SignalType.CANCEL, userId, assistantMessageId, buffer)
+                    finalizeAssistantMessage(SignalType.CANCEL, userId, assistantMessageId, StringBuilder(content))
                 }
             }
     }
