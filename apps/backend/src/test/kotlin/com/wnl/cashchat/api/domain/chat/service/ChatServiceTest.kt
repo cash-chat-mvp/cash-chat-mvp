@@ -447,7 +447,7 @@ class ChatServiceTest : FunSpec() {
             }
         }
 
-        whenever(chatMessageRepository.findById(any())).thenAnswer { invocation ->
+        whenever(chatMessageRepository.findForUpdateById(any())).thenAnswer { invocation ->
             Optional.ofNullable(savedMessageEntities[invocation.getArgument<Long>(0)])
         }
     }

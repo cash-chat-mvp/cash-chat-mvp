@@ -211,7 +211,9 @@ class ChatService(
         }
 
         transactionTemplate.executeWithoutResult {
-            val assistantMessage = chatMessageRepository.findById(assistantMessageId)
+            // 비관적 락으로 행을 직렬화한다 — 정상 완료와 취소(doOnCancel)가 거의 동시에 정산을 시도해도
+            // 한쪽이 커밋한 뒤에야 다른 쪽이 갱신된 상태를 읽으므로 STREAMING 가드가 1회 정산을 보장한다.
+            val assistantMessage = chatMessageRepository.findForUpdateById(assistantMessageId)
                 .orElseThrow { IllegalArgumentException("Assistant message not found") }
 
             // 상태 가드: STREAMING 일 때만 확정·정산한다(멱등). 이미 확정된 메시지면 아무것도 하지 않는다.
