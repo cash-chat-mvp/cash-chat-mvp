@@ -85,10 +85,90 @@ done 이벤트에 페이로드가 있으면 그 값을, 없으면 기본값을 �
 
 ---
 
+## 4. (필수) 길게 누르기 타이밍 보너스 서버 판정
+
+### 배경
+
+진화 화면을 Evolution Lab UI로 개편하면서 길게 누른 뒤 특정 타이밍에 손을 떼면 성공 확률 보너스를 주는 인터랙션을 추가한다. 성공 확률은 경제 모델과 직접 연결되므로 클라이언트 계산만 신뢰할 수 없다.
+
+타이밍을 놓쳐도 진화는 취소하지 않고 기존 기본 확률로 시도한다. 누른 뒤 0.6초 이전에 손을 떼는 경우에만 요청 없이 취소한다.
+
+### 판정 정책
+
+| 등급 | 성공 확률 보너스 |
+|---|---:|
+| `PERFECT` | +10%p |
+| `GREAT` | +5%p |
+| `NORMAL` | +0%p |
+
+- Perfect: 서버가 정의한 중앙 10% 구간
+- Great: 중앙 24% 구간에서 Perfect 제외
+- Normal: 나머지 유효 구간
+- 최종 성공 확률 상한: 100%
+
+### 요청 계약 제안
+
+기존 `POST /api/evolution/attempt` 요청에 타이밍 증빙을 추가한다.
+
+```json
+{
+  "idempotencyKey": "uuid",
+  "timing": {
+    "sessionId": "server-issued-session-id",
+    "releasedAtMs": 1432
+  }
+}
+```
+
+클라이언트가 임의의 `PERFECT` 등급이나 최종 확률을 직접 보내는 방식은 사용하지 않는다. 서버가 발급한 세션과 시작 시각을 기준으로 해제 시점을 검증한다.
+
+권장 사전 API:
+
+```http
+POST /api/evolution/timing-sessions
+```
+
+```json
+{
+  "sessionId": "opaque-id",
+  "serverStartedAt": "2026-06-26T00:00:00Z",
+  "minimumHoldMs": 600,
+  "cycleDurationMs": 1800
+}
+```
+
+### 응답 계약 제안
+
+```json
+{
+  "success": true,
+  "fromLevel": 2,
+  "resultLevel": 3,
+  "cost": 1200,
+  "timingGrade": "PERFECT",
+  "timingBonusRate": 0.10,
+  "baseSuccessRate": 0.65,
+  "finalSuccessRate": 0.75
+}
+```
+
+- 등급, 보너스와 최종 확률은 서버 응답을 최종값으로 사용한다.
+- 동일 idempotency key 재시도는 최초 판정 결과를 반환해야 한다.
+- 만료·변조된 timing session은 진화 비용을 차감하지 않고 명시적 에러를 반환한다.
+
+### FE 대응 방침
+
+- 백엔드 지원 전에는 타이밍 보너스를 기능 플래그로 숨긴다.
+- 기존 기본 확률 진화 시도는 유지한다.
+- 백엔드 배포 후 Android/iOS에서 같은 등급 구간과 문구를 활성화한다.
+
+---
+
 ## 우선순위
 
 | 순위 | 항목 | 영향 |
 |---|---|---|
 | P0 | #1 `currentExp` | 진화 UX 핵심 — 보유 경험치/가능 여부/경험치 바 |
+| P0 | #4 타이밍 보너스 서버 판정 | 실제 성공 확률과 경제 모델 무결성 |
 | P1 | #2 `/attempts` | 진화 기록 타임라인 기능 활성 |
 | P2 | #3 done 보상 페이로드 | 보상액 가변화 시에만 |
