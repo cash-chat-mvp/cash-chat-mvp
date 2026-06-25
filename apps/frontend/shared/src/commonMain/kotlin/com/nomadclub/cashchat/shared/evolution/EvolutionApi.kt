@@ -25,6 +25,10 @@ data class EvolutionAttemptDto(
     val fromLevel: Int,
     val resultLevel: Int,
     val cost: Long,
+    val timingGrade: TimingGrade? = null,
+    val timingBonusRate: Double? = null,
+    val baseSuccessRate: Double? = null,
+    val finalSuccessRate: Double? = null,
 )
 
 @Serializable
@@ -40,18 +44,39 @@ data class EvolutionAttemptRecordDto(
 data class EvolutionAttemptsDto(val attempts: List<EvolutionAttemptRecordDto>)
 
 @Serializable
-private data class EvolutionAttemptRequest(val idempotencyKey: String)
+data class TimingSessionDto(
+    val sessionId: String,
+    val serverStartedAt: String,
+    val minimumHoldMs: Long,
+    val cycleDurationMs: Long,
+)
+
+@Serializable
+data class TimingAttempt(
+    val sessionId: String,
+    val releasedAtMs: Long,
+)
+
+@Serializable
+private data class EvolutionAttemptRequest(
+    val idempotencyKey: String,
+    val timing: TimingAttempt? = null,
+)
 
 class EvolutionApi(private val client: HttpClient, private val baseUrl: String) {
     @Throws(Exception::class)
     suspend fun getState(): EvolutionStateDto = client.get("$baseUrl/api/evolution/me").body()
 
+    @Throws(Exception::class)
+    suspend fun createTimingSession(): TimingSessionDto =
+        client.post("$baseUrl/api/evolution/timing-sessions").body()
+
     /** 버튼 1탭 = 새 idempotencyKey. 같은 탭의 네트워크 재시도는 같은 키 재사용(서버 멱등). */
     @Throws(Exception::class)
-    suspend fun attempt(idempotencyKey: String): EvolutionAttemptDto =
+    suspend fun attempt(idempotencyKey: String, timing: TimingAttempt? = null): EvolutionAttemptDto =
         client.post("$baseUrl/api/evolution/attempt") {
             contentType(ContentType.Application.Json)
-            setBody(EvolutionAttemptRequest(idempotencyKey))
+            setBody(EvolutionAttemptRequest(idempotencyKey, timing))
         }.body()
 
     /** P3-1 — FeatureFlags.EVOLUTION_HISTORY 활성 전 호출 금지. */
