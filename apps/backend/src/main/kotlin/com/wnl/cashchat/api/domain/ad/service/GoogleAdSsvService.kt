@@ -9,6 +9,7 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
 
 /**
  * Google AdMob SSV 콜백을 검증(서명·광고단위)하고 멱등하게 저장한다.
@@ -30,25 +31,34 @@ class GoogleAdSsvService(
     private val properties: GoogleAdSsvProperties,
 ) {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    fun verifyAndStore(rawQueryString: String?): GoogleAdSsvVerificationResult {
+    fun verifyAndStore(rawQueryString: String?, now: Instant): GoogleAdSsvVerificationResult {
         // 공개 진입점에서 fail-fast: null/blank 는 파서 구현에 의존하지 않고 여기서 명확히 거절한다.
         if (rawQueryString.isNullOrBlank()) {
             throw InvalidGoogleAdSsvCallbackException("Google Ad SSV raw query string is null or blank")
         }
         val callback = parser.parse(rawQueryString)
-        // 서명 검증을 가장 먼저 수행한다. 이것이 보안 경계이며, 200 응답은 'Google 이 우리 계정용으로
-        // 서명한 진짜 콜백'에만 부여된다. AdMob 콜백 URL '확인' 핑도 유효 서명을 싣고 오므로 통과한다.
+        // 서명 검증을 가장 먼저 수행한다(보안 경계).
         signatureVerifier.verify(callback.signedPayload, callback.signature, callback.keyId)
 
-        // ad_unit 불일치는 거절(400)이 아니라 '수신하되 적립하지 않음(200)' 으로 처리한다(미저장).
-        // AdMob URL '확인' 핑은 실제 광고 단위가 아닌 placeholder ad_unit 을 싣기 때문에 400 으로 막으면
-        // URL 등록이 불가능하고, 잘못된 ad_unit 의 (서명 유효) 콜백을 400 으로 돌려주면 Google 이 재시도를 반복한다.
-        // 실제 ad_unit 값을 로그로 남겨 AdMob 확인 핑이 보내는 값을 관측할 수 있게 한다.
+        // ad_unit 불일치는 '수신하되 적립하지 않음(200)'(미저장).
         if (!isAdUnitMatched(callback)) {
             logger.warn(
                 "Google Ad SSV ad_unit mismatch — accepted without crediting (callback ad_unit={}, configured={})",
                 callback.adUnit,
                 properties.rewardedAdUnitIds,
+            )
+            return GoogleAdSsvVerificationResult(callback, newlyStored = false)
+        }
+
+        // timestamp 신선도 — 윈도우 밖이면 재생/지연 콜백으로 보고 '수신하되 적립하지 않음(200)'(미저장).
+        if (!properties.isTimestampFresh(callback.timestamp, now)) {
+            logger.warn(
+                "Google Ad SSV timestamp outside freshness window — accepted without crediting " +
+                    "(callback timestamp={}, now={}, tolerance={}, futureSkew={})",
+                callback.timestamp,
+                now.toEpochMilli(),
+                properties.timestampTolerance,
+                properties.timestampFutureSkew,
             )
             return GoogleAdSsvVerificationResult(callback, newlyStored = false)
         }
@@ -68,8 +78,6 @@ class GoogleAdSsvService(
                 logIfCoreFieldsDiffer(callback, duplicateEvent)
                 GoogleAdSsvVerificationResult(callback, newlyStored = false)
             } else {
-                // transaction_id 중복이 아닌 예기치 못한 제약 위반 — 멱등 복구가 불가능하므로
-                // 진단을 위해 ERROR 로 남기고 그대로 전파한다(상위에서 처리/관측).
                 logger.error(
                     "Unexpected DataIntegrityViolationException for Google Ad SSV transaction {}",
                     callback.transactionId,

@@ -19,8 +19,12 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Component
 import org.springframework.transaction.annotation.Propagation
 import org.springframework.transaction.annotation.Transactional
+import java.time.Duration
+import java.time.Instant
 
 class GoogleAdSsvServiceTest : FunSpec({
+    // 콜백 timestamp(1710000000123L)와 같은 시각 → 기본 윈도우 안에서 신선.
+    val now = Instant.ofEpochMilli(1710000000123L)
     // SSV user_id 에는 서버 발급 nonce(비숫자 opaque 토큰)가 실린다. 적립은 컨트롤러가 이어 호출하는
     // AdRewardService.grantFromCallback(nonce → userId 해석)이 전담하며, GoogleAdSsvService 는 검증·저장만 한다.
     val nonceUserId = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
@@ -88,7 +92,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         whenever(repository.saveAndFlush(any<GoogleAdSsvEvent>())).thenAnswer { it.arguments[0] }
         val service = service(parser, signatureVerifier, repository)
 
-        val result = service.verifyAndStore(rawQuery)
+        val result = service.verifyAndStore(rawQuery, now)
 
         result.newlyStored shouldBe true
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
@@ -115,7 +119,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         whenever(repository.saveAndFlush(any<GoogleAdSsvEvent>())).thenAnswer { it.arguments[0] }
         val service = service(parser, signatureVerifier, repository)
 
-        val result = service.verifyAndStore(rawQuery)
+        val result = service.verifyAndStore(rawQuery, now)
 
         result.newlyStored shouldBe true
         verify(signatureVerifier).verify(callbackNonce.signedPayload, callbackNonce.signature, callbackNonce.keyId)
@@ -133,7 +137,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         whenever(repository.findByTransactionId(callback.transactionId)).thenReturn(event(userId = "99deadbeef"))
         val service = service(parser, signatureVerifier, repository)
 
-        val result = service.verifyAndStore(rawQuery)
+        val result = service.verifyAndStore(rawQuery, now)
 
         result.newlyStored shouldBe false
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
@@ -153,7 +157,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         val service = service(parser, signatureVerifier, repository)
 
         shouldThrow<InvalidGoogleAdSsvCallbackException> {
-            service.verifyAndStore(rawQuery)
+            service.verifyAndStore(rawQuery, now)
         }
 
         verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
@@ -172,7 +176,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         val service = service(parser, signatureVerifier, repository)
 
         shouldThrow<InvalidGoogleAdSsvCallbackException> {
-            service.verifyAndStore(rawQuery)
+            service.verifyAndStore(rawQuery, now)
         }
 
         verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
@@ -186,7 +190,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         whenever(parser.parse(rawQuery)).thenReturn(callback)
         val service = service(parser, signatureVerifier, repository)
 
-        val result = service.verifyAndStore(rawQuery)
+        val result = service.verifyAndStore(rawQuery, now)
 
         result.newlyStored shouldBe false
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
@@ -206,7 +210,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         val service = service(parser, signatureVerifier, repository)
 
         shouldThrow<InvalidGoogleAdSsvCallbackException> {
-            service.verifyAndStore(rawQuery)
+            service.verifyAndStore(rawQuery, now)
         }
 
         verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
@@ -227,7 +231,7 @@ class GoogleAdSsvServiceTest : FunSpec({
             properties = GoogleAdSsvProperties(rewardedAdUnitIds = emptyList()),
         )
 
-        service.verifyAndStore(rawQuery)
+        service.verifyAndStore(rawQuery, now)
 
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
         verify(repository).saveAndFlush(any<GoogleAdSsvEvent>())
@@ -251,7 +255,7 @@ class GoogleAdSsvServiceTest : FunSpec({
             properties = GoogleAdSsvProperties(rewardedAdUnitIds = listOf(androidAdUnit, iosAdUnit)),
         )
 
-        val result = service.verifyAndStore(rawQuery)
+        val result = service.verifyAndStore(rawQuery, now)
 
         result.newlyStored shouldBe true
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
@@ -269,7 +273,7 @@ class GoogleAdSsvServiceTest : FunSpec({
             .thenThrow(DataIntegrityViolationException("duplicate transaction_id"))
         val service = service(parser, signatureVerifier, repository)
 
-        val result = service.verifyAndStore(rawQuery)
+        val result = service.verifyAndStore(rawQuery, now)
 
         result.newlyStored shouldBe false
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
@@ -279,7 +283,7 @@ class GoogleAdSsvServiceTest : FunSpec({
 
     test("verify and store does not open an outer transaction around duplicate recovery") {
         val annotation = GoogleAdSsvService::class.java
-            .getMethod("verifyAndStore", String::class.java)
+            .getMethod("verifyAndStore", String::class.java, Instant::class.java)
             .getAnnotation(Transactional::class.java)
 
         annotation.propagation shouldBe Propagation.NOT_SUPPORTED
@@ -293,9 +297,44 @@ class GoogleAdSsvServiceTest : FunSpec({
         val parser = mock<GoogleAdSsvQueryParser>()
         val service = service(parser = parser)
 
-        shouldThrow<InvalidGoogleAdSsvCallbackException> { service.verifyAndStore(null) }
-        shouldThrow<InvalidGoogleAdSsvCallbackException> { service.verifyAndStore("   ") }
+        shouldThrow<InvalidGoogleAdSsvCallbackException> { service.verifyAndStore(null, now) }
+        shouldThrow<InvalidGoogleAdSsvCallbackException> { service.verifyAndStore("   ", now) }
 
         verify(parser, never()).parse(any())
+    }
+
+    test("stale timestamp is verified but accepted without storing") {
+        val parser = mock<GoogleAdSsvQueryParser>()
+        val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
+        val repository = mock<GoogleAdSsvEventRepository>()
+        val callback = callback()
+        whenever(parser.parse(rawQuery)).thenReturn(callback)
+        val service = service(parser, signatureVerifier, repository)
+        // 이벤트 시각보다 2시간 뒤 → 과거 tolerance(1h) 초과.
+        val later = Instant.ofEpochMilli(callback.timestamp).plus(Duration.ofHours(2))
+
+        val result = service.verifyAndStore(rawQuery, later)
+
+        result.newlyStored shouldBe false
+        verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
+        verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
+        verify(repository, never()).findByTransactionId(any())
+    }
+
+    test("timestamp too far in the future is accepted without storing") {
+        val parser = mock<GoogleAdSsvQueryParser>()
+        val signatureVerifier = mock<GoogleAdSsvSignatureVerifier>()
+        val repository = mock<GoogleAdSsvEventRepository>()
+        val callback = callback()
+        whenever(parser.parse(rawQuery)).thenReturn(callback)
+        val service = service(parser, signatureVerifier, repository)
+        // 현재 시각이 이벤트 시각보다 10분 전 → 이벤트가 미래 skew(5m) 초과.
+        val earlier = Instant.ofEpochMilli(callback.timestamp).minus(Duration.ofMinutes(10))
+
+        val result = service.verifyAndStore(rawQuery, earlier)
+
+        result.newlyStored shouldBe false
+        verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
+        verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
     }
 })
