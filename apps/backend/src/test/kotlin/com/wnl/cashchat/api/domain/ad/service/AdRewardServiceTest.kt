@@ -8,12 +8,10 @@ import com.wnl.cashchat.api.domain.ad.persistence.repository.AdRewardDailyQuotaR
 import com.wnl.cashchat.api.domain.ad.persistence.repository.AdRewardNonceRepository
 import com.wnl.cashchat.api.domain.ad.persistence.repository.GoogleAdSsvEventRepository
 import com.wnl.cashchat.api.domain.ad.properties.AdRewardProperties
-import com.wnl.cashchat.api.domain.point.persistence.entity.PointTransactionReason
-import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.energy.service.EnergyService
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -25,7 +23,7 @@ class AdRewardServiceTest : FunSpec({
     lateinit var eventRepository: GoogleAdSsvEventRepository
     lateinit var nonceRepository: AdRewardNonceRepository
     lateinit var quotaRepository: AdRewardDailyQuotaRepository
-    lateinit var userPointService: UserPointService
+    lateinit var energyService: EnergyService
     lateinit var service: AdRewardService
 
     val now = Instant.parse("2026-05-31T00:00:00Z")
@@ -42,8 +40,8 @@ class AdRewardServiceTest : FunSpec({
         eventRepository = mock()
         nonceRepository = mock()
         quotaRepository = mock()
-        userPointService = mock()
-        service = AdRewardService(eventRepository, nonceRepository, quotaRepository, userPointService, AdRewardProperties())
+        energyService = mock()
+        service = AdRewardService(eventRepository, nonceRepository, quotaRepository, energyService, AdRewardProperties())
     }
 
     test("invalid/used/expired nonce marks event REJECTED_INVALID_NONCE and grants nothing") {
@@ -54,7 +52,7 @@ class AdRewardServiceTest : FunSpec({
         service.grantFromCallback(callback("nonce-x"), now)
 
         event.rewardStatus shouldBe RewardStatus.REJECTED_INVALID_NONCE
-        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(energyService, never()).charge(any(), any())
     }
 
     test("over quota marks event REJECTED_OVER_QUOTA, consumes nonce, and grants nothing") {
@@ -69,10 +67,10 @@ class AdRewardServiceTest : FunSpec({
         event.rewardStatus shouldBe RewardStatus.REJECTED_OVER_QUOTA
         // 한도 초과 거절이어도 유효 nonce 는 소모되어 단일 사용이 보장된다.
         nonce.used shouldBe true
-        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(energyService, never()).charge(any(), any())
     }
 
-    test("valid nonce within quota grants coins, marks used, increments quota, event GRANTED") {
+    test("valid nonce within quota grants energy, marks used, increments quota, event GRANTED") {
         val event = GoogleAdSsvEvent(transactionId = txnId, userId = "nonce-z", rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw")
         val nonce = AdRewardNonce(nonce = "nonce-z", userId = 7L, expiresAt = now.plusSeconds(60))
         val quota = AdRewardDailyQuota(userId = 7L, kstDate = kstToday, usedCount = 3)
@@ -85,7 +83,8 @@ class AdRewardServiceTest : FunSpec({
         event.rewardStatus shouldBe RewardStatus.GRANTED
         nonce.used shouldBe true
         quota.usedCount shouldBe 4
-        verify(userPointService).recordTransaction(eq(7L), eq(40L), eq(PointTransactionReason.AD_REWARD), eq("admob:reward:txn-1"))
+        // 기본 energy-amount = 3 밥을 적립한다.
+        verify(energyService).charge(7L, 3)
     }
 
     test("already GRANTED event is skipped idempotently (no re-grant, no quota touch)") {
@@ -97,7 +96,7 @@ class AdRewardServiceTest : FunSpec({
 
         event.rewardStatus shouldBe RewardStatus.GRANTED
         verify(nonceRepository, never()).findForUpdate(any())
-        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(energyService, never()).charge(any(), any())
     }
 
     test("already REJECTED event is skipped on retry (no nonce lock, no re-grant)") {
@@ -110,7 +109,7 @@ class AdRewardServiceTest : FunSpec({
         // 거절 종결 상태는 재전송돼도 그대로 유지되고, nonce 락 획득·적립을 시도하지 않는다.
         event.rewardStatus shouldBe RewardStatus.REJECTED_OVER_QUOTA
         verify(nonceRepository, never()).findForUpdate(any())
-        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(energyService, never()).charge(any(), any())
     }
 
     test("missing custom_data marks event REJECTED_INVALID_NONCE without nonce lookup") {
@@ -126,6 +125,6 @@ class AdRewardServiceTest : FunSpec({
 
         event.rewardStatus shouldBe RewardStatus.REJECTED_INVALID_NONCE
         verify(nonceRepository, never()).findForUpdate(any())
-        verify(userPointService, never()).recordTransaction(any(), any(), any(), any())
+        verify(energyService, never()).charge(any(), any())
     }
 })

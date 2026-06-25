@@ -13,7 +13,7 @@ import java.time.LocalDate
  *
  * routeAndConsume 은 채팅 LLM 스트림 시작 직전에 1회 호출한다:
  *
- * 1. energyService.consume(userId)          → 밥 1 차감 (부족 시 InsufficientEnergyException 전파)
+ * 1. energyService.reserve(userId)          → 밥 1 예약 (부족 시 InsufficientEnergyException 전파)
  * 2. qualityPoolService.accrue(MEAL_MARGIN) → 공용 풀에 마진 32 centi-pt 적립
  * 3. level = evolutionService.getState(userId).level
  * 4. scale = qualityPoolService.throttleScale()
@@ -41,8 +41,8 @@ class ChatModelRouter(
      */
     @Transactional
     fun routeAndConsume(userId: Long, today: LocalDate): ModelTier {
-        // 1. 밥 차감 (부족 시 예외 전파)
-        energyService.consume(userId)
+        // 1. 밥 예약 (부족 시 예외 전파). 정상 완료/실패 시 ChatService 가 정산(settle)/환불(refund)한다.
+        energyService.reserve(userId)
 
         // 2. 공용 풀 마진 적립
         qualityPoolService.accrue(props.mealMarginCentiPt)

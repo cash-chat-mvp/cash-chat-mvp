@@ -53,7 +53,7 @@ app:
       timestamp-tolerance: ${APP_ADS_GOOGLE_TIMESTAMP_TOLERANCE:1h}
       timestamp-future-skew: ${APP_ADS_GOOGLE_TIMESTAMP_FUTURE_SKEW:5m}
     reward:
-      coin-amount: ${APP_ADS_REWARD_COIN_AMOUNT:40}
+      energy-amount: ${APP_ADS_REWARD_ENERGY_AMOUNT:3}
       daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}
       nonce-ttl: ${APP_ADS_REWARD_NONCE_TTL:10m}
   offerwall:

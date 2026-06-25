@@ -6,8 +6,7 @@ import com.wnl.cashchat.api.domain.ad.persistence.repository.AdRewardDailyQuotaR
 import com.wnl.cashchat.api.domain.ad.persistence.repository.AdRewardNonceRepository
 import com.wnl.cashchat.api.domain.ad.persistence.repository.GoogleAdSsvEventRepository
 import com.wnl.cashchat.api.domain.ad.properties.AdRewardProperties
-import com.wnl.cashchat.api.domain.point.persistence.entity.PointTransactionReason
-import com.wnl.cashchat.api.domain.point.service.UserPointService
+import com.wnl.cashchat.api.domain.energy.service.EnergyService
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -15,16 +14,17 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 /**
- * SSV 서명 검증 통과·신규 저장된 광고 이벤트에 대해 코인을 적립한다.
- * 단일 @Transactional 안에서 nonce 해석 → 일일 한도 행 락 → 코인 적립 → 이벤트 상태 갱신을 원자적으로 수행.
+ * SSV 서명 검증 통과·신규 저장된 광고 이벤트에 대해 밥(energy)을 적립한다(개정 모델).
+ * 단일 @Transactional 안에서 nonce 해석 → 일일 한도 행 락 → 밥 적립 → 이벤트 상태 갱신을 원자적으로 수행.
  * callback.customData 는 클라이언트가 SSV custom_data 필드에 실은 서버 발급 nonce 다(직접 신뢰 금지).
+ * 적립 멱등성은 이벤트 상태 가드(VERIFIED→GRANTED, 비관락)가 보장하므로 별도 멱등키가 필요 없다.
  */
 @Service
 class AdRewardService(
     private val googleAdSsvEventRepository: GoogleAdSsvEventRepository,
     private val adRewardNonceRepository: AdRewardNonceRepository,
     private val adRewardDailyQuotaRepository: AdRewardDailyQuotaRepository,
-    private val userPointService: UserPointService,
+    private val energyService: EnergyService,
     private val adRewardProperties: AdRewardProperties,
 ) {
     @Transactional
@@ -63,12 +63,8 @@ class AdRewardService(
 
         quota.increment()
         nonce.markUsed()
-        userPointService.recordTransaction(
-            userId = nonce.userId,
-            delta = adRewardProperties.coinAmount,
-            reason = PointTransactionReason.AD_REWARD,
-            idempotencyKey = "admob:reward:${callback.transactionId}",
-        )
+        // 광고 보상은 밥(energy)으로 적립한다(개정 모델). 상한(maxEnergy) 초과분은 charge 내부에서 잘린다.
+        energyService.charge(nonce.userId, adRewardProperties.energyAmount)
         event.markGranted()
     }
 
