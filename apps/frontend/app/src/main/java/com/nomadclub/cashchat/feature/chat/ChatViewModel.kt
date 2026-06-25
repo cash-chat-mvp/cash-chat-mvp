@@ -3,10 +3,14 @@ package com.nomadclub.cashchat.feature.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nomadclub.cashchat.shared.ads.AdRewardStore
+import com.nomadclub.cashchat.shared.chat.ChatResourceFeedback
 import com.nomadclub.cashchat.shared.chat.ChatStore
 import com.nomadclub.cashchat.shared.hud.HudStore
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class ChatViewModel(
@@ -23,6 +27,10 @@ class ChatViewModel(
 
     private val _rewardBurstTick = MutableStateFlow(0)
     val rewardBurstTick = _rewardBurstTick.asStateFlow()
+    val resourceFeedback = chatStore.resourceFeedback
+    val latestResourceFeedback = resourceFeedback
+        .map<ChatResourceFeedback, ChatResourceFeedback?> { it }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
         hudStore.refresh()
