@@ -192,7 +192,11 @@ fun EvolutionScreen(
                 if (evolution.isMaxLevel) {
                     AssistChip(onClick = {}, label = { Text("🏆 최고 레벨 달성!") })
                 } else {
-                    StatRow("다음 진화 비용", "🪙 %,d".format(evolution.nextAttemptCost ?: 0))
+                    StatRow("다음 진화 비용", "⭐ %,d 경험치".format(evolution.nextAttemptCost ?: 0))
+                    evolution.currentExp?.let { exp ->
+                        Spacer(Modifier.height(6.dp))
+                        StatRow("보유 경험치", "⭐ %,d".format(exp))
+                    }
                     Spacer(Modifier.height(6.dp))
                     StatRow("성공 확률", "${((evolution.nextSuccessRate ?: 0.0) * 100).toInt()}%")
                     // 보유 아이템 — 효과 적용 API는 BE 미구현이라 표시 전용
@@ -221,12 +225,22 @@ fun EvolutionScreen(
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                     Spacer(Modifier.height(16.dp))
+                    val cost = evolution.nextAttemptCost ?: 0L
+                    val canAfford = evolution.currentExp?.let { it >= cost } ?: true
                     Button(
                         onClick = { viewModel.attempt() },
-                        enabled = phase == EvolutionViewModel.Phase.IDLE,
+                        enabled = phase == EvolutionViewModel.Phase.IDLE && canAfford,
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(16.dp),
-                    ) { Text(if (phase == EvolutionViewModel.Phase.IDLE) "🎰 진화 시도하기" else "두근두근...") }
+                    ) {
+                        Text(
+                            when {
+                                phase != EvolutionViewModel.Phase.IDLE -> "두근두근..."
+                                !canAfford -> "경험치가 부족해요"
+                                else -> "🎰 진화 시도하기"
+                            }
+                        )
+                    }
 
                     // 시도 기록 타임라인 (P3-1) — 플래그 활성 시에만
                     if (FeatureFlags.EVOLUTION_HISTORY && history.isNotEmpty()) {
@@ -241,7 +255,7 @@ fun EvolutionScreen(
                                             else "Lv.${record.fromLevel} 실패",
                                         )
                                     },
-                                    supportingContent = { Text("🪙${record.cost} · ${record.attemptedAt.take(10)}") },
+                                    supportingContent = { Text("⭐${record.cost} · ${record.attemptedAt.take(10)}") },
                                 )
                             }
                         }
@@ -269,7 +283,7 @@ fun EvolutionScreen(
                     text = {
                         Text(
                             if (attemptResult.success) "진화 성공! 밥도 보너스로 충전됐어요 ⚡"
-                            else "이번엔 실패했어요 (-%,d 코인). 다시 도전해볼까요?".format(attemptResult.cost),
+                            else "이번엔 실패했어요 (-%,d 경험치). 다시 도전해볼까요?".format(attemptResult.cost),
                         )
                     },
                     confirmButton = {
