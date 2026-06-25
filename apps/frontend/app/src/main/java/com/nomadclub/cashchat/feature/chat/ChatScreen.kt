@@ -55,6 +55,7 @@ import com.nomadclub.cashchat.feature.chat.components.AdGateCard
 import com.nomadclub.cashchat.feature.chat.components.CharacterAvatar
 import com.nomadclub.cashchat.feature.chat.components.EnergyGauge
 import com.nomadclub.cashchat.feature.chat.components.MessageBubble
+import com.nomadclub.cashchat.feature.chat.components.RewardBurstOverlay
 import com.nomadclub.cashchat.feature.chat.components.StatChip
 import com.nomadclub.cashchat.feature.chat.components.TypingIndicator
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
@@ -174,6 +175,7 @@ fun ChatScreen(
             }
             // 포인트 잔액 API 부재(BE 의존성) — points가 null이면 칩 숨김
             hud.points?.let { StatChip("🪙", "%,d".format(it)) }
+            hud.exp?.let { StatChip("⭐", "%,d".format(it)) }
             if (hud.isLoaded) {
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     StatChip("⚡", "${hud.energy}/${hud.maxEnergy}", warning = hud.energy == 0)
@@ -270,6 +272,7 @@ fun ChatScreen(
                     }
                 }
             }
+            RewardBurstOverlay(tick = rewardTick)
         }
 
         // ── 입력바
