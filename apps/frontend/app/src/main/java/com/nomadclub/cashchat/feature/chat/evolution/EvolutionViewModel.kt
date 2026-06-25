@@ -54,7 +54,8 @@ class EvolutionViewModel(
             } catch (e: ApiException) {
                 _phase.value = Phase.IDLE
                 _errorMessage.value = when (e.code) {
-                    ApiException.INSUFFICIENT_POINTS -> "포인트가 부족해요. 광고로 모아볼까요?"
+                    ApiException.INSUFFICIENT_EVOLUTION_EXP,
+                    ApiException.INSUFFICIENT_POINTS -> "경험치가 부족해요. 채팅으로 모아볼까요?"
                     ApiException.ALREADY_MAX_LEVEL -> "이미 최고 레벨이에요!"
                     else -> e.message
                 }
