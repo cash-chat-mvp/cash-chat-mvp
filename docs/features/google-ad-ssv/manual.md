@@ -8,11 +8,11 @@
 | 구분 | 상태 |
 | ---- | ---- |
 | 백엔드 SSV 검증·저장·nonce 적립 | ✅ 구현 완료 (단, 본 변경 브랜치 **배포 필요**) |
-| 프론트 — nonce를 `user_id`로 전달 | ⚠️ **미적용** (현재 `custom_data`로 보냄 → §2 필수 작업) |
+| 프론트 — nonce를 `custom_data`로 전달 | ✅ **구현 완료** (Android `setCustomData`, iOS `customRewardString`) |
 | AdMob 콘솔 SSV URL 등록 | 🚧 확인/등록 필요 (§3) |
 | 광고단위 ID·공개키 URI 환경변수 | 🚧 확인 필요 (§3, §5) |
 
-> **end-to-end 적립이 동작하려면 최소: ①이 브랜치 배포 + ②프론트 `user_id` 전달 수정 + ③AdMob 콘솔 SSV URL 등록** 세 가지가 모두 필요하다.
+> **end-to-end 적립이 동작하려면 최소: ①이 브랜치 배포 + ②AdMob 콘솔 SSV URL 등록** 두 가지가 필요하다. 프론트 nonce 전달(`custom_data`)은 이미 구현 완료.
 
 ---
 
@@ -28,33 +28,20 @@
 
 ## 2. 프론트엔드 구현 지침 (필수)
 
-### 2.1 핵심 변경 — nonce를 `custom_data`가 아니라 `user_id`로
+### 2.1 nonce 전달 방식 — `custom_data` 사용 (이미 구현 완료)
 
-백엔드는 nonce를 SSV **`user_id`** 파라미터에서 읽는다(`AdRewardService`가 `callback.userId`를 nonce로 해석). 현재 클라이언트는 nonce를 `custom_data`로 싣고 있어 **위치가 어긋난다.** 아래처럼 바꿔야 한다.
+백엔드는 nonce를 SSV **`custom_data`** 파라미터에서 읽는다(`AdRewardService`의 `callback.customData`를 nonce로 해석). 클라이언트도 이에 맞춰 이미 구현돼 있다 — **프론트엔드 수정 불필요.**
 
-**Android** — `apps/frontend/app/.../ads/RewardedAdManager.kt`
-```kotlin
-// 변경 전
-ServerSideVerificationOptions.Builder().setCustomData(it).build()
-// 변경 후
-ServerSideVerificationOptions.Builder().setUserId(it).build()
-```
+- **Android** (`apps/frontend/app/.../ads/RewardedAdManager.kt`): `ServerSideVerificationOptions.Builder().setCustomData(nonce).build()` → SSV `custom_data` 파라미터로 전달됨.
+- **iOS** (`apps/frontend/CashChatIOS/.../Ads/RewardedAdManager.swift`): `options.customRewardString = nonce` → SSV `custom_data` 파라미터로 전달됨.
 
-**iOS** — `apps/frontend/CashChatIOS/.../Ads/RewardedAdManager.swift`
-```swift
-// 변경 전
-options.customRewardText = nonce
-// 변경 후
-options.userIdentifier = nonce
-```
-
-> SDK API 참고: Android `ServerSideVerificationOptions.Builder.setUserId(String)`, iOS `ServerSideVerificationOptions.userIdentifier`. 둘 다 SSV 콜백의 `user_id` 파라미터로 매핑되는 표준 속성이다. (iOS는 SDK 버전에 따라 `customRewardString`/`customRewardText` 네이밍이 다를 수 있으나 `userIdentifier`는 버전 무관 안정 속성.) **변경 후 각 플랫폼 빌드로 컴파일 확인할 것.**
+> Google SSV 프로토콜에는 `user_id` 파라미터도 존재하지만(백엔드 파서가 optional 필드로 수신), nonce 전달에는 사용하지 않는다. `custom_data`는 클라이언트가 임의로 채울 수 있는 값이므로 백엔드는 이를 직접 신뢰하지 않고 `nonce → 내부 userId`를 서버측에서 해석한다(단일 사용·단기 TTL nonce로 위조 차단).
 
 ### 2.2 광고 시청 전체 흐름 (클라이언트가 구현해야 할 순서)
 
 1. **(선택) quota 확인** — `GET /api/ads/reward/quota`로 `remaining`을 확인해, 0이면 [지금 시청] 버튼 비활성화.
 2. **nonce 발급** — `POST /api/ads/reward/issue-nonce` 호출 → `{ nonce, expiresAt }` 수신. **광고 노출 직전에** 발급(TTL 기본 10분이므로 미리 받아두고 오래 묵히지 말 것).
-3. **nonce를 `user_id`에 실어 노출** — `setUserId(nonce)`(§2.1) 후 보상형 광고 present.
+3. **nonce를 `custom_data`에 실어 노출** — `setCustomData(nonce)` / `customRewardString = nonce`(§2.1, 이미 구현 완료) 후 보상형 광고 present.
 4. **시청 후 재조회** — `onUserEarnedReward`/광고 종료 콜백 시점에 잔액(`GET /api/points/me` 등)과 `GET /api/ads/reward/quota`를 재조회해 화면 반영. (적립은 AdMob 서버 콜백으로 비동기 발생하므로, 종료 직후 약간의 지연이 있을 수 있음 → 필요 시 짧은 폴링/재시도.)
 
 > nonce는 **단일 사용**이다. 한 번 시청에 한 번 발급. 같은 nonce 재사용 시 `REJECTED_INVALID_NONCE`로 적립되지 않는다.
@@ -102,7 +89,7 @@ https://<도메인>/api/ads/google/ssv
 - **HTTP 200 받기**: "사용자 ID" 칸에 **아무 non-blank 값**(임의 문자열 가능 — 이제 숫자 강제 없음)을 넣고 확인 → 서명만 통과하면 200("확인된 URL 사용" 활성화). **비워두면** `missing user_id`로 400.
 - **실제 적립까지 검증하기**(웹 도구로 가능):
   1. JWT로 `POST /api/ads/reward/issue-nonce` 호출 → `nonce` 획득.
-  2. 그 **nonce 문자열을 "사용자 ID" 칸에 붙여넣고** (TTL 10분 내) 확인.
+  2. 그 **nonce 문자열을 "사용자 맞춤 데이터"(custom data) 칸에 붙여넣고** (TTL 10분 내) 확인.
   3. 결과: 서명 ✓ → nonce 유효 → 한도 내 → **코인 적립 + `reward_status=GRANTED`**.
   - 재시도하려면 매번 **새 nonce** 발급(단일 사용).
 
@@ -162,16 +149,15 @@ cd apps/backend
 | 콜백 **200**인데 미적립 | `ad_unit`이 `rewarded-ad-unit-ids` 목록에 없음 | 설정 목록에 Android·iOS 광고단위 ID가 모두 들어있는지 확인 |
 | 콜백 **200**인데 미적립 | `timestamp`가 신선도 윈도우(과거 1h/미래 5m) 밖 | 서버 시계(NTP) 동기화 확인, 필요 시 윈도우 조정 |
 | 콜백 **503** | 공개키(verifier-keys.json) 조회 실패 | gstatic egress 허용·일시 장애 재시도 |
-| 200인데 적립 안 됨 | `user_id`가 실제 nonce가 아님/만료/이미 used → `REJECTED_INVALID_NONCE`, 또는 한도 초과 `REJECTED_OVER_QUOTA` | DB `reward_status` 확인. 실 nonce를 TTL 내 사용 |
+| 200인데 적립 안 됨 | `custom_data`가 실제 nonce가 아님/만료/이미 used → `REJECTED_INVALID_NONCE`, 또는 한도 초과 `REJECTED_OVER_QUOTA` | DB `reward_status` 확인. 실 nonce를 TTL 내 사용 |
 | 적립이 화면에 안 뜸 | 콜백은 비동기 | 시청 후 잔액/quota 재조회 트리거 추가 |
-| 실 광고 시청해도 적립 X | 프론트가 nonce를 `custom_data`로 보냄(§2 미적용) | `setUserId`/`userIdentifier`로 수정 후 재배포 |
 
 ---
 
 ## 7. 배포 전 체크리스트
 
 - [ ] 백엔드 이 브랜치 배포 (숫자강제 제거 + ledger 적립 제거 반영)
-- [ ] 프론트 nonce 전달 위치 수정: `setUserId` / `userIdentifier` (§2.1) + 빌드 확인
+- [x] 프론트 nonce 전달 위치: `setCustomData(nonce)` (Android) / `customRewardString = nonce` (iOS) — 구현 완료
 - [ ] 프론트 광고 흐름: 시청 전 `issue-nonce` 호출, 시청 후 잔액/quota 재조회 (§2.2)
 - [ ] AdMob 콘솔 SSV 콜백 URL 등록 (dev/prod) (§3.1)
 - [ ] `APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS` 에 Android·iOS 운영 광고단위 ID 콤마로 모두 등록(권장) (§3.2)

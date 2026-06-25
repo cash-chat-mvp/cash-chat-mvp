@@ -159,7 +159,7 @@ GET /api/ads/google/ssv
 > Ledger가 통합 회계로 **이행 중**임을 시사한다. §6.2 참조.
 
 - 서명 검증: Google 공개키(`verifier-keys.json`, 24h 캐시)로 SSV 서명 검증.
-- 광고 단위 검증: `rewarded-ad-unit-id` 설정 시 일치 확인.
+- 광고 단위 검증: `rewarded-ad-unit-ids`(`APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS`) 설정 시 일치 확인.
 - 실패해도 SSV 엔드포인트는 2xx 반환 → Google 재시도 폭주(retry storm) 방지.
 - 설정: `infra`/환경변수 `APP_ADS_GOOGLE_*`, 상세는 `docs/admob-production-setup.md`.
 
