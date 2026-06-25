@@ -9,7 +9,7 @@ import java.time.Duration
 @ConfigurationProperties(prefix = "app.ads.reward")
 data class AdRewardProperties(
     @field:Positive
-    val coinAmount: Long = 40,
+    val energyAmount: Int = 3,
 
     @field:Positive
     val dailyLimit: Int = 10,

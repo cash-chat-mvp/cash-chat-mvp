@@ -38,6 +38,31 @@ class EnergyService(
         energy.consume()
     }
 
+    /** 채팅 진입 시 밥 1개 예약(available→reserved). 잔여 밥이 없으면 게이트(InsufficientEnergyException). */
+    @Transactional
+    fun reserve(userId: Long) {
+        val energy = userEnergyRepository.findByUserIdForUpdate(userId)
+            ?: throw IllegalStateException("UserEnergy not initialized for userId=$userId")
+        if (energy.energy < 1) throw InsufficientEnergyException()
+        energy.reserve()
+    }
+
+    /** 채팅 정상 완료 시 예약분 1개 최종 소진. */
+    @Transactional
+    fun settleReserved(userId: Long) {
+        val energy = userEnergyRepository.findByUserIdForUpdate(userId)
+            ?: throw IllegalStateException("UserEnergy not initialized for userId=$userId")
+        energy.settleReserved()
+    }
+
+    /** 채팅 실패/취소 시 예약분 1개 환불(reserved→available). */
+    @Transactional
+    fun refundReserved(userId: Long) {
+        val energy = userEnergyRepository.findByUserIdForUpdate(userId)
+            ?: throw IllegalStateException("UserEnergy not initialized for userId=$userId")
+        energy.refundReserved()
+    }
+
     @Transactional
     fun charge(userId: Long, amount: Int) {
         val energy = userEnergyRepository.findByUserIdForUpdate(userId)

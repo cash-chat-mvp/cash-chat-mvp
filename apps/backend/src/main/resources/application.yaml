@@ -45,7 +45,7 @@ app:
       public-key-cache-ttl: ${APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL:24h}
       rewarded-ad-unit-id: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID:}
     reward:
-      coin-amount: ${APP_ADS_REWARD_COIN_AMOUNT:40}
+      energy-amount: ${APP_ADS_REWARD_ENERGY_AMOUNT:3}
       daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}
       nonce-ttl: ${APP_ADS_REWARD_NONCE_TTL:10m}
   offerwall:

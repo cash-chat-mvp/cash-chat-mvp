@@ -37,6 +37,11 @@ class UserEnergy(
     var energy: Int = energy
         private set
 
+    /** 채팅 스트림 진행 중 예약된 밥. 정상 완료 시 소진(settle), 실패/취소 시 환불(refund). */
+    @Column(name = "reserved_energy", nullable = false)
+    var reservedEnergy: Int = 0
+        private set
+
     init {
         require(energy >= 0) { "Energy must be non-negative" }
     }
@@ -49,6 +54,26 @@ class UserEnergy(
     fun consume() {
         check(energy >= 1) { "Not enough energy" }
         energy -= 1
+    }
+
+    /** 채팅 진입 시 밥 1개를 available → reserved 로 옮긴다(게이트). */
+    fun reserve() {
+        check(energy >= 1) { "Not enough energy" }
+        energy -= 1
+        reservedEnergy += 1
+    }
+
+    /** 채팅 정상 완료 시 예약분 1개를 최종 소진한다. */
+    fun settleReserved() {
+        check(reservedEnergy >= 1) { "No reserved energy to settle" }
+        reservedEnergy -= 1
+    }
+
+    /** 채팅 실패/취소 시 예약분 1개를 available 로 되돌린다. */
+    fun refundReserved() {
+        check(reservedEnergy >= 1) { "No reserved energy to refund" }
+        reservedEnergy -= 1
+        energy += 1
     }
 
     /** 가입/진화 직후 1회 보정: 현재 밥이 floor 미만이면 floor 까지 올리고, 이미 많으면 그대로 둔다. */
