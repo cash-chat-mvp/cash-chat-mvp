@@ -144,6 +144,8 @@ cd apps/backend
 | --- | --- | --- | --- |
 | `app.ads.google.ssv-public-keys-uri` | `APP_ADS_GOOGLE_SSV_PUBLIC_KEYS_URI` | gstatic verifier-keys.json | SSV 공개키 묶음 URI |
 | `app.ads.google.public-key-cache-ttl` | `APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL` | `24h` | 공개키 캐시 TTL |
+| `app.ads.google.timestamp-tolerance` | `APP_ADS_GOOGLE_TIMESTAMP_TOLERANCE` | `1h` | 콜백 timestamp 과거 허용폭(초과 시 미적립) |
+| `app.ads.google.timestamp-future-skew` | `APP_ADS_GOOGLE_TIMESTAMP_FUTURE_SKEW` | `5m` | 콜백 timestamp 미래 허용폭(시계 오차) |
 | `app.ads.google.rewarded-ad-unit-ids` | `APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS` | `` (빈값) | 콜백 `ad_unit` 허용 목록(콤마 구분, Android·iOS). 빈값이면 검증 스킵 |
 | `app.ads.reward.coin-amount` | `APP_ADS_REWARD_COIN_AMOUNT` | `40` | 시청당 적립 코인(서버 고정, `reward_amount` 미신뢰) |
 | `app.ads.reward.daily-limit` | `APP_ADS_REWARD_DAILY_LIMIT` | `10` | 사용자당 1일 시청 한도(KST 자정 리셋) |
@@ -158,6 +160,7 @@ cd apps/backend
 | 콘솔 테스트 **400** "Url error" | `user_id` 비움 → `missing user_id` | 사용자 ID 칸에 값 입력 |
 | 콜백 **400** | 서명 검증 실패 / 쿼리스트링 변형 / percent 인코딩 깨짐 | 프록시가 쿼리스트링 원본 보존하는지 확인 |
 | 콜백 **200**인데 미적립 | `ad_unit`이 `rewarded-ad-unit-ids` 목록에 없음 | 설정 목록에 Android·iOS 광고단위 ID가 모두 들어있는지 확인 |
+| 콜백 **200**인데 미적립 | `timestamp`가 신선도 윈도우(과거 1h/미래 5m) 밖 | 서버 시계(NTP) 동기화 확인, 필요 시 윈도우 조정 |
 | 콜백 **503** | 공개키(verifier-keys.json) 조회 실패 | gstatic egress 허용·일시 장애 재시도 |
 | 200인데 적립 안 됨 | `user_id`가 실제 nonce가 아님/만료/이미 used → `REJECTED_INVALID_NONCE`, 또는 한도 초과 `REJECTED_OVER_QUOTA` | DB `reward_status` 확인. 실 nonce를 TTL 내 사용 |
 | 적립이 화면에 안 뜸 | 콜백은 비동기 | 시청 후 잔액/quota 재조회 트리거 추가 |

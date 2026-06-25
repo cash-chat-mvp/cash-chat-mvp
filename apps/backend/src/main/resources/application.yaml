@@ -49,6 +49,9 @@ app:
       public-key-cache-ttl: ${APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL:24h}
       # Android·iOS 보상형 광고 단위 ID 를 콤마로 구분해 나열한다. 비어 있으면 ad_unit 검증을 건너뛴다.
       rewarded-ad-unit-ids: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS:}
+      # 콜백 timestamp 신선도 윈도우. 과거 tolerance/미래 skew 밖이면 미적립(재생공격 방어).
+      timestamp-tolerance: ${APP_ADS_GOOGLE_TIMESTAMP_TOLERANCE:1h}
+      timestamp-future-skew: ${APP_ADS_GOOGLE_TIMESTAMP_FUTURE_SKEW:5m}
     reward:
       coin-amount: ${APP_ADS_REWARD_COIN_AMOUNT:40}
       daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}

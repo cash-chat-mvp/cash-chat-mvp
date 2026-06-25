@@ -175,6 +175,7 @@ sequenceDiagram
 - **단일 사용 nonce** — 적립 성공 시 `used=true`. 한도 초과로 거절돼도 유효 nonce는 1회 시청에 소모된 것으로 보고 `used=true` 처리(재사용 차단). nonce 없음/만료/used → `REJECTED_INVALID_NONCE`.
 - **재시도 폭주 방지** — 서명만 통과했다면(거절 케이스 포함) AdMob에 **200**을 반환한다. 적립 실패(예: DB 예외)도 SSV 엔드포인트가 5xx를 던지지 않게 설계해 AdMob의 무한 재전송을 막는다. 단, **서명 실패는 400**, 공개키 일시 불가는 **503**.
 - **광고단위 검증(선택)** — `app.ads.google.rewarded-ad-unit-ids`(콤마 구분, Android·iOS)가 설정되면 콜백 `ad_unit`이 목록 중 하나와 일치해야 적립된다(불일치 시 200이되 미적립). 빈 값이면 검증을 건너뛴다.
+- **timestamp 신선도** — 콜백 `timestamp`가 `app.ads.google.timestamp-tolerance`(과거)/`timestamp-future-skew`(미래) 윈도우 밖이면 적립하지 않는다(200, 미저장). transaction_id 멱등성을 보완하는 재생공격 심층 방어.
 
 ## 6. 설계 이력 — 적립 경로 정리 (중요)
 
