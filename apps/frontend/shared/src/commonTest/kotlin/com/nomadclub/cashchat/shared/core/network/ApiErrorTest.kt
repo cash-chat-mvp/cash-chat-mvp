@@ -22,4 +22,14 @@ class ApiErrorTest {
         assertEquals("UNKNOWN", exception.code)
         assertEquals(500, exception.httpStatus)
     }
+
+    @Test
+    fun `진화 경험치 부족 에러를 파싱한다`() {
+        val exception = parseApiError(
+            httpStatus = 409,
+            body = """{ "code": "INSUFFICIENT_EVOLUTION_EXP", "message": "진화 경험치가 부족합니다." }""",
+        )
+        assertEquals(ApiException.INSUFFICIENT_EVOLUTION_EXP, exception.code)
+        assertEquals(409, exception.httpStatus)
+    }
 }
