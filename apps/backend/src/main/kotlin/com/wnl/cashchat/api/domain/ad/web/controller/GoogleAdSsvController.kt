@@ -47,8 +47,11 @@ class GoogleAdSsvController(
         // 검증과 적립이 동일한 '현재 시각'을 보도록 한 번만 만들어 두 호출에 전달한다.
         val now = Instant.now()
         val result = googleAdSsvService.verifyAndStore(request.queryString, now)
-        // 모든 검증된 콜백에 대해 적립을 시도한다. grantFromCallback 은 이미 GRANTED 된 이벤트를 멱등하게 건너뛴다.
-        adRewardService.grantFromCallback(result.callback, now)
+        // 적립 대상 콜백만 grantFromCallback 을 호출한다(ad_unit 불일치·timestamp 윈도우 밖은 미저장이라 건너뜀 →
+        // 무의미한 행 락 조회 회피). grantFromCallback 은 이미 GRANTED 된 이벤트를 멱등하게 건너뛴다.
+        if (result.eligibleForGranting) {
+            adRewardService.grantFromCallback(result.callback, now)
+        }
         return ResponseEntity.ok().build()
     }
 }

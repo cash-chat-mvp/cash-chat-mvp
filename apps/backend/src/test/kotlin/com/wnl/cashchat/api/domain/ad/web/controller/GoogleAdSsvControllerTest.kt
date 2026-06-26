@@ -15,6 +15,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
@@ -63,7 +64,7 @@ class GoogleAdSsvControllerTest : FunSpec() {
                 rawQueryString = rawQuery, signedPayload = rawQuery.substringBefore("&signature="),
             )
             whenever(googleAdSsvService.verifyAndStore(eq(rawQuery), any()))
-                .thenReturn(GoogleAdSsvVerificationResult(callback, newlyStored = false))
+                .thenReturn(GoogleAdSsvVerificationResult(callback, newlyStored = false, eligibleForGranting = true))
 
             mockMvc.perform(get("/api/ads/google/ssv?$rawQuery"))
                 .andExpect(status().isOk)
@@ -80,7 +81,7 @@ class GoogleAdSsvControllerTest : FunSpec() {
                 rawQueryString = rawQuery, signedPayload = rawQuery.substringBefore("&signature="),
             )
             whenever(googleAdSsvService.verifyAndStore(eq(rawQuery), any()))
-                .thenReturn(GoogleAdSsvVerificationResult(callback, newlyStored = true))
+                .thenReturn(GoogleAdSsvVerificationResult(callback, newlyStored = true, eligibleForGranting = true))
 
             mockMvc.perform(get("/api/ads/google/ssv?$rawQuery"))
                 .andExpect(status().isOk)
@@ -90,6 +91,23 @@ class GoogleAdSsvControllerTest : FunSpec() {
             verify(googleAdSsvService).verifyAndStore(eq(rawQuery), verifyNow.capture())
             verify(adRewardService).grantFromCallback(eq(callback), grantNow.capture())
             grantNow.firstValue shouldBe verifyNow.firstValue
+        }
+
+        test("ineligible callback (ad_unit/timestamp reject) is not granted") {
+            val rawQuery = "ad_unit=other-ad-unit&reward_amount=10&reward_item=coin&timestamp=1710000000123" +
+                "&transaction_id=txn-777&user_id=nonce-1&signature=sig&key_id=12345"
+            val callback = GoogleAdSsvCallback(
+                adUnit = "other-ad-unit", rewardAmount = 10, rewardItem = "coin", timestamp = 1710000000123L,
+                transactionId = "txn-777", userId = "nonce-1", signature = "sig", keyId = 12345L,
+                rawQueryString = rawQuery, signedPayload = rawQuery.substringBefore("&signature="),
+            )
+            whenever(googleAdSsvService.verifyAndStore(eq(rawQuery), any()))
+                .thenReturn(GoogleAdSsvVerificationResult(callback, newlyStored = false, eligibleForGranting = false))
+
+            mockMvc.perform(get("/api/ads/google/ssv?$rawQuery"))
+                .andExpect(status().isOk)
+
+            verify(adRewardService, never()).grantFromCallback(any(), any())
         }
 
         test("google ssv callback maps invalid callback to bad request") {

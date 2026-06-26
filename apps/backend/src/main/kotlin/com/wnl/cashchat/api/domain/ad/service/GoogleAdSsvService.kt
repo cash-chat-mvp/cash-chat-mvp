@@ -45,9 +45,9 @@ class GoogleAdSsvService(
             logger.warn(
                 "Google Ad SSV ad_unit mismatch — accepted without crediting (callback ad_unit={}, configured={})",
                 callback.adUnit,
-                properties.rewardedAdUnitIds,
+                properties.rewardedAdUnitIds.joinToString(","),
             )
-            return GoogleAdSsvVerificationResult(callback, newlyStored = false)
+            return GoogleAdSsvVerificationResult(callback, newlyStored = false, eligibleForGranting = false)
         }
 
         // timestamp 신선도 — 윈도우 밖이면 재생/지연 콜백으로 보고 '수신하되 적립하지 않음(200)'(미저장).
@@ -60,23 +60,23 @@ class GoogleAdSsvService(
                 properties.timestampTolerance,
                 properties.timestampFutureSkew,
             )
-            return GoogleAdSsvVerificationResult(callback, newlyStored = false)
+            return GoogleAdSsvVerificationResult(callback, newlyStored = false, eligibleForGranting = false)
         }
 
         val existingEvent = repository.findByTransactionId(callback.transactionId)
         if (existingEvent != null) {
             logIfCoreFieldsDiffer(callback, existingEvent)
-            return GoogleAdSsvVerificationResult(callback, newlyStored = false)
+            return GoogleAdSsvVerificationResult(callback, newlyStored = false, eligibleForGranting = true)
         }
 
         return try {
             repository.saveAndFlush(callback.toEntity())
-            GoogleAdSsvVerificationResult(callback, newlyStored = true)
+            GoogleAdSsvVerificationResult(callback, newlyStored = true, eligibleForGranting = true)
         } catch (exception: DataIntegrityViolationException) {
             val duplicateEvent = repository.findByTransactionId(callback.transactionId)
             if (duplicateEvent != null) {
                 logIfCoreFieldsDiffer(callback, duplicateEvent)
-                GoogleAdSsvVerificationResult(callback, newlyStored = false)
+                GoogleAdSsvVerificationResult(callback, newlyStored = false, eligibleForGranting = true)
             } else {
                 logger.error(
                     "Unexpected DataIntegrityViolationException for Google Ad SSV transaction {}",

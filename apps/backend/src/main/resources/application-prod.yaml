@@ -22,9 +22,8 @@ app:
   ads:
     google:
       # Android·iOS 보상형 광고 단위 ID 를 콤마로 구분해 나열한다(필수).
+      # timestamp-tolerance/future-skew 는 application.yaml 기본값(1h/5m)을 그대로 상속한다.
       rewarded-ad-unit-ids: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS}
-      timestamp-tolerance: ${APP_ADS_GOOGLE_TIMESTAMP_TOLERANCE:1h}
-      timestamp-future-skew: ${APP_ADS_GOOGLE_TIMESTAMP_FUTURE_SKEW:5m}
   offerwall:
     tnk:
       # 미설정 시 빈 값으로 기동(부팅 실패 방지). 빈 키면 해당 플랫폼 콜백이 모두 서명 실패로 거절(fail-closed).

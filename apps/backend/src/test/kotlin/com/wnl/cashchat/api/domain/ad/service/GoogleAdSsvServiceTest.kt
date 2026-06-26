@@ -193,6 +193,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         val result = service.verifyAndStore(rawQuery, now)
 
         result.newlyStored shouldBe false
+        result.eligibleForGranting shouldBe false
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
         verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
         verify(repository, never()).findByTransactionId(any())
@@ -316,6 +317,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         val result = service.verifyAndStore(rawQuery, later)
 
         result.newlyStored shouldBe false
+        result.eligibleForGranting shouldBe false
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
         verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
         verify(repository, never()).findByTransactionId(any())
@@ -334,6 +336,7 @@ class GoogleAdSsvServiceTest : FunSpec({
         val result = service.verifyAndStore(rawQuery, earlier)
 
         result.newlyStored shouldBe false
+        result.eligibleForGranting shouldBe false
         verify(signatureVerifier).verify(callback.signedPayload, callback.signature, callback.keyId)
         verify(repository, never()).saveAndFlush(any<GoogleAdSsvEvent>())
     }
