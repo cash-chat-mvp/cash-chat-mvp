@@ -12,6 +12,7 @@ class ApiException(
     companion object {
         const val INSUFFICIENT_ENERGY = "INSUFFICIENT_ENERGY"
         const val INSUFFICIENT_POINTS = "INSUFFICIENT_POINTS"
+        const val INSUFFICIENT_EVOLUTION_EXP = "INSUFFICIENT_EVOLUTION_EXP"
         const val ALREADY_MAX_LEVEL = "ALREADY_MAX_LEVEL"
         const val CONVERSATION_NOT_FOUND = "CONVERSATION_NOT_FOUND"
         const val UNKNOWN = "UNKNOWN"

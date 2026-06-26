@@ -1,11 +1,14 @@
 package com.nomadclub.cashchat.feature.chat.components
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -23,23 +27,45 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.markdownPadding
+import com.nomadclub.cashchat.feature.chat.ChatViewModel
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
+import org.koin.androidx.compose.koinViewModel
 
-/** 코인/밥 공용 칩 */
+/** 코인/밥 공용 칩 — pulseTick 이 증가하면 도착 펄스(1.0→1.15→1.0)를 재생한다. */
 @Composable
-fun StatChip(emoji: String, text: String, warning: Boolean = false) {
+fun StatChip(
+    emoji: String,
+    text: String,
+    warning: Boolean = false,
+    pulseTick: Int = 0,
+    modifier: Modifier = Modifier,
+) {
+    val scale = remember { Animatable(1f) }
+    LaunchedEffect(pulseTick) {
+        if (pulseTick > 0) {
+            scale.animateTo(1.15f, tween(120))
+            scale.animateTo(1f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+        }
+    }
     Surface(
+        modifier = modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value },
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
@@ -75,29 +101,47 @@ fun EnergyGauge(energy: Int, maxEnergy: Int, modifier: Modifier = Modifier) {
     }
 }
 
-/** 메시지 버블 */
+/** 메시지 버블. [onAssistantPositioned] 는 AI 답변 버블의 좌표를 보상 토큰 원점으로 보고한다. */
 @Composable
-fun MessageBubble(item: ChatItem) {
+fun MessageBubble(
+    item: ChatItem,
+    onAssistantPositioned: ((String, LayoutCoordinates) -> Unit)? = null,
+) {
     when (item) {
         is ChatItem.UserMessage -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Surface(
-                shape = RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp),
-                color = MaterialTheme.colorScheme.primary.copy(
-                    alpha = if (item.status == ChatItem.SendStatus.PENDING || item.status == ChatItem.SendStatus.BLOCKED) 0.55f else 1f,
-                ),
-            ) {
-                Text(
-                    item.text,
-                    Modifier.padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 280.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+            val badge = rememberUserMessageBadge(item.id)
+            Box {
+                if (badge != null) {
+                    ResourceDeltaBadge(
+                        eventId = badge.eventId,
+                        label = badge.label,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(y = (-12).dp),
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(
+                        alpha = if (item.status == ChatItem.SendStatus.PENDING || item.status == ChatItem.SendStatus.BLOCKED) 0.55f else 1f,
+                    ),
+                ) {
+                    Text(
+                        item.text,
+                        Modifier.padding(horizontal = 14.dp, vertical = 10.dp).widthIn(max = 280.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
         }
         is ChatItem.ProductCards -> ProductCardList(item)
         is ChatItem.NativeAd -> Unit
         is ChatItem.AssistantMessage -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
             Surface(
+                modifier = if (onAssistantPositioned != null) {
+                    Modifier.onGloballyPositioned { onAssistantPositioned(item.id, it) }
+                } else Modifier,
                 shape = RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
@@ -117,6 +161,15 @@ fun MessageBubble(item: ChatItem) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun rememberUserMessageBadge(messageId: String): ResourceDeltaBadgeModel? {
+    val viewModel: ChatViewModel = koinViewModel()
+    val latestResourceFeedback by viewModel.latestResourceFeedback.collectAsStateWithLifecycle()
+    return remember(latestResourceFeedback, messageId) {
+        latestResourceFeedback?.toResourceDeltaBadge(messageId)
     }
 }
 

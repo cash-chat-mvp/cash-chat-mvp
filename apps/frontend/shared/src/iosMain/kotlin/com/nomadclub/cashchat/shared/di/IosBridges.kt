@@ -11,6 +11,7 @@ import com.nomadclub.cashchat.shared.attendance.AttendanceUiState
 import com.nomadclub.cashchat.shared.attendance.CheckInRewardEvent
 import com.nomadclub.cashchat.shared.chat.ChatApi
 import com.nomadclub.cashchat.shared.chat.ChatStore
+import com.nomadclub.cashchat.shared.chat.ChatResourceFeedback
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudState
@@ -80,6 +81,10 @@ class FlowCollector {
 
     fun collectChatItems(store: ChatStore, onEach: (List<ChatItem>) -> Unit) {
         scope.launch { store.items.collect { onEach(it) } }
+    }
+
+    fun collectResourceFeedback(store: ChatStore, onEach: (ChatResourceFeedback) -> Unit) {
+        scope.launch { store.resourceFeedback.collect { onEach(it) } }
     }
 
     fun collectIsStreaming(store: ChatStore, onEach: (Boolean) -> Unit) {
