@@ -12,21 +12,25 @@ import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties.LevelRule
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
+import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.util.Optional
 
 class EvolutionServiceTest : FunSpec({
     lateinit var userEvolutionRepository: UserEvolutionRepository
     lateinit var evolutionAttemptRepository: EvolutionAttemptRepository
+    lateinit var userRepository: UserRepository
     lateinit var probabilityRoller: ProbabilityRoller
     lateinit var energyService: EnergyService
     lateinit var timingSessionStore: TimingSessionStore
@@ -49,6 +53,7 @@ class EvolutionServiceTest : FunSpec({
     beforeTest {
         userEvolutionRepository = mock()
         evolutionAttemptRepository = mock()
+        userRepository = mock()
         probabilityRoller = mock()
         energyService = mock()
         timingSessionStore = mock()
@@ -56,6 +61,7 @@ class EvolutionServiceTest : FunSpec({
         service = EvolutionService(
             userEvolutionRepository,
             evolutionAttemptRepository,
+            userRepository,
             probabilityRoller,
             properties,
             energyService,
@@ -74,6 +80,22 @@ class EvolutionServiceTest : FunSpec({
         state.isMaxLevel shouldBe false
         state.nextAttemptCost shouldBe 500L
         state.nextSuccessRate shouldBe 0.7
+    }
+
+    test("getState initializes evolution state for an existing user when missing") {
+        val user = user()
+        whenever(userEvolutionRepository.findByUserId(userId)).thenReturn(null)
+        whenever(userRepository.findById(userId)).thenReturn(Optional.of(user))
+        doAnswer { it.arguments[0] as UserEvolution }
+            .whenever(userEvolutionRepository).saveAndFlush(any())
+
+        val state = service.getState(userId)
+
+        state.level shouldBe 1
+        state.currentExp shouldBe 0L
+        verify(userEvolutionRepository).saveAndFlush(argThat<UserEvolution> {
+            this.user.id == userId && level == 1
+        })
     }
 
     test("getState at a level with no rule is reported as max") {

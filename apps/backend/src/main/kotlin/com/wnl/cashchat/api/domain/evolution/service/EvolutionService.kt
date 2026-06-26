@@ -8,6 +8,7 @@ import com.wnl.cashchat.api.domain.evolution.persistence.repository.EvolutionAtt
 import com.wnl.cashchat.api.domain.evolution.persistence.repository.UserEvolutionRepository
 import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
+import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional
 class EvolutionService(
     private val userEvolutionRepository: UserEvolutionRepository,
     private val evolutionAttemptRepository: EvolutionAttemptRepository,
+    private val userRepository: UserRepository,
     private val probabilityRoller: ProbabilityRoller,
     private val evolutionProperties: EvolutionProperties,
     private val energyService: EnergyService,
@@ -36,10 +38,9 @@ class EvolutionService(
     fun ensureInitialized(user: User): UserEvolution =
         userEvolutionRepository.findByUserId(user.id) ?: createInitial(user)
 
-    @Transactional(readOnly = true)
+    @Transactional
     fun getState(userId: Long): EvolutionStateResult {
-        val evo = userEvolutionRepository.findByUserId(userId)
-            ?: throw IllegalStateException("UserEvolution not initialized for userId=$userId")
+        val evo = userEvolutionRepository.findByUserId(userId) ?: initializeExistingUser(userId)
         val rule = evolutionProperties.ruleFor(evo.level)
         return EvolutionStateResult(
             level = evo.level,
@@ -134,6 +135,12 @@ class EvolutionService(
         } catch (e: DataIntegrityViolationException) {
             userEvolutionRepository.findByUserId(user.id) ?: throw e
         }
+
+    private fun initializeExistingUser(userId: Long): UserEvolution {
+        val user = userRepository.findById(userId)
+            .orElseThrow { IllegalStateException("User not found for userId=$userId") }
+        return ensureInitialized(user)
+    }
 
     private fun EvolutionAttempt.toResult() =
         EvolutionAttemptResult(
