@@ -101,7 +101,7 @@ jobs:
           APPLE_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
           APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
           APPLE_REDIRECT_URI: ${{ secrets.APPLE_REDIRECT_URI }}
-          APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID }}
+          APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS }}
           APP_OFFERWALL_TNK_ANDROID_APP_KEY: ${{ secrets.APP_OFFERWALL_TNK_ANDROID_APP_KEY }}
           APP_OFFERWALL_TNK_IOS_APP_KEY: ${{ secrets.APP_OFFERWALL_TNK_IOS_APP_KEY }}
           APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO: ${{ secrets.APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO }}
@@ -129,7 +129,7 @@ jobs:
             if [ -z "${APPLE_KEY_ID}" ]; then missing_vars+=("APPLE_KEY_ID"); fi
             if [ -z "${APPLE_PRIVATE_KEY}" ]; then missing_vars+=("APPLE_PRIVATE_KEY"); fi
             # APPLE_REDIRECT_URI is optional for the native iOS Sign in with Apple flow.
-            if [ -z "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID}" ]; then missing_vars+=("APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID"); fi
+            if [ -z "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS}" ]; then missing_vars+=("APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS"); fi
 
             if [ "${#missing_vars[@]}" -gt 0 ]; then
               echo "Missing required prod secrets: ${missing_vars[*]}" >&2
@@ -181,7 +181,7 @@ jobs:
             write_env "APPLE_KEY_ID" "${APPLE_KEY_ID}"
             write_env "APPLE_PRIVATE_KEY" "${APPLE_PRIVATE_KEY}"
             write_env "APPLE_REDIRECT_URI" "${APPLE_REDIRECT_URI}"
-            write_env "APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID" "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID}"
+            write_env "APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS" "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS}"
             write_env "APP_OFFERWALL_TNK_ANDROID_APP_KEY" "${APP_OFFERWALL_TNK_ANDROID_APP_KEY}"
             write_env "APP_OFFERWALL_TNK_IOS_APP_KEY" "${APP_OFFERWALL_TNK_IOS_APP_KEY}"
             write_env "APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO" "${APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO}"

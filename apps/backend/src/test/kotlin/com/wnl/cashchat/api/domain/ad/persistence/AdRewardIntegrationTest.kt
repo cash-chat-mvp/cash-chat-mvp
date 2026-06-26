@@ -56,13 +56,13 @@ class AdRewardIntegrationTest : FunSpec() {
 
     private fun callback(txnId: String, nonce: String) = GoogleAdSsvCallback(
         adUnit = "rewarded", rewardAmount = 10, rewardItem = "coin", timestamp = 1L,
-        transactionId = txnId, userId = nonce, signature = "sig", keyId = 1L,
+        transactionId = txnId, userId = null, customData = nonce, signature = "sig", keyId = 1L,
         rawQueryString = "raw-$txnId", signedPayload = "raw",
     )
 
     private fun storeEvent(txnId: String, nonce: String) =
         eventRepository.saveAndFlush(
-            GoogleAdSsvEvent(transactionId = txnId, userId = nonce, rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw-$txnId")
+            GoogleAdSsvEvent(transactionId = txnId, userId = null, rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw-$txnId", customData = nonce)
         )
 
     init {

@@ -19,6 +19,7 @@ class GoogleAdSsvQueryParser {
             key to decode(parameterValue(part))
         }
 
+        // 검증기가 raw·decoded 두 형태로 서명을 시도하므로 파서는 원문(raw)을 그대로 보존한다.
         val signedPayload = rawQuery.substringBefore("&signature=")
         if (signedPayload == rawQuery) {
             throw InvalidGoogleAdSsvCallbackException("Google Ad SSV query string must include signature")
@@ -32,7 +33,8 @@ class GoogleAdSsvQueryParser {
             timestamp = required(parameters, "timestamp").toLongOrNull()
                 ?: throw InvalidGoogleAdSsvCallbackException("Google Ad SSV timestamp must be numeric"),
             transactionId = required(parameters, "transaction_id"),
-            userId = required(parameters, "user_id"),
+            userId = parameters["user_id"]?.takeIf { it.isNotBlank() },
+            customData = parameters["custom_data"]?.takeIf { it.isNotBlank() },
             signature = required(parameters, "signature"),
             keyId = required(parameters, "key_id").toLongOrNull()
                 ?: throw InvalidGoogleAdSsvCallbackException("Google Ad SSV key_id must be numeric"),

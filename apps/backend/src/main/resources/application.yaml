@@ -21,7 +21,11 @@ spring:
       ddl-auto: validate
 
   datasource:
-    # url/username/password 는 프로파일/.env 에서 주입된다. 여기서는 풀 동작만 튜닝한다.
+    # url/username/password 는 운영/개발에서 .env(SPRING_DATASOURCE_*)로 주입된다. 미주입 시(테스트/로컬)
+    # H2 를 MySQL 호환 모드(MODE=MySQL)로 사용해, 운영 MySQL 과 동일한 DDL/문법으로 마이그레이션·테스트를 검증한다.
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:cashchat;MODE=MySQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
       maximum-pool-size: 20
       # 커넥션을 못 받을 때 30s(기본) 대신 5s 안에 fast-fail 시킨다 — 무응답(hang) 대신 명확한 에러.
@@ -43,7 +47,11 @@ app:
     google:
       ssv-public-keys-uri: ${APP_ADS_GOOGLE_SSV_PUBLIC_KEYS_URI:https://www.gstatic.com/admob/reward/verifier-keys.json}
       public-key-cache-ttl: ${APP_ADS_GOOGLE_PUBLIC_KEY_CACHE_TTL:24h}
-      rewarded-ad-unit-id: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID:}
+      # Android·iOS 보상형 광고 단위 ID 를 콤마로 구분해 나열한다. 비어 있으면 ad_unit 검증을 건너뛴다.
+      rewarded-ad-unit-ids: ${APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS:}
+      # 콜백 timestamp 신선도 윈도우. 과거 tolerance/미래 skew 밖이면 미적립(재생공격 방어).
+      timestamp-tolerance: ${APP_ADS_GOOGLE_TIMESTAMP_TOLERANCE:1h}
+      timestamp-future-skew: ${APP_ADS_GOOGLE_TIMESTAMP_FUTURE_SKEW:5m}
     reward:
       energy-amount: ${APP_ADS_REWARD_ENERGY_AMOUNT:3}
       daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}

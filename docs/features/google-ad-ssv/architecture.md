@@ -11,7 +11,7 @@
 
 오퍼월(TNK)이 "외부 전환 확정 후 비동기 통보"인 것과 구조가 비슷하지만, 리워드 광고는 "**광고 1회 시청 → 즉시 콜백 → 즉시 적립**"이다. 다만 콜백은 AdMob 서버에서 오므로 앱 화면에는 즉시 반영되지 않고, 앱이 잔액/quota를 재조회해야 한다.
 
-위조의 핵심 위험은 **"다른 사람의 userId로 콜백을 위조해 내 계정에 적립"** 이다. SSV의 `user_id` 필드는 클라이언트가 임의로 채울 수 있으므로, 백엔드는 이 값을 **직접 신뢰하지 않고** "서버가 광고 시청 직전 발급한 단일 사용 nonce"로만 받아 `nonce → 내부 userId`를 서버측에서 해석한다.
+위조의 핵심 위험은 **"다른 사람의 userId로 콜백을 위조해 내 계정에 적립"** 이다. SSV의 `custom_data` 필드(nonce 전달 경로)는 클라이언트가 임의로 채울 수 있으므로, 백엔드는 이 값을 **직접 신뢰하지 않고** "서버가 광고 시청 직전 발급한 단일 사용 nonce"로만 받아 `nonce → 내부 userId`를 서버측에서 해석한다. (SSV 프로토콜에 `user_id` 파라미터도 존재하지만 nonce 전달에는 사용하지 않는다.)
 
 ### 현재 구현 상태
 
@@ -19,17 +19,15 @@
 | ---- | ---- | ---- |
 | 백엔드 — SSV 콜백 서명 검증·이벤트 저장 | ✅ **구현 완료** | `GoogleAdSsvService.verifyAndStore` |
 | 백엔드 — nonce 발급·일일한도·코인 적립 | ✅ **구현 완료** | `AdRewardService.grantFromCallback`, `AdRewardNonceService` |
-| 프론트엔드 — nonce를 SSV `user_id`로 전달 | ⚠️ **불일치 (수정 필요)** | 현재 클라는 nonce를 `custom_data`로 보냄 → 백엔드는 `user_id`를 읽음. [`manual.md` §2](./manual.md) 참조 |
+| 프론트엔드 — nonce를 SSV `custom_data`로 전달 | ✅ **구현 완료** | Android `setCustomData`, iOS `customRewardString`. 백엔드도 `callback.customData`로 수신. |
 | 프론트엔드 — `issue-nonce` 호출·quota 연동 | 🚧 **부분/계획** | 광고 시청 전 nonce 발급 흐름 정비 필요 |
 | 운영 설정 — AdMob 콘솔 SSV URL 등록·광고단위 ID 주입 | 🚧 **예정** | [`manual.md` §3](./manual.md) 참조 |
-
-> **핵심 갭**: 백엔드는 nonce를 SSV `user_id`에서 읽도록 구현됐지만, 현재 앱 클라이언트(`RewardedAdManager`)는 nonce를 `custom_data`(`setCustomData`/`customRewardText`)로 싣는다. 이 위치 불일치를 해소(클라가 `setUserId`/`userIdentifier` 사용)하기 전까지 **실제 적립은 end-to-end로 동작하지 않는다.**
 
 ## 2. 구성 요소
 
 | 주체 | 역할 |
 | ---- | ---- |
-| **앱 클라이언트** (프론트엔드) | 광고 시청 직전 백엔드에서 nonce를 발급받아 AdMob SSV `user_id` 필드에 설정하고 보상형 광고를 노출한다. (현재 `custom_data`로 싣는 불일치 존재 — §1 갭) |
+| **앱 클라이언트** (프론트엔드) | 광고 시청 직전 백엔드에서 nonce를 발급받아 AdMob SSV `custom_data` 필드에 설정하고 보상형 광고를 노출한다 (Android: `setCustomData`, iOS: `customRewardString`). |
 | **AdMob SDK / AdMob 서버** | 광고를 제공하고, 시청 완료가 확정되면 AdMob 서버 → 우리 백엔드로 SSV 콜백(GET)을 서명과 함께 전송한다. |
 | **CashChat 백엔드** | nonce 발급 API, SSV 콜백 서명 검증·이벤트 저장, nonce→userId 해석·일일한도·코인 적립, quota 조회를 담당한다. |
 | **Google 공개키 서버** (`gstatic.com`) | SSV 서명 검증용 ECDSA 공개키 묶음(`verifier-keys.json`)을 제공한다. 백엔드가 캐시한다. |
@@ -61,7 +59,7 @@ flowchart LR
     FE -->|1. nonce 요청| NonceApi
     NonceApi <--> Nonce
     NonceApi -->|2. nonce| FE
-    FE -->|3. setUserId nonce| SDK
+    FE -->|3. setCustomData nonce| SDK
     SDK <-->|광고 로드| AdMob
     AdMob -->|4. SSV 콜백 GET| Ssv
     Ssv -->|서명 검증| GKeys
@@ -75,11 +73,11 @@ flowchart LR
 ## 3. 동작 흐름
 
 1. **nonce 발급** — 앱이 광고 시청 직전 `POST /api/ads/reward/issue-nonce`(JWT 인증)를 호출한다. 백엔드는 `ad_reward_nonce`에 `(nonce=UUID, userId, expiresAt=now+TTL, used=false)`를 INSERT하고 `{ nonce, expiresAt }`을 반환한다.
-2. **광고 노출** — 앱이 AdMob SDK로 보상형 광고를 로드·노출하며, 받은 nonce를 SSV `user_id` 필드에 설정한다(`setUserId`/`userIdentifier`).
+2. **광고 노출** — 앱이 AdMob SDK로 보상형 광고를 로드·노출하며, 받은 nonce를 SSV `custom_data` 필드에 설정한다(Android: `setCustomData`, iOS: `customRewardString`).
 3. **시청 완료** — 사용자가 광고를 끝까지 본다. AdMob이 시청을 확정한다.
-4. **SSV 콜백** — AdMob 서버가 `GET /api/ads/google/ssv?...&signature=...&key_id=...`로 콜백을 보낸다. 표준 파라미터: `ad_unit, reward_amount, reward_item, timestamp, transaction_id, user_id(=nonce), signature, key_id`.
+4. **SSV 콜백** — AdMob 서버가 `GET /api/ads/google/ssv?...&signature=...&key_id=...`로 콜백을 보낸다. 표준 파라미터: `ad_unit, reward_amount, reward_item, timestamp, transaction_id, user_id, custom_data(=nonce), signature, key_id`. (`user_id`는 SSV 프로토콜의 선택 파라미터로 파서가 수신하지만 nonce 전달에 사용하지 않는다.)
 5. **검증·저장** (`GoogleAdSsvService.verifyAndStore`, 무트랜잭션) — 쿼리스트링 파싱 → 광고단위 검증(설정 시) → `key_id`로 공개키 조회(캐시) → `SHA256withECDSA` 서명 검증 → `google_ad_ssv_events`에 저장(`transaction_id` 유니크로 dedup, 상태 `VERIFIED`). 결과(callback, newlyStored)를 반환한다. **이 단계는 적립하지 않는다.**
-6. **적립** (`AdRewardService.grantFromCallback`, 단일 `@Transactional`) — 이벤트를 비관적 락으로 재조회 → `callback.userId`(=nonce)를 `ad_reward_nonce`에서 락 조회해 내부 `userId` 해석 → 일일 한도 확인 → `UserPointService.recordTransaction`으로 **코인(서버 고정값) 적립** → 이벤트 상태 `GRANTED`.
+6. **적립** (`AdRewardService.grantFromCallback`, 단일 `@Transactional`) — 이벤트를 비관적 락으로 재조회 → `callback.customData`(=nonce)를 `ad_reward_nonce`에서 락 조회해 내부 `userId` 해석 → 일일 한도 확인 → `UserPointService.recordTransaction`으로 **코인(서버 고정값) 적립** → 이벤트 상태 `GRANTED`.
 7. **앱 반영** — 콜백은 AdMob 서버발이라 앱에 즉시 안 뜬다. 앱은 `GET /api/ads/reward/quota`/잔액 조회로 재조회해 반영한다.
 
 > **적립 코인**은 서버 설정값(`app.ads.reward.coin-amount`, 기본 40)을 쓴다. 콜백의 `reward_amount`(AdMob 콘솔 설정값)는 **신뢰·사용하지 않는다**(코인 이코노미는 서버 정책). 리워드 광고는 코인만 적립하며 energy·매출회계(ledger)는 적립하지 않는다(§5 참조).
@@ -102,7 +100,7 @@ sequenceDiagram
     FE->>API: POST /api/ads/reward/issue-nonce (JWT)
     API->>DB: ad_reward_nonce INSERT (nonce, userId, expiresAt, used=false)
     API-->>FE: { nonce, expiresAt }
-    FE->>SDK: setUserId(nonce) → 광고 노출
+    FE->>SDK: setCustomData(nonce) → 광고 노출
     SDK<->>AdMob: 광고 로드
     User->>SDK: 광고 끝까지 시청
 
@@ -118,7 +116,7 @@ sequenceDiagram
 
         Note over API,DB: 3단계 — 적립 (단일 @Transactional, 락 순서 event→nonce→quota→point)
         API->>DB: event 락 조회 (VERIFIED 인 것만 적립 시도)
-        API->>DB: ad_reward_nonce 락 조회 (user_id=nonce)
+        API->>DB: ad_reward_nonce 락 조회 (custom_data=nonce)
         alt nonce 없음 / 만료 / 이미 used
             API->>DB: event status=REJECTED_INVALID_NONCE
             API-->>AdMob: 200 (재시도 폭주 방지)
@@ -158,7 +156,7 @@ sequenceDiagram
 - `AdRewardService` — `grantFromCallback`(적립), `quotaOf`(조회).
 
 **테이블**
-- `google_ad_ssv_events` (V4): `transaction_id`(UNIQUE), `user_id`(=nonce, VARCHAR(128)), `reward_amount`, `reward_item`, `ad_unit`, `key_id`, `reward_status`, `raw_query_string`.
+- `google_ad_ssv_events` (V4): `transaction_id`(UNIQUE), `user_id`(VARCHAR(128), SSV 프로토콜 파라미터·optional), `custom_data`(VARCHAR(1024), =nonce), `reward_amount`, `reward_item`, `ad_unit`, `key_id`, `reward_status`, `raw_query_string`.
 - `ad_reward_nonce` (V5): `nonce`(PK, VARCHAR(64)), `user_id`(FK→users), `expires_at`, `used`.
 - `ad_reward_daily_quota` (V5): `(user_id, kst_date)`(PK), `used_count`.
 
@@ -169,12 +167,13 @@ sequenceDiagram
 콜백 엔드포인트는 인증 없는 public(AdMob 서버가 호출)이므로 위조·중복·동시성을 다음으로 방어한다.
 
 - **서명 검증 우선** — `key_id`로 받은 Google 공개키로 `SHA256withECDSA` 서명을 검증한다. 서명 페이로드는 `signature` 앞까지의 원본 쿼리스트링이라, 파서는 `signature`·`key_id`를 **마지막 두 파라미터로 강제**한다. 서명 실패 시 400 + 이벤트 미저장.
-- **nonce 신뢰 모델** — SSV `user_id`는 클라가 임의로 채우는 값이므로 직접 신뢰하지 않는다. 광고 시청 직전 서버가 발급한 **단일 사용·단기 TTL nonce**만 받아 `nonce → 내부 userId`를 서버측에서 해석한다. 위조된 `user_id`로 타인 계정에 적립되는 것을 막는다.
+- **nonce 신뢰 모델** — SSV `custom_data`는 클라가 임의로 채우는 값이므로 직접 신뢰하지 않는다. 광고 시청 직전 서버가 발급한 **단일 사용·단기 TTL nonce**만 받아 `nonce → 내부 userId`를 서버측에서 해석한다. 위조된 `custom_data`로 타인 계정에 적립되는 것을 막는다.
 - **멱등성 (이중 방어선)** — ① `google_ad_ssv_events.transaction_id` UNIQUE로 동일 콜백 dedup, ② 적립 멱등키 `admob:reward:{transactionId}`. AdMob 재전송에도 1회만 적립.
 - **동시성 / 락 순서** — 데드락 방지를 위해 **event → nonce → ad_reward_daily_quota → user_point** 순으로 비관적 쓰기 락을 획득한다. 동일 transactionId 동시 콜백의 상태 덮어쓰기(GRANTED→REJECTED)와, 동일 nonce 동시 요청의 중복 적립(TOCTOU)을 막는다.
 - **단일 사용 nonce** — 적립 성공 시 `used=true`. 한도 초과로 거절돼도 유효 nonce는 1회 시청에 소모된 것으로 보고 `used=true` 처리(재사용 차단). nonce 없음/만료/used → `REJECTED_INVALID_NONCE`.
 - **재시도 폭주 방지** — 서명만 통과했다면(거절 케이스 포함) AdMob에 **200**을 반환한다. 적립 실패(예: DB 예외)도 SSV 엔드포인트가 5xx를 던지지 않게 설계해 AdMob의 무한 재전송을 막는다. 단, **서명 실패는 400**, 공개키 일시 불가는 **503**.
-- **광고단위 검증(선택)** — `app.ads.google.rewarded-ad-unit-id`가 설정되면 콜백 `ad_unit`이 그 값과 일치해야 한다(불일치 400). 빈 값이면 검증을 건너뛴다.
+- **광고단위 검증(선택)** — `app.ads.google.rewarded-ad-unit-ids`(콤마 구분, Android·iOS)가 설정되면 콜백 `ad_unit`이 목록 중 하나와 일치해야 적립된다(불일치 시 200이되 미적립). 빈 값이면 검증을 건너뛴다.
+- **timestamp 신선도** — 콜백 `timestamp`가 `app.ads.google.timestamp-tolerance`(과거)/`timestamp-future-skew`(미래) 윈도우 밖이면 적립하지 않는다(200, 미저장). transaction_id 멱등성을 보완하는 재생공격 심층 방어.
 
 ## 6. 설계 이력 — 적립 경로 정리 (중요)
 
@@ -187,7 +186,7 @@ sequenceDiagram
 
 ## 7. 범위 외 & 후속 과제
 
-- **프론트엔드 통합** — nonce를 `custom_data`가 아니라 SSV `user_id`로 전달하도록 수정(§1 갭), `issue-nonce` 선행 호출·quota 연동·시청 후 잔액/quota 재조회. 상세 지침은 [`manual.md`](./manual.md).
+- **프론트엔드 통합** — nonce를 SSV `custom_data`로 전달하는 것은 이미 구현 완료(`setCustomData`/`customRewardString`). `issue-nonce` 선행 호출·quota 연동·시청 후 잔액/quota 재조회 정비. 상세 지침은 [`manual.md`](./manual.md).
 - **운영 설정** — AdMob 콘솔 SSV 콜백 URL 등록, 보상형 광고단위 ID 주입, 공개키 URI 확인. [`manual.md`](./manual.md).
 - **휴면 코드 정리** — `LedgerService`/`app.ledger.rewards.AD`가 ad 경로에서 더 이상 쓰이지 않음. 타 수익원에서 ledger를 쓸 계획이 없으면 제거 검토.
 - **energy 적립 여부 재확인** — 현재 리워드 광고는 코인만 적립. energy도 줄 정책이면 별도 설계 필요.
