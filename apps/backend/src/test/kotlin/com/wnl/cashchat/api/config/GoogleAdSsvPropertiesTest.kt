@@ -58,6 +58,14 @@ class GoogleAdSsvPropertiesTest : FunSpec({
         properties.isAllowedAdUnit("") shouldBe false
     }
 
+    test("treats ad unit ids that normalize to empty (trailing slash only) as validation disabled") {
+        // 잘못된 설정값(끝에 '/'만)은 정규화 시 ""가 되므로 allow-set 에서 걸러져야 한다.
+        val properties = GoogleAdSsvProperties(rewardedAdUnitIds = listOf("ca-app-pub-5280178196982923/"))
+
+        properties.isRewardedAdUnitValidationEnabled() shouldBe false
+        properties.isAllowedAdUnit("") shouldBe false
+    }
+
     test("rejects public key cache TTL longer than 24 hours") {
         val validator = Validation.buildDefaultValidatorFactory().validator
 

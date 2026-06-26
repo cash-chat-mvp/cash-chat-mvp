@@ -31,8 +31,8 @@ data class GoogleAdSsvProperties(
     // AdMob SSV 콜백의 ad_unit 은 숫자 부분만(예: 2647937531) 오는 반면 설정값은 전체 형식
     // (ca-app-pub-.../2647937531)이다. 양쪽 모두 마지막 '/' 뒤의 숫자 ID 로 정규화해 비교한다.
     private val allowedAdUnitIds: Set<String> = rewardedAdUnitIds
-        .filter { it.isNotBlank() }
         .map { it.normalizeAdUnitId() }
+        .filter { it.isNotBlank() }
         .toSet()
 
     fun isRewardedAdUnitValidationEnabled(): Boolean = allowedAdUnitIds.isNotEmpty()
