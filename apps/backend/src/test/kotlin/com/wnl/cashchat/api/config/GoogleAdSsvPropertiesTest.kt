@@ -39,8 +39,28 @@ class GoogleAdSsvPropertiesTest : FunSpec({
         properties.isAllowedAdUnit("ca-app-pub-5280178196982923/0000000000") shouldBe false
     }
 
+    test("allows callback ad_unit sent in AdMob's numeric-only form against full configured ids") {
+        // AdMob SSV 콜백은 ad_unit 을 숫자 부분만 보낸다(예: 2647937531)지만,
+        // 설정값은 전체 형식(ca-app-pub-.../2647937531)이다. 둘을 매칭해야 적립된다.
+        val android = "ca-app-pub-5280178196982923/6512984753"
+        val ios = "ca-app-pub-5280178196982923/2647937531"
+        val properties = GoogleAdSsvProperties(rewardedAdUnitIds = listOf(android, ios))
+
+        properties.isAllowedAdUnit("6512984753") shouldBe true
+        properties.isAllowedAdUnit("2647937531") shouldBe true
+        properties.isAllowedAdUnit("0000000000") shouldBe false
+    }
+
     test("treats blank-only ad unit ids as validation disabled") {
         val properties = GoogleAdSsvProperties(rewardedAdUnitIds = listOf("", "   "))
+
+        properties.isRewardedAdUnitValidationEnabled() shouldBe false
+        properties.isAllowedAdUnit("") shouldBe false
+    }
+
+    test("treats ad unit ids that normalize to empty (trailing slash only) as validation disabled") {
+        // 잘못된 설정값(끝에 '/'만)은 정규화 시 ""가 되므로 allow-set 에서 걸러져야 한다.
+        val properties = GoogleAdSsvProperties(rewardedAdUnitIds = listOf("ca-app-pub-5280178196982923/"))
 
         properties.isRewardedAdUnitValidationEnabled() shouldBe false
         properties.isAllowedAdUnit("") shouldBe false
