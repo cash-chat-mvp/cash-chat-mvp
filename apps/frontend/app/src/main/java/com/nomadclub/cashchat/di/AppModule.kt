@@ -9,6 +9,8 @@ import com.nomadclub.cashchat.core.network.DataStoreTokenProvider
 import com.nomadclub.cashchat.core.network.TokenAuthenticator
 import com.nomadclub.cashchat.data.repository.AuthRepository
 import com.nomadclub.cashchat.shared.core.network.TokenProvider
+import com.nomadclub.cashchat.shared.localllm.LocalChatStore
+import com.nomadclub.cashchat.shared.localllm.LocalLlmEngine
 import com.nomadclub.cashchat.shared.session.SessionResetter
 import com.nomadclub.cashchat.feature.auth.AuthViewModel
 import com.nomadclub.cashchat.feature.settings.SettingsViewModel
@@ -59,13 +61,34 @@ val appModule = module {
 
     // SessionResetter는 lazy로 전달해 DI 순환(HttpClient→TokenProvider→AuthRepository→SessionResetter
     // →PointsRepository→PointsApi→HttpClient)을 끊는다.
-    single { AuthRepository(get(), get(), get(), lazy { get<SessionResetter>() }) }
+    single { AuthRepository(get(), get(), get(), lazy { get<SessionResetter>() }, lazy { get<LocalChatStore>() }) }
 
     viewModel { AuthViewModel(get()) }
 
     viewModel { SettingsViewModel(get()) }
 
     viewModel { com.nomadclub.cashchat.feature.chat.ChatViewModel(get(), get(), get()) }
+
+    single<LocalLlmEngine> { com.nomadclub.cashchat.localllm.UnavailableLocalLlmEngine() }
+    single {
+        LocalChatStore(
+            engine = get(),
+            history = get(),
+            scope = get(),
+            modelSpec = get(),
+        )
+    }
+    viewModel {
+        com.nomadclub.cashchat.feature.chat.LocalChatViewModel(
+            modeStore = get(),
+            downloadStore = get(),
+            localChatStore = get(),
+            gemmaSpec = get(),
+            engineAvailability = com.nomadclub.cashchat.feature.chat.GemmaEngineAvailability.Unavailable(
+                "Gemma 실행 엔진은 아직 이 Android 빌드에 포함되지 않았어요.",
+            ),
+        )
+    }
 
     viewModel { com.nomadclub.cashchat.feature.chat.evolution.EvolutionViewModel(get(), get()) }
 

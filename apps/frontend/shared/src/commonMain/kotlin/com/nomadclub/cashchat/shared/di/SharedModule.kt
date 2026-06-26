@@ -14,6 +14,14 @@ import com.nomadclub.cashchat.shared.energy.EnergyApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudStore
+import com.nomadclub.cashchat.shared.localllm.ChatModeStore
+import com.nomadclub.cashchat.shared.localllm.DEFAULT_GEMMA_SPEC
+import com.nomadclub.cashchat.shared.localllm.GemmaModelSpec
+import com.nomadclub.cashchat.shared.localllm.JsonFileLocalChatHistory
+import com.nomadclub.cashchat.shared.localllm.KtorModelDownloader
+import com.nomadclub.cashchat.shared.localllm.LocalChatHistory
+import com.nomadclub.cashchat.shared.localllm.ModelDownloadStore
+import com.nomadclub.cashchat.shared.localllm.ModelDownloader
 import com.nomadclub.cashchat.shared.points.PointsRepository
 import com.nomadclub.cashchat.shared.points.RemotePointsRepository
 import com.nomadclub.cashchat.shared.session.SessionResetter
@@ -51,6 +59,17 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single<ChatGateway> { ApiChatGateway(get()) }
     single { ChatStore(get(), get(), get()) }
     single { HudStore(get(), get(), get(), get()) }
+    single { ChatModeStore() }
+    single<GemmaModelSpec> { DEFAULT_GEMMA_SPEC }
+    single<ModelDownloader> { KtorModelDownloader(get()) }
+    single {
+        ModelDownloadStore(
+            spec = get(),
+            downloader = get(),
+            scope = get(),
+        )
+    }
+    single<LocalChatHistory> { JsonFileLocalChatHistory() }
     single<com.nomadclub.cashchat.shared.roulette.RouletteRepository> {
         com.nomadclub.cashchat.shared.roulette.FakeRouletteRepository()
     }
@@ -81,5 +100,5 @@ fun sharedDataModule(rawBaseUrl: String) = module {
         )
     }
     // 로그아웃/세션 만료 시 사용자별 스토어를 일괄 초기화 (계정 전환 후 이전 사용자 데이터 노출 방지)
-    single { SessionResetter(get(), get(), get(), get(), get(), get()) }
+    single { SessionResetter(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 }

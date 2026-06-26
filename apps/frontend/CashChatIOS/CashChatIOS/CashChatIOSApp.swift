@@ -21,7 +21,8 @@ struct CashChatIOSApp: App {
         KoinIosKt.doInitKoin(
             baseUrl: AppConfig.apiBaseUrl,
             tokenProvider: KeychainTokenProvider(),
-            adChatInterval: Int64(AppConfig.adChatInterval)
+            adChatInterval: Int64(AppConfig.adChatInterval),
+            gemmaEngine: SwiftBackedLocalLlmEngine(bridge: GemmaLlmBridge())
         )
         // AdMob 초기화 (리워드 광고). 앱 생명주기당 1회.
         MobileAds.shared.start(completionHandler: nil)

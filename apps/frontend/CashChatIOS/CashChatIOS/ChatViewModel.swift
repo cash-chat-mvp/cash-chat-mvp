@@ -3,6 +3,50 @@ import SwiftUI
 import Combine
 import CashChatShared
 
+enum ChatModelSelection {
+    case cashAi
+    case gemma
+}
+
+struct GemmaDownloadPresentation {
+    let title: String
+    let body: String
+    let progress: Double?
+
+    init(state: ModelDownloadState?, engineUnavailableReason: String?) {
+        switch state {
+        case let ready as ModelDownloadStateReady:
+            if let engineUnavailableReason {
+                title = "Gemma 엔진 준비 필요"
+                body = engineUnavailableReason
+            } else {
+                title = "Gemma 모델 준비됨"
+                body = "온디바이스 대화를 시작할 수 있어요. \(ready.localPath)"
+            }
+            progress = nil
+        case let downloading as ModelDownloadStateDownloading:
+            let fraction = downloading.totalBytes > 0
+                ? Double(downloading.receivedBytes) / Double(downloading.totalBytes)
+                : 0
+            title = "Gemma 모델 다운로드 중"
+            body = "\(Int((fraction * 100).rounded()))% 완료"
+            progress = min(max(fraction, 0), 1)
+        case is ModelDownloadStateVerifying:
+            title = "Gemma 모델 확인 중"
+            body = "파일 무결성을 확인하고 있어요."
+            progress = nil
+        case let failed as ModelDownloadStateFailed:
+            title = "Gemma 모델 준비 실패"
+            body = failed.reason
+            progress = nil
+        default:
+            title = "Gemma 모델 다운로드 필요"
+            body = "처음 한 번 모델 파일을 내려받아야 해요."
+            progress = nil
+        }
+    }
+}
+
 /// 브랜치 shared `ChatStore` 를 감싸는 iOS 채팅 ViewModel.
 /// Flow 구독은 FlowCollector(메인 디스패처)로 브리지하고, deinit 에서 취소해 누수를 막는다.
 @MainActor
@@ -11,6 +55,16 @@ final class ChatViewModel: ObservableObject {
     @Published var isStreaming = false
     @Published var energyGateVisible = false
     @Published var conversations: [ConversationSummaryDto] = []
+    @Published var selectedModel: ChatModelSelection = .cashAi
+    @Published var modelDownloadState: ModelDownloadState? = nil
+    // 엔진(LiteRT-LM Swift)이 주입되므로 더 이상 "미포함" 사유가 아니다. 다운로드만 끝나면 대화 가능.
+    @Published var gemmaEngineUnavailableReason: String? = nil
+
+    /// Gemma 모드 입력 가능 여부 — 모델 파일이 준비(다운로드+검증 완료)됐을 때.
+    var gemmaModelReady: Bool { modelDownloadState is ModelDownloadStateReady }
+
+    /// 현재 모드에서 메시지를 보낼 수 있는지. Cash AI 는 항상, Gemma 는 모델 준비 후.
+    var canSend: Bool { selectedModel == .cashAi || gemmaModelReady }
 
     // HUD (에너지/레벨/포인트) — Android ChatScreen 톱바와 동일 정보.
     @Published var level: Int = 1
@@ -35,11 +89,31 @@ final class ChatViewModel: ObservableObject {
     @Published var gateRewardCoin: Int = 30
 
     private let store = KoinHelper().chatStore()
+    private let chatModeStore = KoinHelper().chatModeStore()
+    private let modelDownloadStore = KoinHelper().modelDownloadStore()
+    private let localChatStore = KoinHelper().localChatStore()
     private let chatApi = KoinHelper().chatApi()
     private let hudStore = KoinHelper().hudStore()
     private let adRewardStore = KoinHelper().adRewardStore()
     private let collector = FlowCollector()
     private var didLoad = false
+
+    // `items`/`isStreaming` 은 활성 모드(Cash AI ↔ Gemma)의 값을 보여준다.
+    // 각 스토어 구독은 항상 캐시에 쌓고, 활성 모드일 때만 표시 프로퍼티로 반영한다.
+    private var cashItems: [ChatItem] = []
+    private var localItems: [ChatItem] = []
+    private var cashStreaming = false
+    private var localStreaming = false
+
+    private func syncActiveMode() {
+        if selectedModel == .gemma {
+            items = localItems
+            isStreaming = localStreaming
+        } else {
+            items = cashItems
+            isStreaming = cashStreaming
+        }
+    }
 
     deinit {
         collector.cancel()
@@ -50,10 +124,44 @@ final class ChatViewModel: ObservableObject {
         guard !didLoad else { return }
         didLoad = true
         collector.collectChatItems(store: store) { [weak self] list in
-            Task { @MainActor in self?.items = list }
+            Task { @MainActor in
+                guard let self else { return }
+                self.cashItems = list
+                if self.selectedModel == .cashAi { self.items = list }
+            }
+        }
+        collector.collectChatMode(store: chatModeStore) { [weak self] mode in
+            Task { @MainActor in
+                guard let self else { return }
+                self.selectedModel = mode == ChatModelMode.gemmaLocal ? .gemma : .cashAi
+                self.syncActiveMode()
+            }
+        }
+        modelDownloadStore.refresh()
+        collector.collectModelDownloadState(store: modelDownloadStore) { [weak self] state in
+            Task { @MainActor in self?.modelDownloadState = state }
         }
         collector.collectIsStreaming(store: store) { [weak self] streaming in
-            Task { @MainActor in self?.isStreaming = streaming.boolValue }
+            Task { @MainActor in
+                guard let self else { return }
+                self.cashStreaming = streaming.boolValue
+                if self.selectedModel == .cashAi { self.isStreaming = streaming.boolValue }
+            }
+        }
+        // Gemma 온디바이스 채팅 — 활성 모드일 때만 표시에 반영.
+        collector.collectLocalChatItems(store: localChatStore) { [weak self] list in
+            Task { @MainActor in
+                guard let self else { return }
+                self.localItems = list
+                if self.selectedModel == .gemma { self.items = list }
+            }
+        }
+        collector.collectLocalStreaming(store: localChatStore) { [weak self] streaming in
+            Task { @MainActor in
+                guard let self else { return }
+                self.localStreaming = streaming.boolValue
+                if self.selectedModel == .gemma { self.isStreaming = streaming.boolValue }
+            }
         }
         collector.collectEnergyGate(store: store) { [weak self] visible in
             Task { @MainActor in
@@ -168,7 +276,31 @@ final class ChatViewModel: ObservableObject {
     func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        store.sendMessage(text: trimmed)
+        switch selectedModel {
+        case .cashAi:
+            store.sendMessage(text: trimmed)
+        case .gemma:
+            // 모델 파일이 준비됐을 때만 전송(엔진은 첫 전송 시 lazy 로드, ~10초).
+            guard gemmaModelReady else { return }
+            localChatStore.sendMessage(text: trimmed)
+        }
+    }
+
+    func selectModel(_ selection: ChatModelSelection) {
+        switch selection {
+        case .cashAi:
+            chatModeStore.select(mode: ChatModelMode.cashAi)
+        case .gemma:
+            chatModeStore.select(mode: ChatModelMode.gemmaLocal)
+        }
+    }
+
+    func startGemmaDownload() {
+        modelDownloadStore.start()
+    }
+
+    func cancelGemmaDownload() {
+        modelDownloadStore.cancel()
     }
 
     func startNew() {
