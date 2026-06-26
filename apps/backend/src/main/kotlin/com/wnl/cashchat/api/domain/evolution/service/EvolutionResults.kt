@@ -15,6 +15,15 @@ data class EvolutionAttemptResult(
     val fromLevel: Int,
     val resultLevel: Int,
     val cost: Long,
+    val timingGrade: TimingGrade? = null,
+    val timingBonusRate: Double? = null,
+    val baseSuccessRate: Double? = null,
+    val finalSuccessRate: Double? = null,
+)
+
+data class TimingAttemptCommand(
+    val sessionId: String,
+    val releasedAtMs: Long,
 )
 
 data class EvolutionAttemptRecordResult(

@@ -1,8 +1,11 @@
 package com.wnl.cashchat.api.domain.evolution.persistence.entity
 
 import com.wnl.cashchat.api.common.entity.BaseEntity
+import com.wnl.cashchat.api.domain.evolution.service.TimingGrade
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.EnumType
+import jakarta.persistence.Enumerated
 import jakarta.persistence.GeneratedValue
 import jakarta.persistence.GenerationType
 import jakarta.persistence.Id
@@ -45,4 +48,17 @@ class EvolutionAttempt(
 
     @Column(name = "idempotency_key", nullable = false, length = 255)
     val idempotencyKey: String,
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "timing_grade")
+    val timingGrade: TimingGrade? = null,
+
+    @Column(name = "timing_bonus_rate")
+    val timingBonusRate: Double? = null,
+
+    @Column(name = "base_success_rate")
+    val baseSuccessRate: Double? = null,
+
+    @Column(name = "final_success_rate")
+    val finalSuccessRate: Double? = null,
 ) : BaseEntity()

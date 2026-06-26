@@ -2,6 +2,7 @@ package com.wnl.cashchat.api.domain.evolution.web.controller
 
 import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
+import com.wnl.cashchat.api.domain.evolution.service.TimingAttemptCommand
 import com.wnl.cashchat.api.domain.evolution.service.TimingSessionStore
 import com.wnl.cashchat.api.domain.evolution.web.request.EvolutionAttemptRequest
 import com.wnl.cashchat.api.domain.evolution.web.response.EvolutionAttemptResponse
@@ -39,7 +40,11 @@ class EvolutionController(
         @Valid @RequestBody request: EvolutionAttemptRequest,
     ): EvolutionAttemptResponse =
         EvolutionAttemptResponse.from(
-            evolutionService.attempt(authentication.userId(), request.idempotencyKey)
+            evolutionService.attempt(
+                authentication.userId(),
+                request.idempotencyKey,
+                request.timing?.let { TimingAttemptCommand(it.sessionId, it.releasedAtMs) },
+            )
         )
 
     @GetMapping("/attempts")

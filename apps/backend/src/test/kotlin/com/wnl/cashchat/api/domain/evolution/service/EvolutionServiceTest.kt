@@ -29,6 +29,8 @@ class EvolutionServiceTest : FunSpec({
     lateinit var evolutionAttemptRepository: EvolutionAttemptRepository
     lateinit var probabilityRoller: ProbabilityRoller
     lateinit var energyService: EnergyService
+    lateinit var timingSessionStore: TimingSessionStore
+    lateinit var evolutionTimingJudge: EvolutionTimingJudge
     lateinit var service: EvolutionService
 
     val userId = 1L
@@ -49,12 +51,16 @@ class EvolutionServiceTest : FunSpec({
         evolutionAttemptRepository = mock()
         probabilityRoller = mock()
         energyService = mock()
+        timingSessionStore = mock()
+        evolutionTimingJudge = mock()
         service = EvolutionService(
             userEvolutionRepository,
             evolutionAttemptRepository,
             probabilityRoller,
             properties,
             energyService,
+            timingSessionStore,
+            evolutionTimingJudge,
         )
         whenever(evolutionAttemptRepository.findByUserIdAndIdempotencyKey(any(), any())).thenReturn(null)
     }
@@ -196,5 +202,56 @@ class EvolutionServiceTest : FunSpec({
         records[0].resultLevel shouldBe 3
         records[0].cost shouldBe 1200L
         records[0].attemptedAt shouldBe now
+    }
+
+    test("timing attempt consumes session, judges, and uses final success rate") {
+        val evolution = evo(level = 1, exp = 1000L)
+        whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(evolution)
+        val started = java.time.Instant.parse("2026-06-26T00:00:00Z")
+        whenever(timingSessionStore.consume(eq("sess-1"), eq(userId), any())).thenReturn(
+            TimingSession("sess-1", userId, started, started.plusSeconds(120))
+        )
+        whenever(evolutionTimingJudge.judge(eq(900L), any(), eq(0.7))).thenReturn(
+            TimingJudgement(TimingGrade.PERFECT, 0.10, 0.7, 0.8)
+        )
+        whenever(probabilityRoller.succeeds(0.8)).thenReturn(true)
+
+        val result = service.attempt(userId, "key-t1", TimingAttemptCommand("sess-1", 900L))
+
+        result.success shouldBe true
+        result.timingGrade shouldBe TimingGrade.PERFECT
+        result.timingBonusRate shouldBe 0.10
+        result.baseSuccessRate shouldBe 0.7
+        result.finalSuccessRate shouldBe 0.8
+        verify(probabilityRoller).succeeds(0.8)
+    }
+
+    test("legacy attempt without timing uses base rule rate and null timing fields") {
+        val evolution = evo(level = 1, exp = 1000L)
+        whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(evolution)
+        whenever(probabilityRoller.succeeds(0.7)).thenReturn(true)
+
+        val result = service.attempt(userId, "key-l1", null)
+
+        result.timingGrade shouldBe null
+        result.finalSuccessRate shouldBe null
+        verify(timingSessionStore, never()).consume(any(), any(), any())
+    }
+
+    test("duplicate timing key returns stored judgement without consuming session again") {
+        val evolution = evo(level = 1, exp = 1000L)
+        whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(evolution)
+        whenever(evolutionAttemptRepository.findByUserIdAndIdempotencyKey(userId, "key-t2")).thenReturn(
+            EvolutionAttempt(
+                userId = userId, fromLevel = 1, cost = 500, success = true, resultLevel = 2, idempotencyKey = "key-t2",
+                timingGrade = TimingGrade.GREAT, timingBonusRate = 0.05, baseSuccessRate = 0.7, finalSuccessRate = 0.75,
+            )
+        )
+
+        val result = service.attempt(userId, "key-t2", TimingAttemptCommand("sess-x", 720L))
+
+        result.timingGrade shouldBe TimingGrade.GREAT
+        result.finalSuccessRate shouldBe 0.75
+        verify(timingSessionStore, never()).consume(any(), any(), any())
     }
 })

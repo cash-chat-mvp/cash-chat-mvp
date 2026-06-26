@@ -15,6 +15,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest
 import org.springframework.boot.test.mock.mockito.MockBean
 import org.springframework.context.annotation.Import
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
+import org.springframework.http.MediaType
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
@@ -86,6 +87,36 @@ class EvolutionControllerTest : FunSpec() {
                 .andExpect(jsonPath("$.serverStartedAt").value("2026-06-26T00:00:00Z"))
                 .andExpect(jsonPath("$.minimumHoldMs").value(600))
                 .andExpect(jsonPath("$.cycleDurationMs").value(1800))
+        }
+
+        test("POST /attempt with timing returns judged rates") {
+            whenever(evolutionService.attempt(eq(1L), eq("key-1"), any())).thenReturn(
+                com.wnl.cashchat.api.domain.evolution.service.EvolutionAttemptResult(
+                    success = true, fromLevel = 2, resultLevel = 3, cost = 1200,
+                    timingGrade = com.wnl.cashchat.api.domain.evolution.service.TimingGrade.PERFECT,
+                    timingBonusRate = 0.10, baseSuccessRate = 0.65, finalSuccessRate = 0.75,
+                )
+            )
+            val body = """{"idempotencyKey":"key-1","timing":{"sessionId":"s1","releasedAtMs":900}}"""
+            mockMvc.perform(
+                post("/api/evolution/attempt").principal(principal)
+                    .contentType(MediaType.APPLICATION_JSON).content(body)
+            )
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.timingGrade").value("PERFECT"))
+                .andExpect(jsonPath("$.finalSuccessRate").value(0.75))
+        }
+
+        test("POST /attempt with invalid timing session returns 422 INVALID_TIMING_SESSION") {
+            whenever(evolutionService.attempt(eq(1L), eq("key-2"), any()))
+                .thenThrow(com.wnl.cashchat.api.domain.evolution.exception.InvalidTimingSessionException())
+            val body = """{"idempotencyKey":"key-2","timing":{"sessionId":"bad","releasedAtMs":900}}"""
+            mockMvc.perform(
+                post("/api/evolution/attempt").principal(principal)
+                    .contentType(MediaType.APPLICATION_JSON).content(body)
+            )
+                .andExpect(status().isUnprocessableEntity)
+                .andExpect(jsonPath("$.code").value("INVALID_TIMING_SESSION"))
         }
     }
 }

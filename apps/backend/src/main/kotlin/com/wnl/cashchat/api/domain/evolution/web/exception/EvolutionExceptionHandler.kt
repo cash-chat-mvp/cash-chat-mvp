@@ -3,6 +3,7 @@ package com.wnl.cashchat.api.domain.evolution.web.exception
 import com.wnl.cashchat.api.common.web.response.ErrorResponse
 import com.wnl.cashchat.api.domain.evolution.exception.AlreadyMaxLevelException
 import com.wnl.cashchat.api.domain.evolution.exception.InsufficientEvolutionExpException
+import com.wnl.cashchat.api.domain.evolution.exception.InvalidTimingSessionException
 import jakarta.validation.ConstraintViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -26,4 +27,9 @@ class EvolutionExceptionHandler {
     fun handleConstraintViolation(e: ConstraintViolationException): ResponseEntity<ErrorResponse> =
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(ErrorResponse("INVALID_PARAMETER", e.message ?: "Invalid request parameter"))
+
+    @ExceptionHandler(InvalidTimingSessionException::class)
+    fun handleInvalidTimingSession(e: InvalidTimingSessionException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+            .body(ErrorResponse("INVALID_TIMING_SESSION", e.message ?: "Invalid or expired timing session"))
 }
