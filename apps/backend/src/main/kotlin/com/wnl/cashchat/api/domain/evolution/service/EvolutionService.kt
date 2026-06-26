@@ -83,7 +83,11 @@ class EvolutionService(
         val rule = evolutionProperties.ruleFor(evo.level) ?: throw AlreadyMaxLevelException()
         val fromLevel = evo.level
 
-        // 타이밍 판정(있으면): 세션 소비(1회용) → 변조검증/등급 → 최종 확률. 비용 차감 전에 수행.
+        // 경험치 차감을 먼저 수행한다: 부족(InsufficientEvolutionExp)이면 여기서 롤백되어
+        // 1회용 타이밍 세션(인메모리, 트랜잭션 비참여)이 소비되지 않는다.
+        evo.spendExp(rule.attemptCost)
+
+        // 타이밍 판정(있으면): 세션 소비(1회용) → 변조검증/등급 → 최종 확률.
         val judgement = timing?.let {
             val now = java.time.Instant.now()
             val session = timingSessionStore.consume(it.sessionId, userId, now)
@@ -91,8 +95,6 @@ class EvolutionService(
             evolutionTimingJudge.judge(it.releasedAtMs, elapsed, rule.successRate)
         }
         val effectiveRate = judgement?.finalSuccessRate ?: rule.successRate
-
-        evo.spendExp(rule.attemptCost)
 
         val success = probabilityRoller.succeeds(effectiveRate)
         if (success) {

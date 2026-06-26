@@ -23,12 +23,29 @@ class TimingSessionStoreTest : FunSpec({
         }
     }
 
-    test("consuming another user's session is rejected") {
+    test("consuming another user's session is rejected and does not destroy the owner's session") {
         val store = TimingSessionStore(config)
         val session = store.issue(userId = 1L)
         shouldThrow<InvalidTimingSessionException> {
             store.consume(session.sessionId, userId = 2L, now = session.serverStartedAt.plusSeconds(1))
         }
+        // 오너 불일치 요청이 세션을 소모해선 안 된다 — 원래 사용자(1L)는 여전히 consume 할 수 있어야 한다.
+        val consumed = store.consume(session.sessionId, userId = 1L, now = session.serverStartedAt.plusSeconds(1))
+        consumed.sessionId shouldBe session.sessionId
+    }
+
+    test("expired unconsumed sessions are swept on next issue (no leak)") {
+        val fastConfig = config.copy(sessionTtl = Duration.ofMillis(1))
+        val store = TimingSessionStore(fastConfig)
+        val stale = store.issue(userId = 1L)
+        Thread.sleep(10)
+        store.issue(userId = 2L) // 발급 시 만료분 스윕
+
+        // now 를 만료 전으로 줘도 'Unknown'이 떠야 스윕으로 제거됐음이 증명된다(아직 있었다면 성공했을 것).
+        val ex = shouldThrow<InvalidTimingSessionException> {
+            store.consume(stale.sessionId, userId = 1L, now = stale.serverStartedAt)
+        }
+        ex.message shouldBe "Unknown timing session"
     }
 
     test("expired session is rejected") {

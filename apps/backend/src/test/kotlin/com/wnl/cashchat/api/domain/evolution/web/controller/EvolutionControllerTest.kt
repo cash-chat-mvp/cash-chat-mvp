@@ -107,6 +107,16 @@ class EvolutionControllerTest : FunSpec() {
                 .andExpect(jsonPath("$.finalSuccessRate").value(0.75))
         }
 
+        test("POST /attempt with blank idempotencyKey returns 400 INVALID_PARAMETER") {
+            val body = """{"idempotencyKey":""}"""
+            mockMvc.perform(
+                post("/api/evolution/attempt").principal(principal)
+                    .contentType(MediaType.APPLICATION_JSON).content(body)
+            )
+                .andExpect(status().isBadRequest)
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        }
+
         test("POST /attempt with invalid timing session returns 422 INVALID_TIMING_SESSION") {
             whenever(evolutionService.attempt(eq(1L), eq("key-2"), any()))
                 .thenThrow(com.wnl.cashchat.api.domain.evolution.exception.InvalidTimingSessionException())

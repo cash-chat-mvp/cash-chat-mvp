@@ -160,6 +160,18 @@ class EvolutionServiceTest : FunSpec({
         verify(energyService, never()).applyPostEvolutionBoost(any())
     }
 
+    test("insufficient exp does not consume the one-time timing session") {
+        val evolution = evo(level = 1, exp = 100L)
+        whenever(userEvolutionRepository.findByUserIdForUpdate(userId)).thenReturn(evolution)
+
+        shouldThrow<InsufficientEvolutionExpException> {
+            service.attempt(userId, "key-t-insufficient", TimingAttemptCommand("sess-1", 900L))
+        }
+
+        // 차감이 먼저 실패해 롤백되므로 인메모리 세션은 보존돼야 한다(이중 손실 방지).
+        verify(timingSessionStore, never()).consume(any(), any(), any())
+    }
+
     test("getState exposes current evolution exp") {
         val evolution = UserEvolution(user = user(), level = 1).apply { addExp(750L) }
         whenever(userEvolutionRepository.findByUserId(userId)).thenReturn(evolution)

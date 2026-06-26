@@ -7,6 +7,7 @@ import com.wnl.cashchat.api.domain.evolution.exception.InvalidTimingSessionExcep
 import jakarta.validation.ConstraintViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 
@@ -27,6 +28,18 @@ class EvolutionExceptionHandler {
     fun handleConstraintViolation(e: ConstraintViolationException): ResponseEntity<ErrorResponse> =
         ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(ErrorResponse("INVALID_PARAMETER", e.message ?: "Invalid request parameter"))
+
+    // @Valid @RequestBody(중첩 TimingAttemptRequest 포함) 검증 실패는 ConstraintViolation 이 아닌
+    // MethodArgumentNotValidException 으로 던져지므로 동일한 INVALID_PARAMETER 계약으로 매핑한다.
+    @ExceptionHandler(MethodArgumentNotValidException::class)
+    fun handleMethodArgumentNotValid(e: MethodArgumentNotValidException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(
+                ErrorResponse(
+                    "INVALID_PARAMETER",
+                    e.bindingResult.fieldErrors.firstOrNull()?.defaultMessage ?: "Invalid request parameter",
+                )
+            )
 
     @ExceptionHandler(InvalidTimingSessionException::class)
     fun handleInvalidTimingSession(e: InvalidTimingSessionException): ResponseEntity<ErrorResponse> =
