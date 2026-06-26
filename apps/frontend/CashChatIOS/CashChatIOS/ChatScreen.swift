@@ -157,6 +157,11 @@ struct ChatScreen: View {
             Text(presentation.body)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if let blockedMessage = vm.gemmaSendBlockedMessage {
+                Text(blockedMessage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+            }
             if let progress = presentation.progress {
                 ProgressView(value: progress)
             }
@@ -346,8 +351,9 @@ struct ChatScreen: View {
 
     private func sendCurrent() {
         let text = input
-        input = ""
-        vm.send(text)
+        if vm.send(text) {
+            input = ""
+        }
     }
 
     /// 어시스턴트 응답의 인라인 마크다운(**굵게**, *기울임*, `코드`, 링크)을 렌더한다.

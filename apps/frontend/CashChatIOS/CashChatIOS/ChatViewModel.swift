@@ -59,6 +59,7 @@ final class ChatViewModel: ObservableObject {
     @Published var modelDownloadState: ModelDownloadState? = nil
     // 엔진(LiteRT-LM Swift)이 주입되므로 더 이상 "미포함" 사유가 아니다. 다운로드만 끝나면 대화 가능.
     @Published var gemmaEngineUnavailableReason: String? = nil
+    @Published var gemmaSendBlockedMessage: String? = nil
 
     /// Gemma 모드 입력 가능 여부 — 모델 파일이 준비(다운로드+검증 완료)됐을 때.
     var gemmaModelReady: Bool { modelDownloadState is ModelDownloadStateReady }
@@ -139,7 +140,12 @@ final class ChatViewModel: ObservableObject {
         }
         modelDownloadStore.refresh()
         collector.collectModelDownloadState(store: modelDownloadStore) { [weak self] state in
-            Task { @MainActor in self?.modelDownloadState = state }
+            Task { @MainActor in
+                self?.modelDownloadState = state
+                if state is ModelDownloadStateReady {
+                    self?.gemmaSendBlockedMessage = nil
+                }
+            }
         }
         collector.collectIsStreaming(store: store) { [weak self] streaming in
             Task { @MainActor in
@@ -273,16 +279,24 @@ final class ChatViewModel: ObservableObject {
         store.dismissEnergyGate()
     }
 
-    func send(_ text: String) {
+    @discardableResult
+    func send(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return false }
         switch selectedModel {
         case .cashAi:
+            gemmaSendBlockedMessage = nil
             store.sendMessage(text: trimmed)
+            return true
         case .gemma:
             // 모델 파일이 준비됐을 때만 전송(엔진은 첫 전송 시 lazy 로드, ~10초).
-            guard gemmaModelReady else { return }
+            guard gemmaModelReady else {
+                gemmaSendBlockedMessage = "Gemma 모델 다운로드와 검증이 끝난 뒤 전송할 수 있어요."
+                return false
+            }
+            gemmaSendBlockedMessage = nil
             localChatStore.sendMessage(text: trimmed)
+            return true
         }
     }
 
