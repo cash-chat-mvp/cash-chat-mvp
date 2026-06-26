@@ -190,6 +190,7 @@ sequenceDiagram
     else 검증 성공
         API->>DB: google_ad_ssv_events UPSERT (VERIFIED)
         Note over API,DB: 3단계 — 적립 (단일 TX · 락: event→nonce→quota→point)
+        API->>DB: event 락 조회 (VERIFIED 인 것만)
         API->>DB: ad_reward_nonce 락 조회 (custom_data=nonce)
         alt nonce 없음/만료/used
             API->>DB: status=REJECTED_INVALID_NONCE

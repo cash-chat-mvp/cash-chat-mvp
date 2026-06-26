@@ -68,7 +68,9 @@ fun isTimestampFresh(timestampMillis: Long, now: Instant): Boolean {
 - 시그니처를 `verifyAndStore(rawQueryString: String?, now: Instant)`로 변경.
 - 검증 순서: **서명(보안 경계)** → ad_unit 허용목록 → **timestamp 신선도**.
   ad_unit·timestamp 게이트는 모두 "수신하되 적립하지 않음(미저장, 200)" 으로 처리.
-- 신선도 실패 시 WARN 로그(콜백 timestamp, 현재 시각/델타, 윈도우) 후 `GoogleAdSsvVerificationResult(callback, newlyStored = false)` 반환.
+- 신선도 실패 시 WARN 로그(콜백 timestamp, 현재 시각/델타, 윈도우) 후 `GoogleAdSsvVerificationResult(callback, newlyStored = false, eligibleForGranting = false)` 반환.
+  (PR 리뷰 반영: 결과에 `eligibleForGranting` 플래그를 두어 ad_unit 불일치·timestamp 윈도우 밖 같은 하드 거절 게이트는 `false` →
+  컨트롤러가 `grantFromCallback` 의 무의미한 행 락 조회를 건너뛴다. 신규 저장·기존 이벤트 재시도는 `true`.)
 
 ### 4.3 `GoogleAdSsvController`
 

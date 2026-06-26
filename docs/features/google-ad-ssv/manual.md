@@ -86,14 +86,14 @@ https://<도메인>/api/ads/google/ssv
 
 이 도구는 **URL이 200을 반환하는지(도달성)만** 검증한다. 적립 로직 정확성은 보지 않는다.
 
-- **HTTP 200 받기**: "사용자 ID" 칸에 **아무 non-blank 값**(임의 문자열 가능 — 이제 숫자 강제 없음)을 넣고 확인 → 서명만 통과하면 200("확인된 URL 사용" 활성화). **비워두면** `missing user_id`로 400.
+- **HTTP 200 받기**: 서명만 통과하면 200("확인된 URL 사용" 활성화). "사용자 ID"(user_id) 칸은 **비워도 무방**하다 — user_id 는 옵셔널이라 미입력해도 400 이 아니다(nonce 는 custom_data 로 전달).
 - **실제 적립까지 검증하기**(웹 도구로 가능):
   1. JWT로 `POST /api/ads/reward/issue-nonce` 호출 → `nonce` 획득.
   2. 그 **nonce 문자열을 "사용자 맞춤 데이터"(custom data) 칸에 붙여넣고** (TTL 10분 내) 확인.
-  3. 결과: 서명 ✓ → nonce 유효 → 한도 내 → **코인 적립 + `reward_status=GRANTED`**.
+  3. 결과: 서명 ✓ → nonce 유효 → 한도 내 → **밥(energy) 적립 + `reward_status=GRANTED`**.
   - 재시도하려면 매번 **새 nonce** 발급(단일 사용).
 
-> 이메일/숫자 등 nonce가 아닌 값은 200은 나오지만 `REJECTED_INVALID_NONCE`로 기록되고 코인은 적립되지 않는다.
+> 이메일/숫자 등 nonce가 아닌 값은 200은 나오지만 `REJECTED_INVALID_NONCE`로 기록되고 밥(energy)은 적립되지 않는다.
 
 ### 4.2 적립 결과 확인 (DB)
 
@@ -101,7 +101,7 @@ https://<도메인>/api/ads/google/ssv
 | --------- | ---- |
 | `google_ad_ssv_events.reward_status` | `GRANTED`(적립됨) / `REJECTED_INVALID_NONCE` / `REJECTED_OVER_QUOTA` / `VERIFIED`(적립 미결정) |
 | `ad_reward_nonce.used` | 적립/소모 시 `true` |
-| `point_transaction` (key=`admob:reward:{transactionId}`) | 코인 적립 1행 |
+| `user_energy` (사용자 밥 잔액) | 적립 시 `energy-amount` 만큼 증가(상한 초과분은 잘림) |
 | 애플리케이션 로그 | `Invalid Google Ad SSV callback: ...`에 400 사유 명시 |
 
 ### 4.3 자동화 테스트 (백엔드)
@@ -134,7 +134,7 @@ cd apps/backend
 | `app.ads.google.timestamp-tolerance` | `APP_ADS_GOOGLE_TIMESTAMP_TOLERANCE` | `1h` | 콜백 timestamp 과거 허용폭(초과 시 미적립) |
 | `app.ads.google.timestamp-future-skew` | `APP_ADS_GOOGLE_TIMESTAMP_FUTURE_SKEW` | `5m` | 콜백 timestamp 미래 허용폭(시계 오차) |
 | `app.ads.google.rewarded-ad-unit-ids` | `APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS` | `` (빈값) | 콜백 `ad_unit` 허용 목록(콤마 구분, Android·iOS). 빈값이면 검증 스킵 |
-| `app.ads.reward.coin-amount` | `APP_ADS_REWARD_COIN_AMOUNT` | `40` | 시청당 적립 코인(서버 고정, `reward_amount` 미신뢰) |
+| `app.ads.reward.energy-amount` | `APP_ADS_REWARD_ENERGY_AMOUNT` | `3` | 시청당 적립 밥(energy)(서버 고정, `reward_amount` 미신뢰) |
 | `app.ads.reward.daily-limit` | `APP_ADS_REWARD_DAILY_LIMIT` | `10` | 사용자당 1일 시청 한도(KST 자정 리셋) |
 | `app.ads.reward.nonce-ttl` | `APP_ADS_REWARD_NONCE_TTL` | `10m` | nonce 유효 시간 |
 
@@ -144,7 +144,6 @@ cd apps/backend
 
 | 증상 | 원인 | 조치 |
 | ---- | ---- | ---- |
-| 콘솔 테스트 **400** "Url error" | `user_id` 비움 → `missing user_id` | 사용자 ID 칸에 값 입력 |
 | 콜백 **400** | 서명 검증 실패 / 쿼리스트링 변형 / percent 인코딩 깨짐 | 프록시가 쿼리스트링 원본 보존하는지 확인 |
 | 콜백 **200**인데 미적립 | `ad_unit`이 `rewarded-ad-unit-ids` 목록에 없음 | 설정 목록에 Android·iOS 광고단위 ID가 모두 들어있는지 확인 |
 | 콜백 **200**인데 미적립 | `timestamp`가 신선도 윈도우(과거 1h/미래 5m) 밖 | 서버 시계(NTP) 동기화 확인, 필요 시 윈도우 조정 |
