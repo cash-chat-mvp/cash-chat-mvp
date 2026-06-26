@@ -8,8 +8,6 @@ import com.wnl.cashchat.api.domain.evolution.persistence.repository.EvolutionAtt
 import com.wnl.cashchat.api.domain.evolution.persistence.repository.UserEvolutionRepository
 import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
-import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -28,7 +26,7 @@ import org.springframework.transaction.annotation.Transactional
 class EvolutionService(
     private val userEvolutionRepository: UserEvolutionRepository,
     private val evolutionAttemptRepository: EvolutionAttemptRepository,
-    private val userRepository: UserRepository,
+    private val evolutionStateInitializer: EvolutionStateInitializer,
     private val probabilityRoller: ProbabilityRoller,
     private val evolutionProperties: EvolutionProperties,
     private val energyService: EnergyService,
@@ -36,11 +34,12 @@ class EvolutionService(
     private val evolutionTimingJudge: EvolutionTimingJudge,
 ) {
     fun ensureInitialized(user: User): UserEvolution =
-        userEvolutionRepository.findByUserId(user.id) ?: createInitial(user)
+        evolutionStateInitializer.ensureInitialized(user)
 
-    @Transactional
+    @Transactional(readOnly = true)
     fun getState(userId: Long): EvolutionStateResult {
-        val evo = userEvolutionRepository.findByUserId(userId) ?: initializeExistingUser(userId)
+        val evo = userEvolutionRepository.findByUserId(userId)
+            ?: evolutionStateInitializer.initializeExistingUser(userId)
         val rule = evolutionProperties.ruleFor(evo.level)
         return EvolutionStateResult(
             level = evo.level,
@@ -127,19 +126,6 @@ class EvolutionService(
             baseSuccessRate = judgement?.baseSuccessRate,
             finalSuccessRate = judgement?.finalSuccessRate,
         )
-    }
-
-    private fun createInitial(user: User): UserEvolution =
-        try {
-            userEvolutionRepository.saveAndFlush(UserEvolution(user = user, level = 1))
-        } catch (e: DataIntegrityViolationException) {
-            userEvolutionRepository.findByUserId(user.id) ?: throw e
-        }
-
-    private fun initializeExistingUser(userId: Long): UserEvolution {
-        val user = userRepository.findById(userId)
-            .orElseThrow { IllegalStateException("User not found for userId=$userId") }
-        return ensureInitialized(user)
     }
 
     private fun EvolutionAttempt.toResult() =

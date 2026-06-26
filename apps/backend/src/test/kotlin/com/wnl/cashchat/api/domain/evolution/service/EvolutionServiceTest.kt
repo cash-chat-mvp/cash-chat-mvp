@@ -12,25 +12,24 @@ import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties.LevelRule
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
-import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
-import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import java.util.Optional
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 
 class EvolutionServiceTest : FunSpec({
     lateinit var userEvolutionRepository: UserEvolutionRepository
     lateinit var evolutionAttemptRepository: EvolutionAttemptRepository
-    lateinit var userRepository: UserRepository
+    lateinit var evolutionStateInitializer: EvolutionStateInitializer
     lateinit var probabilityRoller: ProbabilityRoller
     lateinit var energyService: EnergyService
     lateinit var timingSessionStore: TimingSessionStore
@@ -53,7 +52,7 @@ class EvolutionServiceTest : FunSpec({
     beforeTest {
         userEvolutionRepository = mock()
         evolutionAttemptRepository = mock()
-        userRepository = mock()
+        evolutionStateInitializer = mock()
         probabilityRoller = mock()
         energyService = mock()
         timingSessionStore = mock()
@@ -61,7 +60,7 @@ class EvolutionServiceTest : FunSpec({
         service = EvolutionService(
             userEvolutionRepository,
             evolutionAttemptRepository,
-            userRepository,
+            evolutionStateInitializer,
             probabilityRoller,
             properties,
             energyService,
@@ -85,17 +84,25 @@ class EvolutionServiceTest : FunSpec({
     test("getState initializes evolution state for an existing user when missing") {
         val user = user()
         whenever(userEvolutionRepository.findByUserId(userId)).thenReturn(null)
-        whenever(userRepository.findById(userId)).thenReturn(Optional.of(user))
-        doAnswer { it.arguments[0] as UserEvolution }
-            .whenever(userEvolutionRepository).saveAndFlush(any())
+        whenever(evolutionStateInitializer.initializeExistingUser(userId)).thenReturn(UserEvolution(user = user, level = 1))
 
         val state = service.getState(userId)
 
         state.level shouldBe 1
         state.currentExp shouldBe 0L
-        verify(userEvolutionRepository).saveAndFlush(argThat<UserEvolution> {
-            this.user.id == userId && level == 1
-        })
+        verify(evolutionStateInitializer).initializeExistingUser(userId)
+    }
+
+    test("getState remains read-only and initializer opens an independent write transaction") {
+        val getStateTx = EvolutionService::class.java
+            .getMethod("getState", java.lang.Long.TYPE)
+            .getAnnotation(Transactional::class.java)
+        val initializerTx = EvolutionStateInitializer::class.java
+            .getMethod("initializeExistingUser", java.lang.Long.TYPE)
+            .getAnnotation(Transactional::class.java)
+
+        getStateTx.readOnly shouldBe true
+        initializerTx.propagation shouldBe Propagation.REQUIRES_NEW
     }
 
     test("getState at a level with no rule is reported as max") {
