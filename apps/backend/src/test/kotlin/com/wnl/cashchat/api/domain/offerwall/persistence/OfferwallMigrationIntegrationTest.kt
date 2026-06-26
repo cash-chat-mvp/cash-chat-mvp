@@ -24,6 +24,25 @@ class OfferwallMigrationIntegrationTest : FunSpec() {
         test("V11 creates tnk_offerwall_callbacks table") {
             jdbcTemplate.queryForObject("SELECT COUNT(*) FROM tnk_offerwall_callbacks", Int::class.java) shouldBe 0
         }
+
+        test("V12 adds platform column to tnk_offerwall_callbacks") {
+            val count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns " +
+                    "WHERE table_name = 'tnk_offerwall_callbacks' AND column_name = 'platform'",
+                Int::class.java,
+            )
+            count shouldBe 1
+        }
+
+        test("V12 replaces seq_id unique with composite (platform, seq_id)") {
+            // 단독 seq_id 유니크 인덱스는 사라지고, 복합 유니크 인덱스가 존재해야 한다.
+            val composite = jdbcTemplate.queryForObject(
+                "SELECT COUNT(DISTINCT index_name) FROM information_schema.statistics " +
+                    "WHERE table_name = 'tnk_offerwall_callbacks' AND index_name = 'uk_tnk_offerwall_callbacks_platform_seq_id'",
+                Int::class.java,
+            )
+            composite shouldBe 1
+        }
     }
 
     companion object {
@@ -38,7 +57,8 @@ class OfferwallMigrationIntegrationTest : FunSpec() {
             registry.add("spring.datasource.username", mysql::getUsername)
             registry.add("spring.datasource.password", mysql::getPassword)
             registry.add("spring.datasource.driver-class-name", mysql::getDriverClassName)
-            registry.add("app.offerwall.tnk.app-key") { "test-app-key" }
+            registry.add("app.offerwall.tnk.android.app-key") { "test-app-key" }
+            registry.add("app.offerwall.tnk.ios.app-key") { "test-app-key" }
         }
     }
 }

@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.services)
 }
 
 val localProperties = Properties().apply {
@@ -101,6 +102,11 @@ dependencies {
 
     // AdMob
     implementation(libs.play.services.ads)
+
+    // Firebase (Remote Config + Analytics) — BoM으로 버전 일괄 관리
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.config)
+    implementation(libs.firebase.analytics)
 
     // TNK Offerwall
     implementation("com.tnkfactory:rwd:8.09.07")

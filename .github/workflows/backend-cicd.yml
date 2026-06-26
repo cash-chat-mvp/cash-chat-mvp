@@ -101,9 +101,9 @@ jobs:
           APPLE_KEY_ID: ${{ secrets.APPLE_KEY_ID }}
           APPLE_PRIVATE_KEY: ${{ secrets.APPLE_PRIVATE_KEY }}
           APPLE_REDIRECT_URI: ${{ secrets.APPLE_REDIRECT_URI }}
-          APP_SWAGGER_ENABLED: ${{ secrets.APP_SWAGGER_ENABLED }}
-          APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID }}
-          APP_OFFERWALL_TNK_APP_KEY: ${{ secrets.APP_OFFERWALL_TNK_APP_KEY }}
+          APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS: ${{ secrets.APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS }}
+          APP_OFFERWALL_TNK_ANDROID_APP_KEY: ${{ secrets.APP_OFFERWALL_TNK_ANDROID_APP_KEY }}
+          APP_OFFERWALL_TNK_IOS_APP_KEY: ${{ secrets.APP_OFFERWALL_TNK_IOS_APP_KEY }}
           APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO: ${{ secrets.APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO }}
           SPRING_DATASOURCE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
           SPRING_DATASOURCE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
@@ -113,11 +113,6 @@ jobs:
           SPRING_PROFILE="${BACKEND_SPRING_PROFILES_ACTIVE}"
           if [ -z "${SPRING_PROFILE}" ]; then
             SPRING_PROFILE="prod"
-          fi
-
-          SWAGGER_ENABLED="${APP_SWAGGER_ENABLED}"
-          if [ -z "${SWAGGER_ENABLED}" ]; then
-            SWAGGER_ENABLED="false"
           fi
 
           if [ "${SPRING_PROFILE}" = "prod" ]; then
@@ -134,7 +129,7 @@ jobs:
             if [ -z "${APPLE_KEY_ID}" ]; then missing_vars+=("APPLE_KEY_ID"); fi
             if [ -z "${APPLE_PRIVATE_KEY}" ]; then missing_vars+=("APPLE_PRIVATE_KEY"); fi
             # APPLE_REDIRECT_URI is optional for the native iOS Sign in with Apple flow.
-            if [ -z "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID}" ]; then missing_vars+=("APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID"); fi
+            if [ -z "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS}" ]; then missing_vars+=("APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS"); fi
 
             if [ "${#missing_vars[@]}" -gt 0 ]; then
               echo "Missing required prod secrets: ${missing_vars[*]}" >&2
@@ -142,8 +137,12 @@ jobs:
             fi
 
             # 선택 시크릿: 미설정이어도 배포는 진행하되, TNK 오퍼월이 조용히 비활성화되지 않도록 경고로 가시성 확보.
-            if [ -z "${APP_OFFERWALL_TNK_APP_KEY}" ]; then
-              echo "::warning::APP_OFFERWALL_TNK_APP_KEY is not set — TNK offerwall callbacks will be rejected (fail-closed) until configured."
+            # TNK 는 Android/iOS 앱을 별도 등록하므로 앱키도 플랫폼별로 확인한다.
+            if [ -z "${APP_OFFERWALL_TNK_ANDROID_APP_KEY}" ]; then
+              echo "::warning::APP_OFFERWALL_TNK_ANDROID_APP_KEY is not set — Android TNK offerwall callbacks will be rejected (fail-closed) until configured."
+            fi
+            if [ -z "${APP_OFFERWALL_TNK_IOS_APP_KEY}" ]; then
+              echo "::warning::APP_OFFERWALL_TNK_IOS_APP_KEY is not set — iOS TNK offerwall callbacks will be rejected (fail-closed) until configured."
             fi
           fi
 
@@ -182,9 +181,9 @@ jobs:
             write_env "APPLE_KEY_ID" "${APPLE_KEY_ID}"
             write_env "APPLE_PRIVATE_KEY" "${APPLE_PRIVATE_KEY}"
             write_env "APPLE_REDIRECT_URI" "${APPLE_REDIRECT_URI}"
-            write_env "APP_SWAGGER_ENABLED" "${SWAGGER_ENABLED}"
-            write_env "APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID" "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_ID}"
-            write_env "APP_OFFERWALL_TNK_APP_KEY" "${APP_OFFERWALL_TNK_APP_KEY}"
+            write_env "APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS" "${APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS}"
+            write_env "APP_OFFERWALL_TNK_ANDROID_APP_KEY" "${APP_OFFERWALL_TNK_ANDROID_APP_KEY}"
+            write_env "APP_OFFERWALL_TNK_IOS_APP_KEY" "${APP_OFFERWALL_TNK_IOS_APP_KEY}"
             write_env "APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO" "${APP_OFFERWALL_TNK_POINT_TO_COIN_RATIO}"
           } > infra/deploy/backend/.deploy.env
 

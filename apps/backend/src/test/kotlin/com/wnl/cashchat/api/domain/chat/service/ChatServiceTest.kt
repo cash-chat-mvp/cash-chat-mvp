@@ -18,6 +18,7 @@ import com.wnl.cashchat.api.domain.energy.exception.InsufficientEnergyException
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import com.wnl.cashchat.api.domain.user.persistence.repository.UserRepository
+import io.kotest.assertions.nondeterministic.eventually
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.collections.shouldContain
@@ -38,6 +39,7 @@ import reactor.core.publisher.Flux
 import reactor.test.StepVerifier
 import java.util.Optional
 import java.util.UUID
+import kotlin.time.Duration.Companion.seconds
 
 class ChatServiceTest : FunSpec() {
     private lateinit var conversationRepository: ConversationRepository
@@ -45,6 +47,7 @@ class ChatServiceTest : FunSpec() {
     private lateinit var userRepository: UserRepository
     private lateinit var llmProvider: LlmProvider
     private lateinit var chatModelRouter: ChatModelRouter
+    private lateinit var chatRewardService: ChatRewardService
     private lateinit var chatService: ChatService
     private lateinit var savedMessages: MutableList<SavedMessageSnapshot>
     private lateinit var savedMessageEntities: MutableMap<Long, ChatMessage>
@@ -57,6 +60,7 @@ class ChatServiceTest : FunSpec() {
             userRepository = mock()
             llmProvider = mock()
             chatModelRouter = mock()
+            chatRewardService = mock()
             savedMessages = mutableListOf()
             savedMessageEntities = mutableMapOf()
             nextMessageId = 100L
@@ -66,6 +70,7 @@ class ChatServiceTest : FunSpec() {
                 userRepository = userRepository,
                 llmProvider = llmProvider,
                 chatModelRouter = chatModelRouter,
+                chatRewardService = chatRewardService,
                 transactionManager = NoOpTransactionManager(),
             )
         }
@@ -283,11 +288,14 @@ class ChatServiceTest : FunSpec() {
                 .thenCancel()
                 .verify()
 
-            savedMessages shouldContain SavedMessageSnapshot(
-                role = MessageRole.ASSISTANT,
-                status = MessageStatus.FAILED,
-                content = "",
-            )
+            // 취소 시 확정·정산은 boundedElastic 으로 오프로딩되므로 비동기 완료를 기다린다.
+            eventually(2.seconds) {
+                savedMessages shouldContain SavedMessageSnapshot(
+                    role = MessageRole.ASSISTANT,
+                    status = MessageStatus.FAILED,
+                    content = "",
+                )
+            }
         }
 
         test("stream keeps partial assistant content when cancelled after a chunk arrives") {
@@ -301,11 +309,57 @@ class ChatServiceTest : FunSpec() {
                 .thenCancel()
                 .verify()
 
-            savedMessages shouldContain SavedMessageSnapshot(
-                role = MessageRole.ASSISTANT,
-                status = MessageStatus.COMPLETED,
-                content = "hi",
-            )
+            // 취소 시 확정·정산은 boundedElastic 으로 오프로딩되므로 비동기 완료를 기다린다.
+            eventually(2.seconds) {
+                savedMessages shouldContain SavedMessageSnapshot(
+                    role = MessageRole.ASSISTANT,
+                    status = MessageStatus.COMPLETED,
+                    content = "hi",
+                )
+            }
+        }
+
+        test("stream settles chat reward when streaming completes normally") {
+            val conversation = conversation(ownerId = 1L)
+
+            stubConversation(conversation)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.just("hi", " there"))
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .expectNext("hi", " there")
+                .verifyComplete()
+
+            verify(chatRewardService).settle(eq(1L), any())
+            verify(chatRewardService, never()).refund(any())
+        }
+
+        test("stream refunds reserved energy when the provider errors") {
+            val conversation = conversation(ownerId = 1L)
+
+            stubConversation(conversation)
+            whenever(llmProvider.stream(any())).thenReturn(Flux.error(IllegalStateException("boom")))
+
+            StepVerifier.create(chatService.stream(userId = 1L, conversationId = 1L, content = "hello"))
+                .expectErrorMessage("boom")
+                .verify()
+
+            verify(chatRewardService).refund(1L)
+            verify(chatRewardService, never()).settle(any(), any())
+        }
+
+        test("stream neither settles nor refunds when the energy gate triggers") {
+            val conversation = conversation(ownerId = 1L)
+
+            whenever(conversationRepository.findByIdAndUserId(1L, 1L)).thenReturn(conversation)
+            whenever(chatModelRouter.routeAndConsume(eq(1L), any()))
+                .thenThrow(InsufficientEnergyException())
+
+            shouldThrow<InsufficientEnergyException> {
+                chatService.stream(userId = 1L, conversationId = 1L, content = "hello")
+            }
+
+            verify(chatRewardService, never()).settle(any(), any())
+            verify(chatRewardService, never()).refund(any())
         }
 
         test("getHistory returns owned conversation messages ordered by creation time") {
@@ -393,7 +447,7 @@ class ChatServiceTest : FunSpec() {
             }
         }
 
-        whenever(chatMessageRepository.findById(any())).thenAnswer { invocation ->
+        whenever(chatMessageRepository.findForUpdateById(any())).thenAnswer { invocation ->
             Optional.ofNullable(savedMessageEntities[invocation.getArgument<Long>(0)])
         }
     }

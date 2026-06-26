@@ -65,7 +65,7 @@ val appModule = module {
 
     viewModel { SettingsViewModel(get()) }
 
-    viewModel { com.nomadclub.cashchat.feature.chat.ChatViewModel(get(), get(), get(), get(), get()) }
+    viewModel { com.nomadclub.cashchat.feature.chat.ChatViewModel(get(), get(), get()) }
 
     viewModel { com.nomadclub.cashchat.feature.chat.evolution.EvolutionViewModel(get(), get()) }
 
@@ -78,8 +78,20 @@ val appModule = module {
     // shared 데이터 레이어 (CC-348)
     single<TokenProvider> { DataStoreTokenProvider(get(), get()) }
 
-    single { com.nomadclub.cashchat.config.AppConfig.fromBuildConfig() }
+    // Firebase Remote Config / Analytics
+    single { com.nomadclub.cashchat.config.RemoteConfigManager(appVersionName = BuildConfig.VERSION_NAME) }
+    single { com.nomadclub.cashchat.config.AnalyticsManager(androidContext()) }
+
+    // AppConfig: RC(활성값)→BuildConfig→테스트ID 계층 폴백
+    single { com.nomadclub.cashchat.config.AppConfig.resolve(get()) }
+    // 네이티브 광고 삽입 빈도(ad_chat_interval). ChatStore(shared)가 get()으로 요구한다.
+    single<com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider> {
+        com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider {
+            get<com.nomadclub.cashchat.config.AppConfig>().adChatInterval
+        }
+    }
     single { com.nomadclub.cashchat.ads.RewardedAdManager(get()) }
+    single { com.nomadclub.cashchat.ads.NativeAdManager(get()) }
 
     single { com.nomadclub.cashchat.offerwall.TnkOfferwallManager(get()) }
 }
