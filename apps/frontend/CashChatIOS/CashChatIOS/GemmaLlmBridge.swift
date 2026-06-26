@@ -70,9 +70,14 @@ final class GemmaLlmBridge: SwiftLlmBridge {
         // 멀티턴 맥락 제거: 새 대화 세션을 생성한다.
         guard let engine, let sampler else { return }
         Task {
-            self.conversation = try? await engine.createConversation(
-                with: ConversationConfig(samplerConfig: sampler)
-            )
+            do {
+                self.conversation = try await engine.createConversation(
+                    with: ConversationConfig(samplerConfig: sampler)
+                )
+            } catch {
+                self.conversation = nil
+                print("Gemma conversation reset failed: \(error.localizedDescription)")
+            }
         }
     }
 

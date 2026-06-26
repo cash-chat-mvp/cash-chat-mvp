@@ -66,8 +66,9 @@ class LocalChatStore(
                     }
                 }
                 updateAssistant(assistantId) { it.copy(isStreaming = false) }
-            } catch (_: CancellationException) {
+            } catch (e: CancellationException) {
                 updateAssistant(assistantId) { it.copy(isStreaming = false) }
+                throw e
             } catch (_: Throwable) {
                 updateAssistant(assistantId) { it.copy(isStreaming = false, isError = true) }
             } finally {

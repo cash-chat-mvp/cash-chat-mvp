@@ -56,7 +56,7 @@ final class ChatViewModel: ObservableObject {
     @Published var energyGateVisible = false
     @Published var conversations: [ConversationSummaryDto] = []
     @Published var selectedModel: ChatModelSelection = .cashAi
-    @Published var modelDownloadState: ModelDownloadState? = nil
+    @Published var modelDownloadState: ModelDownloadState = ModelDownloadStateNotDownloaded.shared
     // 엔진(LiteRT-LM Swift)이 주입되므로 더 이상 "미포함" 사유가 아니다. 다운로드만 끝나면 대화 가능.
     @Published var gemmaEngineUnavailableReason: String? = nil
     @Published var gemmaSendBlockedMessage: String? = nil

@@ -69,28 +69,32 @@ class KtorModelDownloader(
 
             val channel = response.bodyAsChannel()
             println("📥GemmaDL 본문 스트림 시작 — 수신 루프 진입")
-            val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
-            var append = resumed
-            var lastLoggedBytes = 0L
+            try {
+                val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
+                var append = resumed
+                var lastLoggedBytes = 0L
 
-            while (true) {
-                val read = channel.readAvailable(buffer, 0, buffer.size)
-                if (read <= 0) break
+                while (true) {
+                    val read = channel.readAvailable(buffer, 0, buffer.size)
+                    if (read <= 0) break
 
-                writeFileBytes(
-                    path = tempPath,
-                    bytes = buffer,
-                    append = append,
-                    length = read,
-                )
-                append = true
-                receivedBytes += read
-                // ~64MB 마다 한 번씩 진행 로그(콘솔에서 바이트 흐름 확인용 — 스팸 방지).
-                if (receivedBytes - lastLoggedBytes >= 64L * 1024 * 1024) {
-                    lastLoggedBytes = receivedBytes
-                    println("📥GemmaDL 진행 ${receivedBytes / (1024 * 1024)}MB / ${totalBytes / (1024 * 1024)}MB")
+                    writeFileBytes(
+                        path = tempPath,
+                        bytes = buffer,
+                        append = append,
+                        length = read,
+                    )
+                    append = true
+                    receivedBytes += read
+                    // ~64MB 마다 한 번씩 진행 로그(콘솔에서 바이트 흐름 확인용 — 스팸 방지).
+                    if (receivedBytes - lastLoggedBytes >= 64L * 1024 * 1024) {
+                        lastLoggedBytes = receivedBytes
+                        println("📥GemmaDL 진행 ${receivedBytes / (1024 * 1024)}MB / ${totalBytes / (1024 * 1024)}MB")
+                    }
+                    emit(ModelDownloadState.Downloading(receivedBytes = receivedBytes, totalBytes = totalBytes))
                 }
-                emit(ModelDownloadState.Downloading(receivedBytes = receivedBytes, totalBytes = totalBytes))
+            } finally {
+                channel.cancel(null)
             }
 
             println("📥GemmaDL 본문 수신 완료 received=$receivedBytes — 검증 시작")
