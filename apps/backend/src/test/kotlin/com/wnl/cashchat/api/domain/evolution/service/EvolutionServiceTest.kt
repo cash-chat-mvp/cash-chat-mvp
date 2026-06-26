@@ -151,4 +151,13 @@ class EvolutionServiceTest : FunSpec({
         verify(evolutionAttemptRepository, never()).save(any())
         verify(energyService, never()).applyPostEvolutionBoost(any())
     }
+
+    test("getState exposes current evolution exp") {
+        val evolution = UserEvolution(user = user(), level = 1).apply { addExp(750L) }
+        whenever(userEvolutionRepository.findByUserId(userId)).thenReturn(evolution)
+
+        val state = service.getState(userId)
+
+        state.currentExp shouldBe 750L
+    }
 })

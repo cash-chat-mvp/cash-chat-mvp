@@ -5,6 +5,7 @@ data class EvolutionStateResult(
     val isMaxLevel: Boolean,
     val nextAttemptCost: Long?,
     val nextSuccessRate: Double?,
+    val currentExp: Long,
 )
 
 data class EvolutionAttemptResult(

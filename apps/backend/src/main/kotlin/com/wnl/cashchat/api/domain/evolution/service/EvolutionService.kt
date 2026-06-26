@@ -43,6 +43,7 @@ class EvolutionService(
             isMaxLevel = rule == null,
             nextAttemptCost = rule?.attemptCost,
             nextSuccessRate = rule?.successRate,
+            currentExp = evo.exp,
         )
     }
 
