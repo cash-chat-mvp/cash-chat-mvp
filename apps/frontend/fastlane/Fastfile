@@ -87,13 +87,39 @@ platform :ios do
       output_name:      "CashChatIOS.ipa",
     )
 
-    upload_to_testflight(
+    # beta_app_description은 앱 단위 메타데이터(외부 Beta App Review 심사용 "앱 설명")로,
+    # 빌드마다 바뀌는 릴리즈 노트(changelog)와 성격이 다르다. AI가 생성한 노트에는
+    # 이모지·마크다운이 섞여 BetaAppLocalization.description 엔드포인트가 거부하므로
+    # ("invalid characters/formats"), 고정 평문 앱 설명을 별도로 사용한다.
+    beta_app_description = ENV["BETA_APP_DESCRIPTION"].to_s.strip
+    if beta_app_description.empty?
+      beta_app_description = "Cash Chat은 AI 채팅 기반의 모바일 앱입니다. " \
+        "채팅으로 정보를 주고받고 활동에 따라 리워드를 받을 수 있습니다."
+    end
+
+    # 외부 배포 여부와 대상 그룹은 환경변수로 제어한다(코드 수정 없이 GitHub Variables로 전환).
+    # 미설정 시 내부 전용(CashChatPrivateTester)이 기본값.
+    distribute_external = ENV["DISTRIBUTE_EXTERNAL"].to_s.strip.downcase == "true"
+    groups = ENV["TESTFLIGHT_GROUPS"].to_s.split(",").map(&:strip).reject(&:empty?)
+    groups = ["CashChatPrivateTester"] if groups.empty?
+
+    # 외부 배포(Beta App Review) 시 필수인 피드백 이메일. 값이 있을 때만 전달
+    # (빈 값을 넘기면 동일하게 ASC 검증 오류가 발생).
+    beta_feedback_email = ENV["BETA_APP_FEEDBACK_EMAIL"].to_s.strip
+    if distribute_external && beta_feedback_email.empty?
+      UI.user_error!("외부 배포(DISTRIBUTE_EXTERNAL=true)에는 BETA_APP_FEEDBACK_EMAIL이 필요합니다.")
+    end
+
+    testflight_params = {
       api_key:                           api_key,
       changelog:                         ENV.fetch("RELEASE_NOTES", "New build"),
-      beta_app_description:              ENV.fetch("RELEASE_NOTES", "New build"),
+      beta_app_description:              beta_app_description,
       skip_waiting_for_build_processing: false,
-      distribute_external:               false,
-      groups:                            ["CashChatPrivateTester"],
-    )
+      distribute_external:               distribute_external,
+      groups:                            groups,
+    }
+    testflight_params[:beta_app_feedback_email] = beta_feedback_email unless beta_feedback_email.empty?
+
+    upload_to_testflight(**testflight_params)
   end
 end

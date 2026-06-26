@@ -13,6 +13,8 @@ Gemini(자동·무료 등급)와 OpenAI(수동·유료), 그리고 CodeRabbit �
 | `/openai-review` | OpenAI 심층 리뷰 (수동 · 비용 발생) | PR 코멘트 |
 | `/ask 질문내용` | AI 답변/코드에 후속 질문 (저비용 모델) | PR · 라인 코멘트 |
 | `/resolve` | AI가 반영 여부 판단 → Jira 서브태스크 생성 + 스레드 해결 | 라인 코멘트 답글 |
+| `/auto-review-stop` | 이후 푸시의 자동 코드 제안(/improve) 중단 | PR 코멘트 |
+| `/auto-review-start` | 중단한 자동 코드 제안(/improve) 재개 | PR 코멘트 |
 | `/help` | 명령어 도움말 표시 (오늘 사용량 표 포함) | PR 코멘트 |
 | `@coderabbitai review` | CodeRabbit 리뷰 (수동 · 비용 발생) | PR 코멘트 |
 
@@ -35,8 +37,11 @@ Gemini(자동·무료 등급)와 OpenAI(수동·유료), 그리고 CodeRabbit �
 > 즉, 예전과 달리 **푸시할 때도 코드 라인 리뷰(improve)가 자동으로 돕니다.** 전체 리뷰(`/review`)는
 > PR을 열 때만 자동 1회이며, 다시 받고 싶으면 `/gemini-review` 로 요청하세요.
 
+> 푸시 자동 제안이 부담되면 `/auto-review-stop` 으로 끌 수 있어요. 이후 푸시에서는 `/improve` 가
+> 실행되지 않고(스레드 자동 정리는 계속 동작), `/auto-review-start` 로 다시 켭니다.
+
 ### 명령어를 입력할 때
-`/gemini-review`, `/openai-review`, `/ask`, `/resolve`, `/help` 를 코멘트로 트리거. 상세는 3장 참고.
+`/gemini-review`, `/openai-review`, `/ask`, `/resolve`, `/auto-review-stop`, `/auto-review-start`, `/help` 를 코멘트로 트리거. 상세는 3장 참고.
 
 ## 3. 명령어 상세
 
@@ -58,6 +63,15 @@ AI 리뷰 코멘트(라인/PR)에 답글로 후속 질문을 합니다. 따옴�
 
 > 리졸브는 실제 성공 여부를 **검증**합니다. 봇 권한 등으로 리졸브에 실패하면 거짓 성공 대신
 > "수동으로 Resolve conversation 을 눌러 주세요" 안내를 남기고, 자세한 원인은 워크플로 로그에 남깁니다.
+
+### `/auto-review-stop` · `/auto-review-start`
+PR 코멘트로 입력해 **푸시할 때마다 도는 자동 코드 제안(`/improve`)** 을 켜고 끕니다. (AI 호출 없음)
+
+- `/auto-review-stop`: 이후 푸시에서 `/improve` 를 실행하지 않습니다. **스레드 자동 정리는 계속 동작**하고,
+  `/gemini-review`·`/openai-review` 같은 수동 명령도 그대로 사용할 수 있습니다.
+- `/auto-review-start`: 중단을 해제하고 푸시 자동 제안을 다시 켭니다.
+- 상태는 봇이 남기는 안내 카드(숨김 마커)로 유지되며, push 워크플로가 시작 시 이 마커를 보고 판단합니다.
+  PR을 처음 열 때의 자동 리뷰는 가장 먼저 실행되므로 사전 차단 대상이 아닙니다.
 
 ### `/help`
 사용 가능한 명령어 도움말 카드 + **오늘(KST) 사용량 표**를 PR 코멘트로 게시합니다. (AI 호출 없음)
