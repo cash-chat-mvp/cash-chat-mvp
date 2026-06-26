@@ -9,6 +9,7 @@ import com.nomadclub.cashchat.shared.hud.HudStore
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -25,21 +26,22 @@ class ChatViewModel(
     private val _rewardPhase = MutableStateFlow(RewardPhase.IDLE)
     val rewardPhase = _rewardPhase.asStateFlow()
 
-    private val _rewardBurstTick = MutableStateFlow(0)
-    val rewardBurstTick = _rewardBurstTick.asStateFlow()
     val resourceFeedback = chatStore.resourceFeedback
     val latestResourceFeedback = resourceFeedback
         .map<ChatResourceFeedback, ChatResourceFeedback?> { it }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** 완료 보상(🪙/⭐) 토큰 연출용 — 메시지 ID와 변화량을 담은 마지막 RewardEarned. */
+    val rewardEarned = resourceFeedback
+        .filterIsInstance<ChatResourceFeedback.RewardEarned>()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     init {
         hudStore.refresh()
         viewModelScope.launch {
+            // 완료 즉시 HUD 잔액을 재조회(연출과 병렬). 토큰 연출은 rewardEarned 가 독립 구동한다.
             chatStore.streamCompletedCount.collect {
-                if (it > 0) {
-                    runCatching { hudStore.refreshNow() }
-                    _rewardBurstTick.value += 1
-                }
+                if (it > 0) runCatching { hudStore.refreshNow() }
             }
         }
         viewModelScope.launch {
