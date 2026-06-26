@@ -195,8 +195,11 @@ struct EvolutionScreen: View {
             .navigationTitle("캐릭터 진화")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { vm.load() }
-            .alert("알림", isPresented: Binding(get: { vm.errorMessage != nil }, set: { if !$0 { vm.errorMessage = nil } })) {
-                Button("확인") { vm.errorMessage = nil }
+            .alert("알림", isPresented: Binding(
+                get: { vm.errorMessage != nil },
+                set: { if !$0 { vm.errorMessage = nil } }
+            )) {
+                Button("확인", role: .cancel) { }
             } message: { Text(vm.errorMessage ?? "") }
             .sheet(isPresented: Binding(get: { vm.phase == .result }, set: { if !$0 { vm.dismissResult() } })) {
                 if let r = vm.result { resultSheet(r) }

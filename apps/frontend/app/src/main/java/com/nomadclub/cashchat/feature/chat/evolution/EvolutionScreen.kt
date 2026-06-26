@@ -159,8 +159,7 @@ fun EvolutionScreen(
 
                     is EvolutionViewModel.UiState.Content -> {
                         val evolution = s.evolution
-                        val displayLevel =
-                            if (s.result?.success == true) s.result.resultLevel else evolution.level
+                        val displayLevel = s.result?.takeIf { it.success }?.resultLevel ?: evolution.level
                         val charging = phase == EvolutionViewModel.Phase.CHARGING
                         val orbScale by animateFloatAsState(
                             targetValue = if (charging) 1.06f else if (s.result?.success == true) 1.18f else 1f,
