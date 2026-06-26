@@ -12,6 +12,7 @@ import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties.LevelRule
 import com.wnl.cashchat.api.domain.user.persistence.entity.Role
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
+import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
@@ -160,6 +161,24 @@ class EvolutionServiceTest : FunSpec({
         val state = service.getState(userId)
 
         state.currentExp shouldBe 750L
+    }
+
+    test("getAttempts with limit 0 throws IllegalArgumentException") {
+        shouldThrow<IllegalArgumentException> { service.getAttempts(userId, 0) }
+    }
+
+    test("getAttempts with limit 101 throws IllegalArgumentException") {
+        shouldThrow<IllegalArgumentException> { service.getAttempts(userId, 101) }
+    }
+
+    test("getAttempts with limit 1 and limit 100 do not throw") {
+        val now = java.time.Instant.parse("2026-06-25T12:34:56Z")
+        val a1 = EvolutionAttempt(userId = userId, fromLevel = 1, cost = 500, success = true, resultLevel = 2, idempotencyKey = "k0")
+            .apply { createdAt = now }
+        whenever(evolutionAttemptRepository.findByUserIdOrderByCreatedAtDesc(eq(userId), any()))
+            .thenReturn(listOf(a1))
+        shouldNotThrowAny { service.getAttempts(userId, 1) }
+        shouldNotThrowAny { service.getAttempts(userId, 100) }
     }
 
     test("getAttempts returns own records newest-first limited by limit") {

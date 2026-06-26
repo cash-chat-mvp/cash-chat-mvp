@@ -49,8 +49,9 @@ class EvolutionService(
     }
 
     @Transactional(readOnly = true)
-    fun getAttempts(userId: Long, limit: Int): List<EvolutionAttemptRecordResult> =
-        evolutionAttemptRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, limit))
+    fun getAttempts(userId: Long, limit: Int): List<EvolutionAttemptRecordResult> {
+        require(limit in 1..100) { "limit must be in 1..100" }
+        return evolutionAttemptRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, limit))
             .map {
                 EvolutionAttemptRecordResult(
                     success = it.success,
@@ -60,6 +61,7 @@ class EvolutionService(
                     attemptedAt = it.createdAt,
                 )
             }
+    }
 
     /** 채팅 완료 보상: 진화 경험치 적립(개정 모델 CC-283 R1). */
     @Transactional
