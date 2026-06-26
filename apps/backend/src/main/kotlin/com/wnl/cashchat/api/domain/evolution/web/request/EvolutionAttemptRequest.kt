@@ -1,5 +1,6 @@
 package com.wnl.cashchat.api.domain.evolution.web.request
 
+import jakarta.validation.Valid
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
 
@@ -11,4 +12,6 @@ data class EvolutionAttemptRequest(
     @field:NotBlank
     @field:Size(max = 255)
     val idempotencyKey: String,
+    @field:Valid
+    val timing: TimingAttemptRequest? = null,
 )

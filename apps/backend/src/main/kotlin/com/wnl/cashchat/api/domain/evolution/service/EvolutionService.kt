@@ -9,6 +9,7 @@ import com.wnl.cashchat.api.domain.evolution.persistence.repository.UserEvolutio
 import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -29,6 +30,8 @@ class EvolutionService(
     private val probabilityRoller: ProbabilityRoller,
     private val evolutionProperties: EvolutionProperties,
     private val energyService: EnergyService,
+    private val timingSessionStore: TimingSessionStore,
+    private val evolutionTimingJudge: EvolutionTimingJudge,
 ) {
     fun ensureInitialized(user: User): UserEvolution =
         userEvolutionRepository.findByUserId(user.id) ?: createInitial(user)
@@ -43,7 +46,23 @@ class EvolutionService(
             isMaxLevel = rule == null,
             nextAttemptCost = rule?.attemptCost,
             nextSuccessRate = rule?.successRate,
+            currentExp = evo.exp,
         )
+    }
+
+    @Transactional(readOnly = true)
+    fun getAttempts(userId: Long, limit: Int): List<EvolutionAttemptRecordResult> {
+        require(limit in 1..100) { "limit must be in 1..100" }
+        return evolutionAttemptRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, limit))
+            .map {
+                EvolutionAttemptRecordResult(
+                    success = it.success,
+                    fromLevel = it.fromLevel,
+                    resultLevel = it.resultLevel,
+                    cost = it.cost,
+                    attemptedAt = it.createdAt,
+                )
+            }
     }
 
     /** 채팅 완료 보상: 진화 경험치 적립(개정 모델 CC-283 R1). */
@@ -55,7 +74,7 @@ class EvolutionService(
     }
 
     @Transactional
-    fun attempt(userId: Long, idempotencyKey: String): EvolutionAttemptResult {
+    fun attempt(userId: Long, idempotencyKey: String, timing: TimingAttemptCommand? = null): EvolutionAttemptResult {
         val evo = userEvolutionRepository.findByUserIdForUpdate(userId)
             ?: throw IllegalStateException("UserEvolution not initialized for userId=$userId")
 
@@ -64,10 +83,20 @@ class EvolutionService(
         val rule = evolutionProperties.ruleFor(evo.level) ?: throw AlreadyMaxLevelException()
         val fromLevel = evo.level
 
-        // 진화 시도 비용을 진화 경험치로 차감(개정 모델 CC-283 R2). 부족 시 예외 → 트랜잭션 롤백.
+        // 경험치 차감을 먼저 수행한다: 부족(InsufficientEvolutionExp)이면 여기서 롤백되어
+        // 1회용 타이밍 세션(인메모리, 트랜잭션 비참여)이 소비되지 않는다.
         evo.spendExp(rule.attemptCost)
 
-        val success = probabilityRoller.succeeds(rule.successRate)
+        // 타이밍 판정(있으면): 세션 소비(1회용) → 변조검증/등급 → 최종 확률.
+        val judgement = timing?.let {
+            val now = java.time.Instant.now()
+            val session = timingSessionStore.consume(it.sessionId, userId, now)
+            val elapsed = java.time.Duration.between(session.serverStartedAt, now).toMillis()
+            evolutionTimingJudge.judge(it.releasedAtMs, elapsed, rule.successRate)
+        }
+        val effectiveRate = judgement?.finalSuccessRate ?: rule.successRate
+
+        val success = probabilityRoller.succeeds(effectiveRate)
         if (success) {
             evo.levelUp()
             energyService.applyPostEvolutionBoost(userId)
@@ -81,9 +110,22 @@ class EvolutionService(
                 success = success,
                 resultLevel = evo.level,
                 idempotencyKey = idempotencyKey,
+                timingGrade = judgement?.grade,
+                timingBonusRate = judgement?.bonusRate,
+                baseSuccessRate = judgement?.baseSuccessRate,
+                finalSuccessRate = judgement?.finalSuccessRate,
             )
         )
-        return EvolutionAttemptResult(success, fromLevel, evo.level, rule.attemptCost)
+        return EvolutionAttemptResult(
+            success = success,
+            fromLevel = fromLevel,
+            resultLevel = evo.level,
+            cost = rule.attemptCost,
+            timingGrade = judgement?.grade,
+            timingBonusRate = judgement?.bonusRate,
+            baseSuccessRate = judgement?.baseSuccessRate,
+            finalSuccessRate = judgement?.finalSuccessRate,
+        )
     }
 
     private fun createInitial(user: User): UserEvolution =
@@ -94,5 +136,8 @@ class EvolutionService(
         }
 
     private fun EvolutionAttempt.toResult() =
-        EvolutionAttemptResult(success, fromLevel, resultLevel, cost)
+        EvolutionAttemptResult(
+            success, fromLevel, resultLevel, cost,
+            timingGrade, timingBonusRate, baseSuccessRate, finalSuccessRate,
+        )
 }
