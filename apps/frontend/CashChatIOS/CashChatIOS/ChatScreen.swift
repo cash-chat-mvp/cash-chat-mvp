@@ -19,17 +19,34 @@ struct ChatScreen: View {
     @State private var shareItems: String? = nil
     @FocusState private var isInputFocused: Bool
 
+    // 보상 토큰 연출용 좌표/펄스
+    @State private var rewardFrames: [String: CGRect] = [:]
+    @State private var pointPulse = 0
+    @State private var expPulse = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private let accent = Color(red: 0.36, green: 0.42, blue: 0.98)
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            BannerAdView(slotName: "chat_top")
-                .frame(height: 50)
-            messageList
-                .overlay { RewardBurstOverlay(tick: vm.rewardBurstTick) }
-            inputBar
+        ZStack {
+            VStack(spacing: 0) {
+                header
+                BannerAdView(slotName: "chat_top")
+                    .frame(height: 50)
+                messageList
+                inputBar
+            }
+            // 최상위 보상 토큰 오버레이 — 헤더 HUD/입력창 위에서도 잘리지 않게 화면 전체에 그린다.
+            RewardTokenOverlay(
+                reward: vm.rewardFeedback,
+                frames: rewardFrames,
+                reduceMotion: reduceMotion,
+                onPointArrived: { pointPulse += 1 },
+                onExpArrived: { expPulse += 1 }
+            )
         }
+        .coordinateSpace(name: "chatRoot")
+        .onPreferenceChange(RewardFramePreferenceKey.self) { rewardFrames = $0 }
         .background(Color(.systemGroupedBackground))
         .onAppear { vm.load() }
         // 채팅 화면을 떠나면 캐시된 네이티브 광고를 해제한다(스크롤 재진입 시 재사용하던 캐시).
@@ -69,10 +86,12 @@ struct ChatScreen: View {
             Spacer()
             if vm.hudLoaded {
                 if let p = vm.points {
-                    chip("🪙", "\(p)")
+                    RewardHudChip(emoji: "🪙", value: "\(p)", pulse: pointPulse)
+                        .reportRewardFrame(rewardPointKey)
                 }
                 if let e = vm.exp {
-                    chip("⭐", "\(e)")
+                    RewardHudChip(emoji: "⭐", value: "\(e)", pulse: expPulse)
+                        .reportRewardFrame(rewardExpKey)
                 }
                 VStack(alignment: .trailing, spacing: 2) {
                     chip("⚡", "\(vm.energy)/\(vm.maxEnergy)", warning: vm.energy == 0)
@@ -196,6 +215,7 @@ struct ChatScreen: View {
                             .background(Color(.secondarySystemGroupedBackground))
                             .foregroundStyle(.primary)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .reportRewardFrame(rewardBubbleKey(a.id))
                         if a.isError {
                             Button {
                                 vm.retry()
