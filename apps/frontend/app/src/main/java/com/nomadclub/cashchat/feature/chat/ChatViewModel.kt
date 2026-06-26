@@ -3,22 +3,21 @@ package com.nomadclub.cashchat.feature.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nomadclub.cashchat.shared.ads.AdRewardStore
-import com.nomadclub.cashchat.shared.attendance.AttendanceApi
-import com.nomadclub.cashchat.shared.attendance.CheckInDto
-import com.nomadclub.cashchat.shared.attendance.MonthlyAttendanceDto
+import com.nomadclub.cashchat.shared.chat.ChatResourceFeedback
 import com.nomadclub.cashchat.shared.chat.ChatStore
 import com.nomadclub.cashchat.shared.hud.HudStore
-import com.nomadclub.cashchat.shared.points.PointsRepository
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class ChatViewModel(
     val chatStore: ChatStore,
     val hudStore: HudStore,
     val adRewardStore: AdRewardStore,
-    private val attendanceApi: AttendanceApi,
-    private val pointsRepository: PointsRepository,
 ) : ViewModel() {
 
     /** 게이트 시트의 광고 보상 단계 표시용 */
@@ -27,31 +26,23 @@ class ChatViewModel(
     private val _rewardPhase = MutableStateFlow(RewardPhase.IDLE)
     val rewardPhase = _rewardPhase.asStateFlow()
 
-    private val _attendance = MutableStateFlow<MonthlyAttendanceDto?>(null)
-    val attendance = _attendance.asStateFlow()
+    val resourceFeedback = chatStore.resourceFeedback
+    val latestResourceFeedback = resourceFeedback
+        .map<ChatResourceFeedback, ChatResourceFeedback?> { it }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    private val _checkInResult = MutableStateFlow<CheckInDto?>(null)
-    val checkInResult = _checkInResult.asStateFlow()
+    /** 완료 보상(🪙/⭐) 토큰 연출용 — 메시지 ID와 변화량을 담은 마지막 RewardEarned. */
+    val rewardEarned = resourceFeedback
+        .filterIsInstance<ChatResourceFeedback.RewardEarned>()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     init {
         hudStore.refresh()
         viewModelScope.launch {
-            // 채팅 진입 시 자동 출석 — 이미 출석한 날은 조용히 통과 (409 ALREADY_CHECKED_IN 포함)
-            runCatching {
-                val monthly = attendanceApi.getMonthly()
-                _attendance.value = monthly
-                if (!monthly.todayChecked) {
-                    val result = attendanceApi.checkIn()
-                    _checkInResult.value = result
-                    // 체크인으로 적립된 코인을 혜택존/상점과 동일 소스에 반영한다.
-                    // 클라이언트에서 delta 를 더하면 서버와 어긋날 수 있으므로 서버 잔액으로 재동기화한다.
-                    runCatching { pointsRepository.refresh() }
-                    _attendance.value = attendanceApi.getMonthly()
-                }
-            }.onFailure { android.util.Log.e("ChatViewModel", "자동 출석 체크 실패", it) }
-        }
-        viewModelScope.launch {
-            chatStore.streamCompletedCount.collect { if (it > 0) runCatching { hudStore.refreshEnergyOnly() } }
+            // 완료 즉시 HUD 잔액을 재조회(연출과 병렬). 토큰 연출은 rewardEarned 가 독립 구동한다.
+            chatStore.streamCompletedCount.collect {
+                if (it > 0) runCatching { hudStore.refreshNow() }
+            }
         }
         viewModelScope.launch {
             chatStore.energyGateVisible.collect { visible ->
@@ -129,8 +120,6 @@ class ChatViewModel(
         _rewardPhase.value = RewardPhase.IDLE
         chatStore.dismissEnergyGate()
     }
-
-    fun dismissCheckIn() { _checkInResult.value = null }
 
     /** 회복 카운트다운 종료 등 — 에너지만 재조회 */
     fun refreshEnergy() {

@@ -16,27 +16,43 @@ struct ChatScreen: View {
     @State private var input = ""
     @State private var showConversations = false
     @State private var showEvolution = false
-    @State private var showAttendance = false
     @State private var shareItems: String? = nil
     @FocusState private var isInputFocused: Bool
+
+    // 보상 토큰 연출용 좌표/펄스
+    @State private var rewardFrames: [String: CGRect] = [:]
+    @State private var pointPulse = 0
+    @State private var expPulse = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let accent = Color(red: 0.36, green: 0.42, blue: 0.98)
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            BannerAdView(slotName: "chat_top")
-                .frame(height: 50)
-            messageList
-            inputBar
+        ZStack {
+            VStack(spacing: 0) {
+                header
+                BannerAdView(slotName: "chat_top")
+                    .frame(height: 50)
+                messageList
+                inputBar
+            }
+            // 최상위 보상 토큰 오버레이 — 헤더 HUD/입력창 위에서도 잘리지 않게 화면 전체에 그린다.
+            RewardTokenOverlay(
+                reward: vm.rewardFeedback,
+                frames: rewardFrames,
+                reduceMotion: reduceMotion,
+                onPointArrived: { pointPulse += 1 },
+                onExpArrived: { expPulse += 1 }
+            )
         }
+        .coordinateSpace(name: "chatRoot")
+        .onPreferenceChange(RewardFramePreferenceKey.self) { rewardFrames = $0 }
         .background(Color(.systemGroupedBackground))
         .onAppear { vm.load() }
+        // 채팅 화면을 떠나면 캐시된 네이티브 광고를 해제한다(스크롤 재진입 시 재사용하던 캐시).
+        .onDisappear { ChatNativeAdCache.shared.clear() }
         .sheet(isPresented: $showConversations) {
             conversationListSheet
-        }
-        .sheet(isPresented: $showAttendance) {
-            AttendanceSheet()
         }
         .sheet(isPresented: $showEvolution) {
             EvolutionScreen()
@@ -48,22 +64,6 @@ struct ChatScreen: View {
             EnergyGateSheet(vm: vm, adManager: adManager.manager)
                 .presentationDetents([.height(300)])
         }
-        .overlay(alignment: .top) {
-            if let toast = vm.checkInToast {
-                Text(toast)
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(.orange).foregroundStyle(.white)
-                    .clipShape(Capsule())
-                    .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .task(id: toast) {
-                        try? await Task.sleep(for: .seconds(2))
-                        vm.checkInToast = nil
-                    }
-            }
-        }
-        .animation(.easeInOut, value: vm.checkInToast)
     }
 
     private var header: some View {
@@ -84,13 +84,14 @@ struct ChatScreen: View {
                 }
             }
             Spacer()
-            Button { showAttendance = true } label: {
-                Image(systemName: chatSFSymbol("calendar", fallback: "calendar.circle"))
-                    .foregroundStyle(.primary)
-            }
             if vm.hudLoaded {
                 if let p = vm.points {
-                    chip("🪙", "\(p)")
+                    RewardHudChip(emoji: "🪙", value: "\(p)", pulse: pointPulse)
+                        .reportRewardFrame(rewardPointKey)
+                }
+                if let e = vm.exp {
+                    RewardHudChip(emoji: "⭐", value: "\(e)", pulse: expPulse)
+                        .reportRewardFrame(rewardExpKey)
                 }
                 VStack(alignment: .trailing, spacing: 2) {
                     chip("⚡", "\(vm.energy)/\(vm.maxEnergy)", warning: vm.energy == 0)
@@ -174,10 +175,16 @@ struct ChatScreen: View {
         if let u = item as? ChatItemUserMessage {
             HStack {
                 Spacer()
-                Text(u.text)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(accent).foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                ZStack(alignment: .topTrailing) {
+                    Text(u.text)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(accent).foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    if let energy = vm.energyFeedback, energy.messageId == u.id {
+                        ResourceDeltaBadge(eventId: energy.eventId, amount: energy.amount)
+                            .offset(x: 6, y: -14)
+                    }
+                }
             }
         } else if let a = item as? ChatItemAssistantMessage {
             if a.gated && !a.isStreaming {
@@ -208,6 +215,7 @@ struct ChatScreen: View {
                             .background(Color(.secondarySystemGroupedBackground))
                             .foregroundStyle(.primary)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .reportRewardFrame(rewardBubbleKey(a.id))
                         if a.isError {
                             Button {
                                 vm.retry()
@@ -226,6 +234,11 @@ struct ChatScreen: View {
                 ForEach(p.products, id: \.trackingUrl) { product in
                     ProductCardView(product: product)
                 }
+            }
+        } else if let adItem = item as? ChatItemNativeAd {
+            HStack {
+                ChatNativeAdView(adId: adItem.id)
+                Spacer(minLength: 0)
             }
         }
     }
@@ -428,21 +441,6 @@ private struct EnergyGateSheet: View {
                 .frame(maxWidth: .infinity).padding(.vertical, 12)
                 .background(.orange).foregroundStyle(.white)
                 .clipShape(Capsule())
-        }
-    }
-}
-
-/// 출석 캘린더 시트 — BenefitZone의 AttendanceWidgetView 재사용.
-private struct AttendanceSheet: View {
-    @StateObject private var vm = AttendanceViewModel()
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                AttendanceWidgetView(vm: vm).padding()
-            }
-            .navigationTitle("출석 체크")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear { vm.load() }
         }
     }
 }

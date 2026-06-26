@@ -22,7 +22,9 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
 import reactor.core.publisher.SignalType
+import reactor.core.scheduler.Schedulers
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
@@ -37,6 +39,7 @@ class ChatService(
     private val userRepository: UserRepository,
     private val llmProvider: LlmProvider,
     private val chatModelRouter: ChatModelRouter,
+    private val chatRewardService: ChatRewardService,
     transactionManager: PlatformTransactionManager,
 ) {
     private val log = LoggerFactory.getLogger(ChatService::class.java)
@@ -141,10 +144,33 @@ class ChatService(
         } ?: error("Failed to initialize chat stream")
 
         val buffer = StringBuilder()
+        val assistantMessageId = streamContext.assistantMessageId
 
+        // 메시지 확정·정산은 블로킹 JPA 트랜잭션이라 Netty 이벤트 루프 스레드를 막으면 안 된다.
+        // boundedElastic 로 오프로딩하되, 정상 완료/에러는 스트림에 합류시켜(concatWith/onErrorResume)
+        // 구독자가 종료 신호를 받기 전에 정산이 끝나도록 보장한다. 취소는 다운스트림이 더 듣지 않으므로
+        // doOnCancel 에서 best-effort 로 오프로딩한다(상태 가드가 1회 정산을 보장).
         return llmProvider.stream(streamContext.providerMessages)
             .doOnNext { chunk -> buffer.append(chunk) }
-            .doFinally { signalType -> finalizeAssistantMessage(signalType, streamContext.assistantMessageId, buffer) }
+            .concatWith(
+                Mono.fromRunnable<String> {
+                    finalizeAssistantMessage(SignalType.ON_COMPLETE, userId, assistantMessageId, buffer)
+                }.subscribeOn(Schedulers.boundedElastic())
+            )
+            .onErrorResume { error ->
+                Mono.fromRunnable<String> {
+                    finalizeAssistantMessage(SignalType.ON_ERROR, userId, assistantMessageId, buffer)
+                }.subscribeOn(Schedulers.boundedElastic())
+                    .then(Mono.error(error))
+            }
+            .doOnCancel {
+                // 취소 시점의 buffer 를 즉시 스냅샷으로 떠서 넘긴다 — boundedElastic 워커 스레드가
+                // 가변 StringBuilder 를 교차 스레드로 참조하지 않도록 불변 스냅샷을 전달한다.
+                val contentSnapshot = buffer.toString()
+                Schedulers.boundedElastic().schedule {
+                    finalizeAssistantMessage(SignalType.CANCEL, userId, assistantMessageId, contentSnapshot)
+                }
+            }
     }
 
     /**
@@ -166,24 +192,45 @@ class ChatService(
         } ?: error("Failed to load chat history")
     }
 
+    /**
+     * 스트림 종료 시 assistant 메시지를 확정하고 채팅 보상을 정산한다(개정 모델 CC-283 R1).
+     *
+     * 상태 가드: 재진입(이미 확정된 메시지)에서는 정산/환불을 건너뛴다 — STREAMING 일 때만 1회 처리하여
+     * 예약 밥의 이중 정산·환불과 진화 경험치 이중 적립을 막는다. 메시지 확정과 보상 정산은 한 트랜잭션이다.
+     *  - COMPLETED → chatRewardService.settle (예약 밥 소진 + cashablePt + 진화 경험치)
+     *  - FAILED    → chatRewardService.refund (예약 밥 환불)
+     */
     private fun finalizeAssistantMessage(
         signalType: SignalType,
+        userId: Long,
         assistantMessageId: Long,
-        buffer: StringBuilder,
+        content: CharSequence,
     ) {
         val status = when (signalType) {
             SignalType.ON_COMPLETE -> MessageStatus.COMPLETED
             SignalType.ON_ERROR -> MessageStatus.FAILED
-            SignalType.CANCEL -> if (buffer.isNotEmpty()) MessageStatus.COMPLETED else MessageStatus.FAILED
+            SignalType.CANCEL -> if (content.isNotEmpty()) MessageStatus.COMPLETED else MessageStatus.FAILED
             else -> return
         }
 
         transactionTemplate.executeWithoutResult {
-            val assistantMessage = chatMessageRepository.findById(assistantMessageId)
+            // 비관적 락으로 행을 직렬화한다 — 정상 완료와 취소(doOnCancel)가 거의 동시에 정산을 시도해도
+            // 한쪽이 커밋한 뒤에야 다른 쪽이 갱신된 상태를 읽으므로 STREAMING 가드가 1회 정산을 보장한다.
+            val assistantMessage = chatMessageRepository.findForUpdateById(assistantMessageId)
                 .orElseThrow { IllegalArgumentException("Assistant message not found") }
-            assistantMessage.content = buffer.toString()
+
+            // 상태 가드: STREAMING 일 때만 확정·정산한다(멱등). 이미 확정된 메시지면 아무것도 하지 않는다.
+            if (assistantMessage.status != MessageStatus.STREAMING) return@executeWithoutResult
+
+            assistantMessage.content = content.toString()
             assistantMessage.status = status
             chatMessageRepository.save(assistantMessage)
+
+            when (status) {
+                MessageStatus.COMPLETED -> chatRewardService.settle(userId, assistantMessageId)
+                MessageStatus.FAILED -> chatRewardService.refund(userId)
+                else -> Unit
+            }
         }
     }
 

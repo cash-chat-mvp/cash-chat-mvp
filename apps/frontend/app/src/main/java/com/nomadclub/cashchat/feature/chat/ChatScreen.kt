@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -30,31 +29,39 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import android.app.Activity
+import android.provider.Settings
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nomadclub.cashchat.ads.ChatNativeAdView
 import com.nomadclub.cashchat.ads.RewardedAdManager
 import com.nomadclub.cashchat.core.data.CharacterPreferenceStore
 import com.nomadclub.cashchat.feature.chat.components.AdGateCard
 import com.nomadclub.cashchat.feature.chat.components.CharacterAvatar
 import com.nomadclub.cashchat.feature.chat.components.EnergyGauge
 import com.nomadclub.cashchat.feature.chat.components.MessageBubble
+import com.nomadclub.cashchat.feature.chat.components.RewardTokenOverlay
 import com.nomadclub.cashchat.feature.chat.components.StatChip
 import com.nomadclub.cashchat.feature.chat.components.TypingIndicator
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
@@ -74,20 +81,38 @@ fun ChatScreen(
     onOpenEvolution: () -> Unit,
     viewModel: ChatViewModel = koinViewModel(),
     adManager: RewardedAdManager = koinInject(),
+    nativeAdManager: com.nomadclub.cashchat.ads.NativeAdManager = koinInject(),
     characterStore: CharacterPreferenceStore = koinInject(),
 ) {
     val context = LocalContext.current
+
+    // 채팅 화면을 떠나면 캐시된 네이티브 광고를 모두 해제한다(스크롤 재진입 시 재사용하던 캐시).
+    DisposableEffect(Unit) { onDispose { nativeAdManager.clear() } }
     val characterName by characterStore.name.collectAsStateWithLifecycle(initialValue = "미래")
     val gateInfo by viewModel.chatStore.gateInfo.collectAsStateWithLifecycle()
     val items by viewModel.chatStore.items.collectAsStateWithLifecycle()
     val isStreaming by viewModel.chatStore.isStreaming.collectAsStateWithLifecycle()
     val gateVisible by viewModel.chatStore.energyGateVisible.collectAsStateWithLifecycle()
     val hud by viewModel.hudStore.state.collectAsStateWithLifecycle()
-    val attendance by viewModel.attendance.collectAsStateWithLifecycle()
-    val checkInResult by viewModel.checkInResult.collectAsStateWithLifecycle()
+    val reward by viewModel.rewardEarned.collectAsStateWithLifecycle()
     var input by remember { mutableStateOf("") }
-    var showAttendance by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+
+    // 보상 토큰 연출용 좌표/펄스 (모두 root px 기준)
+    // 좌표는 보상 이벤트가 떴을 때 LaunchedEffect 안에서 단발성으로만 읽으므로 관찰 가능한
+    // 상태가 필요 없다. 스크롤마다 onGloballyPositioned 가 갱신해도 리컴포지션이 일어나지 않도록
+    // 일반 HashMap 을 쓴다.
+    val bubbleOrigins = remember { HashMap<String, Offset>() }
+    var pointHud by remember { mutableStateOf<Offset?>(null) }
+    var expHud by remember { mutableStateOf<Offset?>(null) }
+    var pointPulse by remember { mutableIntStateOf(0) }
+    var expPulse by remember { mutableIntStateOf(0) }
+    var rootSize by remember { mutableStateOf(IntSize.Zero) }
+    val reducedMotion = remember(context) {
+        runCatching {
+            Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+        }.getOrDefault(false)
+    }
 
     // 사용자가 위로 스크롤해 과거 메시지를 읽는 중인지 판단(맨 아래 근처면 자동 추적 유지).
     val isAtBottom by remember {
@@ -116,6 +141,7 @@ fun ChatScreen(
         listState.scrollToItem(items.lastIndex)
     }
 
+    Box(Modifier.fillMaxSize().onGloballyPositioned { rootSize = it.size }) {
     Column(Modifier.fillMaxSize()) {
         // ── 슬림 톱바
         Row(
@@ -149,11 +175,6 @@ fun ChatScreen(
                 }
             }
             Spacer(Modifier.weight(1f))
-            if (attendance != null) {
-                IconButton(onClick = { showAttendance = true }) {
-                    Icon(Icons.Filled.CalendarMonth, contentDescription = "출석 캘린더")
-                }
-            }
             Box {
                 var showMenu by remember { mutableStateOf(false) }
                 IconButton(onClick = { showMenu = true }) {
@@ -176,7 +197,24 @@ fun ChatScreen(
                 }
             }
             // 포인트 잔액 API 부재(BE 의존성) — points가 null이면 칩 숨김
-            hud.points?.let { StatChip("🪙", "%,d".format(it)) }
+            hud.points?.let {
+                StatChip(
+                    "🪙", "%,d".format(it),
+                    pulseTick = pointPulse,
+                    modifier = Modifier.onGloballyPositioned { c ->
+                        pointHud = c.positionInRoot() + Offset(c.size.width / 2f, c.size.height / 2f)
+                    },
+                )
+            }
+            hud.exp?.let {
+                StatChip(
+                    "⭐", "%,d".format(it),
+                    pulseTick = expPulse,
+                    modifier = Modifier.onGloballyPositioned { c ->
+                        expHud = c.positionInRoot() + Offset(c.size.width / 2f, c.size.height / 2f)
+                    },
+                )
+            }
             if (hud.isLoaded) {
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     StatChip("⚡", "${hud.energy}/${hud.maxEnergy}", warning = hud.energy == 0)
@@ -230,7 +268,9 @@ fun ChatScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(items, key = { it.id }) { item ->
-                        if (item is ChatItem.AssistantMessage && item.gated && !item.isStreaming) {
+                        if (item is ChatItem.NativeAd) {
+                            ChatNativeAdView(adId = item.id)
+                        } else if (item is ChatItem.AssistantMessage && item.gated && !item.isStreaming) {
                             AdGateCard(
                                 fullText = item.text,
                                 teaserChars = gateInfo?.teaserChars ?: 80,
@@ -258,7 +298,14 @@ fun ChatScreen(
                                 },
                             )
                         } else {
-                            MessageBubble(item)
+                            MessageBubble(
+                                item = item,
+                                onAssistantPositioned = { id, coords ->
+                                    // 버블 우상단(배지 위치)을 토큰 원점으로 사용
+                                    bubbleOrigins[id] = coords.positionInRoot() +
+                                        Offset(coords.size.width.toFloat(), 0f)
+                                },
+                            )
                         }
                         if (item is ChatItem.AssistantMessage && item.isError) {
                             TextButton(onClick = { viewModel.chatStore.retryLastMessage() }) {
@@ -296,20 +343,21 @@ fun ChatScreen(
         }
     }
 
+        // 최상위 보상 토큰 오버레이 — 키보드/입력창 위에서도 잘리지 않도록 root Box 최상단에 그린다.
+        RewardTokenOverlay(
+            event = reward,
+            originOf = { bubbleOrigins[it] },
+            fallbackOrigin = Offset(rootSize.width / 2f, rootSize.height * 0.8f),
+            pointTarget = pointHud,
+            expTarget = expHud,
+            reducedMotion = reducedMotion,
+            onPointArrived = { pointPulse++ },
+            onExpArrived = { expPulse++ },
+        )
+    }
+
     if (gateVisible) {
         EnergyGateBottomSheet(viewModel = viewModel)
-    }
-
-    checkInResult?.let { result ->
-        CheckInRewardDialog(result = result, onDismiss = { viewModel.dismissCheckIn() })
-    }
-
-    if (showAttendance) {
-        attendance?.let { monthly ->
-            ModalBottomSheet(onDismissRequest = { showAttendance = false }) {
-                AttendanceCalendar(monthly)
-            }
-        }
     }
 }
 

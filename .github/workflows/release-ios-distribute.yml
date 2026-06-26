@@ -303,6 +303,35 @@ jobs:
           }
           SWIFT_EOF
 
+      - name: Write GoogleService-Info.plist
+        env:
+          IOS_GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.IOS_GOOGLE_SERVICE_INFO_PLIST }}
+        run: |
+          # Firebase(Remote Config/Analytics) 설정 파일. base64 시크릿을 디코드해 동기화 그룹 폴더에 둔다.
+          # 시크릿이 없으면 더미로 폴백 (빌드는 통과하되 Firebase 기능은 동작하지 않음).
+          if [ -n "$IOS_GOOGLE_SERVICE_INFO_PLIST" ]; then
+            echo "$IOS_GOOGLE_SERVICE_INFO_PLIST" | base64 --decode > CashChatIOS/CashChatIOS/GoogleService-Info.plist
+          else
+            echo "⚠️ IOS_GOOGLE_SERVICE_INFO_PLIST 시크릿 없음 — 더미 plist 생성"
+            cat > CashChatIOS/CashChatIOS/GoogleService-Info.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>API_KEY</key><string>DUMMY_API_KEY</string>
+            <key>GCM_SENDER_ID</key><string>000000000000</string>
+            <key>BUNDLE_ID</key><string>com.nomadlab.cashchat</string>
+            <key>PROJECT_ID</key><string>cash-chat-dummy</string>
+            <key>STORAGE_BUCKET</key><string>cash-chat-dummy.appspot.com</string>
+            <key>GOOGLE_APP_ID</key><string>1:000000000000:ios:0000000000000000000000</string>
+            <key>IS_ANALYTICS_ENABLED</key><false/>
+            <key>IS_ADS_ENABLED</key><false/>
+            <key>IS_SIGNIN_ENABLED</key><true/>
+          </dict>
+          </plist>
+          EOF
+          fi
+
       - name: Create local.xcconfig
         env:
           IOS_GOOGLE_CLIENT_ID: ${{ secrets.IOS_GOOGLE_CLIENT_ID }}
@@ -377,6 +406,13 @@ jobs:
           VERSION_NAME:            ${{ needs.version.outputs.name }}
           VERSION_CODE:            ${{ needs.version.outputs.code }}
           RELEASE_NOTES:           ${{ needs.version.outputs.release_notes }}
+          # 앱 단위 고정 메타데이터(외부 Beta App Review용). 미설정 시 Fastfile 기본값 사용.
+          BETA_APP_DESCRIPTION:    ${{ vars.BETA_APP_DESCRIPTION }}
+          BETA_APP_FEEDBACK_EMAIL: ${{ vars.BETA_APP_FEEDBACK_EMAIL }}
+          # 배포 대상 제어. 미설정 시 내부 전용(CashChatPrivateTester).
+          # 외부 전환 예: DISTRIBUTE_EXTERNAL=true + TESTFLIGHT_GROUPS=CashChatPublicTester
+          DISTRIBUTE_EXTERNAL:     ${{ vars.DISTRIBUTE_EXTERNAL }}
+          TESTFLIGHT_GROUPS:       ${{ vars.TESTFLIGHT_GROUPS }}
         run: bundle exec fastlane ios distribute
 
       - name: Upload IPA artifact

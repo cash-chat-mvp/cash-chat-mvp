@@ -22,7 +22,7 @@ import java.time.LocalDate
  * 2. nano 샘플 → NANO 반환, tryConsumePremium 미호출, consume+accrue 호출됨
  * 3. mini 샘플 + 풀 충분(tryConsumePremium=true) → MINI
  * 4. gpt 샘플 + 풀 부족(tryConsumePremium=false) → NANO 강등
- * 5. accrue 는 항상(게이트 통과 시) MEAL_MARGIN 으로 호출, consume 항상 1회
+ * 5. accrue 는 항상(게이트 통과 시) MEAL_MARGIN 으로 호출, reserve 항상 1회
  */
 class ChatModelRouterTest : FunSpec() {
 
@@ -66,7 +66,7 @@ class ChatModelRouterTest : FunSpec() {
         }
 
         test("밥 부족 시 InsufficientEnergyException 전파, 풀·프리미엄 미접근") {
-            whenever(energyService.consume(USER_ID)).thenThrow(InsufficientEnergyException())
+            whenever(energyService.reserve(USER_ID)).thenThrow(InsufficientEnergyException())
 
             shouldThrow<InsufficientEnergyException> {
                 router.routeAndConsume(USER_ID, TODAY)
@@ -77,13 +77,13 @@ class ChatModelRouterTest : FunSpec() {
             verify(tierSampler, never()).sample(any(), any())
         }
 
-        test("nano 샘플 → NANO 반환, tryConsumePremium 미호출, consume+accrue 호출") {
+        test("nano 샘플 → NANO 반환, tryConsumePremium 미호출, reserve+accrue 호출") {
             whenever(tierSampler.sample(any(), any())).thenReturn(ModelTier.NANO)
 
             val result = router.routeAndConsume(USER_ID, TODAY)
 
             result shouldBe ModelTier.NANO
-            verify(energyService).consume(USER_ID)
+            verify(energyService).reserve(USER_ID)
             verify(qualityPoolService).accrue(MEAL_MARGIN)
             verify(qualityPoolService, never()).tryConsumePremium(any(), any(), any())
         }
@@ -95,7 +95,7 @@ class ChatModelRouterTest : FunSpec() {
             val result = router.routeAndConsume(USER_ID, TODAY)
 
             result shouldBe ModelTier.MINI
-            verify(energyService).consume(USER_ID)
+            verify(energyService).reserve(USER_ID)
             verify(qualityPoolService).accrue(MEAL_MARGIN)
             verify(qualityPoolService).tryConsumePremium(USER_ID, MINI_DELTA, TODAY)
         }
@@ -107,7 +107,7 @@ class ChatModelRouterTest : FunSpec() {
             val result = router.routeAndConsume(USER_ID, TODAY)
 
             result shouldBe ModelTier.NANO
-            verify(energyService).consume(USER_ID)
+            verify(energyService).reserve(USER_ID)
             verify(qualityPoolService).accrue(MEAL_MARGIN)
             verify(qualityPoolService).tryConsumePremium(USER_ID, GPT_DELTA, TODAY)
         }
@@ -129,7 +129,7 @@ class ChatModelRouterTest : FunSpec() {
             router.routeAndConsume(USER_ID, TODAY)
 
             verify(qualityPoolService).accrue(MEAL_MARGIN)
-            verify(energyService).consume(USER_ID)
+            verify(energyService).reserve(USER_ID)
         }
 
         test("레벨에 확률 정보가 없을 때 nano 확정 반환, tryConsumePremium 미호출") {

@@ -49,7 +49,7 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single { com.nomadclub.cashchat.shared.energy.EnergyTopupApi(get(), baseUrl) }
 
     single<ChatGateway> { ApiChatGateway(get()) }
-    single { ChatStore(get(), get()) }
+    single { ChatStore(get(), get(), get()) }
     single { HudStore(get(), get(), get(), get()) }
     single<com.nomadclub.cashchat.shared.roulette.RouletteRepository> {
         com.nomadclub.cashchat.shared.roulette.FakeRouletteRepository()

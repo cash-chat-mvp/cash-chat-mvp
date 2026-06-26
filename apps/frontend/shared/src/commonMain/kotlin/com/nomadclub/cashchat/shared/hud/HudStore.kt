@@ -23,6 +23,8 @@ data class HudState(
     val energy: Int = 0,
     val maxEnergy: Int = 0,
     val points: Long? = null,
+    /** 진화 경험치(R2 비용 통화). BE currentExp 미배포 시 null. */
+    val exp: Long? = null,
     /** P1-3 — ISO-8601 원본. 파싱은 플랫폼단(java.time 등)에서. */
     val nextRecoverAt: String? = null,
     val isLoaded: Boolean = false,
@@ -55,6 +57,7 @@ class HudStore(
             energy = energy.energy,
             maxEnergy = energy.maxEnergy,
             points = pointsDeferred?.await(),
+            exp = evolution.currentExp,
             nextRecoverAt = energy.nextRecoverAt,
             isLoaded = true,
         )

@@ -10,8 +10,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -38,6 +41,8 @@ class ApiChatGateway(private val api: ChatApi) : ChatGateway {
 class ChatStore(
     private val gateway: ChatGateway,
     private val scope: CoroutineScope,
+    private val adIntervalProvider: com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider =
+        com.nomadclub.cashchat.shared.ads.AdChatIntervalProvider { 0L },
 ) {
     private val _items = MutableStateFlow<List<ChatItem>>(emptyList())
     val items: StateFlow<List<ChatItem>> = _items.asStateFlow()
@@ -51,6 +56,9 @@ class ChatStore(
     /** 스트림 정상 종료 시 1 증가 — HUD가 energy 재조회 트리거로 사용. */
     private val _streamCompletedCount = MutableStateFlow(0)
     val streamCompletedCount: StateFlow<Int> = _streamCompletedCount.asStateFlow()
+
+    private val _resourceFeedback = MutableSharedFlow<ChatResourceFeedback>(extraBufferCapacity = 8)
+    val resourceFeedback: SharedFlow<ChatResourceFeedback> = _resourceFeedback.asSharedFlow()
 
     /** Ad Gate 정보 (P2-3). gate 이벤트 수신 시 채워지고, 해제 시 null. */
     data class GateInfo(val teaserChars: Int, val rewardCoin: Int)
@@ -66,6 +74,11 @@ class ChatStore(
     // 진행 중인 스트리밍 Job — 대화 전환/재시도/초기화 시 명시적으로 취소해 백그라운드 누수를 막는다.
     private var streamJob: Job? = null
 
+    // 네이티브 광고 삽입용 — 정상 종료된 assistant 응답 누적 수. reset/대화전환 시 초기화.
+    // interval(Long)과 비교하므로 Long으로 선언해 타입 불일치/오버플로우를 예방한다.
+    private var assistantResponseCount = 0L
+    private var resourceFeedbackEventId = 0L
+
     @Throws(Exception::class)
     suspend fun openConversation(id: Long) {
         streamJob?.cancel()
@@ -80,6 +93,7 @@ class ChatStore(
         _items.value = history
         blockedMessageId = null
         _energyGateVisible.value = false
+        assistantResponseCount = 0L
     }
 
     fun startNewConversation() {
@@ -88,6 +102,7 @@ class ChatStore(
         _items.value = emptyList()
         blockedMessageId = null
         _energyGateVisible.value = false
+        assistantResponseCount = 0L
     }
 
     /** 로그아웃/세션 종료 시 다음 사용자에게 이전 대화·게이트 상태가 노출되지 않도록 초기화한다. */
@@ -100,6 +115,7 @@ class ChatStore(
         _energyGateVisible.value = false
         _streamCompletedCount.value = 0
         _gateInfo.value = null
+        assistantResponseCount = 0L
     }
 
     fun sendMessage(text: String) {
@@ -149,6 +165,12 @@ class ChatStore(
                     is ChatStreamEvent.Token -> {
                         if (!assistantAdded) {
                             updateUser(messageId) { it.copy(status = ChatItem.SendStatus.CONFIRMED) }
+                            publishResourceFeedback(
+                                ChatResourceFeedback.EnergySpent(
+                                    eventId = nextResourceFeedbackEventId(),
+                                    messageId = messageId,
+                                ),
+                            )
                             _items.update { it + ChatItem.AssistantMessage(assistantId, event.text, isStreaming = true) }
                             assistantAdded = true
                         } else {
@@ -167,6 +189,15 @@ class ChatStore(
                         updateUser(messageId) { it.copy(status = ChatItem.SendStatus.CONFIRMED) }
                         if (assistantAdded) updateAssistant(assistantId) { it.copy(isStreaming = false) }
                         _streamCompletedCount.update { it + 1 }
+                        if (assistantAdded) {
+                            publishResourceFeedback(
+                                ChatResourceFeedback.RewardEarned(
+                                    eventId = nextResourceFeedbackEventId(),
+                                    messageId = assistantId,
+                                ),
+                            )
+                            maybeInsertNativeAd()
+                        }
                     }
                     is ChatStreamEvent.ProductCards -> {
                         _items.update { it + ChatItem.ProductCards("p${currentTimeMillis()}", event.products) }
@@ -203,11 +234,31 @@ class ChatStore(
         }
     }
 
+    /** 정상 응답마다 카운트하고, interval 배수에 도달하면 네이티브 광고 placeholder를 1개 덧붙인다. */
+    private fun maybeInsertNativeAd() {
+        val interval = adIntervalProvider.get()
+        if (interval <= 0) return
+        assistantResponseCount += 1
+        if (assistantResponseCount % interval != 0L) return
+        if (_items.value.lastOrNull() is ChatItem.NativeAd) return
+        // id는 LazyColumn key·광고 캐시 key로 쓰이므로, 같은 ms 충돌을 피하려 카운터를 덧붙여 유일하게 만든다.
+        _items.update { it + ChatItem.NativeAd("ad${currentTimeMillis()}_$assistantResponseCount") }
+    }
+
     private fun updateUser(id: String, transform: (ChatItem.UserMessage) -> ChatItem.UserMessage) {
         _items.update { items -> items.map { if (it is ChatItem.UserMessage && it.id == id) transform(it) else it } }
     }
 
     private fun updateAssistant(id: String, transform: (ChatItem.AssistantMessage) -> ChatItem.AssistantMessage) {
         _items.update { items -> items.map { if (it is ChatItem.AssistantMessage && it.id == id) transform(it) else it } }
+    }
+
+    private fun nextResourceFeedbackEventId(): Long {
+        resourceFeedbackEventId += 1
+        return resourceFeedbackEventId
+    }
+
+    private suspend fun publishResourceFeedback(event: ChatResourceFeedback) {
+        _resourceFeedback.emit(event)
     }
 }

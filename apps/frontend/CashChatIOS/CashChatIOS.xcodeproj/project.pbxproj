@@ -10,6 +10,8 @@
 		25C19DA3DF125C638D2B40E1 /* TnkRwdSdk2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 13783696DF99001CD31C3526 /* TnkRwdSdk2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		AAE4F1D6EE6E16B7929BF492 /* TnkRwdSdk2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 13783696DF99001CD31C3526 /* TnkRwdSdk2.xcframework */; };
 		AD0000010000000000000003 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = AD0000010000000000000002 /* GoogleMobileAds */; };
+		AD0000010000000000000005 /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = AD0000010000000000000006 /* FirebaseRemoteConfig */; };
+		AD0000010000000000000007 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = AD0000010000000000000008 /* FirebaseAnalytics */; };
 		CC2130032F5D5C2B009F83EE /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = CC2130022F5D5C2B009F83EE /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 
@@ -77,6 +79,8 @@
 			files = (
 				CC2130032F5D5C2B009F83EE /* GoogleSignIn in Frameworks */,
 				AD0000010000000000000003 /* GoogleMobileAds in Frameworks */,
+				AD0000010000000000000005 /* FirebaseRemoteConfig in Frameworks */,
+				AD0000010000000000000007 /* FirebaseAnalytics in Frameworks */,
 				AAE4F1D6EE6E16B7929BF492 /* TnkRwdSdk2.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -144,6 +148,8 @@
 			packageProductDependencies = (
 				CC2130022F5D5C2B009F83EE /* GoogleSignIn */,
 				AD0000010000000000000002 /* GoogleMobileAds */,
+				AD0000010000000000000006 /* FirebaseRemoteConfig */,
+				AD0000010000000000000008 /* FirebaseAnalytics */,
 			);
 			productName = CashChatIOS;
 			productReference = FBEF9B8E2F5D5C2B009F83ED /* CashChatIOS.app */;
@@ -226,6 +232,7 @@
 			packageReferences = (
 				CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				AD0000010000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
+				AD0000010000000000000004 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FBEF9B8F2F5D5C2B009F83ED /* Products */;
@@ -645,6 +652,14 @@
 				minimumVersion = 12.0.0;
 			};
 		};
+		AD0000010000000000000004 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.0.0;
+			};
+		};
 		CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
@@ -660,6 +675,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AD0000010000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
 			productName = GoogleMobileAds;
+		};
+		AD0000010000000000000006 /* FirebaseRemoteConfig */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD0000010000000000000004 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseRemoteConfig;
+		};
+		AD0000010000000000000008 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD0000010000000000000004 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
 		};
 		CC2130022F5D5C2B009F83EE /* GoogleSignIn */ = {
 			isa = XCSwiftPackageProductDependency;
