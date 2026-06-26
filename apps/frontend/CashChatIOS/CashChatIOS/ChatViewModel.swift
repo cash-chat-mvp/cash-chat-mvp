@@ -19,7 +19,6 @@ final class ChatViewModel: ObservableObject {
     @Published var maxEnergy: Int = 0
     @Published var points: Int64? = nil
     @Published var exp: Int64? = nil
-    @Published var rewardBurstTick: Int = 0
     @Published var nextRecoverAt: String? = nil
     @Published var hudLoaded = false
 
@@ -77,12 +76,11 @@ final class ChatViewModel: ObservableObject {
                 self.hudLoaded = s.isLoaded
             }
         }
-        // 스트림 정상 종료 시 전체 HUD 재조회 + 보상 연출 트리거.
+        // 스트림 정상 종료 시 전체 HUD 재조회(보상 토큰 연출은 rewardFeedback 이 독립 구동).
         collector.collectStreamCompleted(store: store) { [weak self] count in
             Task { @MainActor in
                 guard let self, count.intValue > 0 else { return }
                 try? await self.hudStore.refreshNow()
-                self.rewardBurstTick += 1
             }
         }
         collector.collectGateInfo(store: store) { [weak self] info in
