@@ -7,6 +7,7 @@ data class EvolutionStateResponse(
     val isMaxLevel: Boolean,
     val nextAttemptCost: Long?,
     val nextSuccessRate: Double?,
+    val currentExp: Long,
 ) {
     companion object {
         fun from(result: EvolutionStateResult) = EvolutionStateResponse(
@@ -14,6 +15,7 @@ data class EvolutionStateResponse(
             isMaxLevel = result.isMaxLevel,
             nextAttemptCost = result.nextAttemptCost,
             nextSuccessRate = result.nextSuccessRate,
+            currentExp = result.currentExp,
         )
     }
 }

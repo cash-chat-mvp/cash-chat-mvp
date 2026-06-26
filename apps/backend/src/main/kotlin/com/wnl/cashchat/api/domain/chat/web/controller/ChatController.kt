@@ -1,6 +1,8 @@
 package com.wnl.cashchat.api.domain.chat.web.controller
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.wnl.cashchat.api.common.web.response.ErrorResponse
+import com.wnl.cashchat.api.domain.chat.properties.ChatRewardProperties
 import com.wnl.cashchat.api.domain.chat.service.ChatService
 import com.wnl.cashchat.api.domain.chat.web.request.CreateConversationRequest
 import com.wnl.cashchat.api.domain.chat.web.request.ChatStreamRequest
@@ -40,6 +42,8 @@ import java.util.UUID
 @Tag(name = "Chat", description = "Chat conversation and streaming endpoints")
 class ChatController(
     private val chatService: ChatService,
+    private val chatRewardProperties: ChatRewardProperties,
+    private val objectMapper: ObjectMapper,
 ) {
 
     @PostMapping("/conversations")
@@ -271,9 +275,22 @@ class ChatController(
             conversationId = request.conversationId!!,
             content = request.message,
         )
-            .asChatSseEvents()
+            .asChatSseEvents(doneRewardPayload())
             .withHeartbeat(Duration.ofSeconds(HEARTBEAT_INTERVAL_SECONDS))
     }
+
+    /**
+     * Reward delta settled on successful chat completion, emitted as the `done` event data (JSON).
+     * Values are fixed by policy today; the payload lets the client show the real amounts once
+     * rewards become variable. Both fields are Long, so manual JSON needs no escaping.
+     */
+    private fun doneRewardPayload(): String =
+        objectMapper.writeValueAsString(
+            mapOf(
+                "pointDelta" to chatRewardProperties.chatRewardPt,
+                "expDelta" to chatRewardProperties.evolutionExpPerChat,
+            )
+        )
 
     companion object {
         /** Heartbeat cadence; must stay well below the nginx SSE read timeout (60s). */
