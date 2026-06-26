@@ -3,18 +3,24 @@ package com.wnl.cashchat.api.domain.evolution.web.controller
 import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
 import com.wnl.cashchat.api.domain.evolution.web.request.EvolutionAttemptRequest
 import com.wnl.cashchat.api.domain.evolution.web.response.EvolutionAttemptResponse
+import com.wnl.cashchat.api.domain.evolution.web.response.EvolutionAttemptsResponse
 import com.wnl.cashchat.api.domain.evolution.web.response.EvolutionStateResponse
 import jakarta.validation.Valid
+import jakarta.validation.constraints.Max
+import jakarta.validation.constraints.Min
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException
 import org.springframework.security.core.Authentication
+import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
 @RequestMapping("/api/evolution")
+@Validated
 class EvolutionController(
     private val evolutionService: EvolutionService,
 ) {
@@ -30,6 +36,13 @@ class EvolutionController(
         EvolutionAttemptResponse.from(
             evolutionService.attempt(authentication.userId(), request.idempotencyKey)
         )
+
+    @GetMapping("/attempts")
+    fun getAttempts(
+        authentication: Authentication,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) limit: Int,
+    ): EvolutionAttemptsResponse =
+        EvolutionAttemptsResponse.from(evolutionService.getAttempts(authentication.userId(), limit))
 
     private fun Authentication.userId(): Long =
         principal as? Long ?: throw AuthenticationCredentialsNotFoundException("Invalid authenticated principal")

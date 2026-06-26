@@ -3,6 +3,7 @@ package com.wnl.cashchat.api.domain.evolution.web.exception
 import com.wnl.cashchat.api.common.web.response.ErrorResponse
 import com.wnl.cashchat.api.domain.evolution.exception.AlreadyMaxLevelException
 import com.wnl.cashchat.api.domain.evolution.exception.InsufficientEvolutionExpException
+import jakarta.validation.ConstraintViolationException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.ExceptionHandler
@@ -20,4 +21,9 @@ class EvolutionExceptionHandler {
     fun handleInsufficientEvolutionExp(e: InsufficientEvolutionExpException): ResponseEntity<ErrorResponse> =
         ResponseEntity.status(HttpStatus.CONFLICT)
             .body(ErrorResponse("INSUFFICIENT_EVOLUTION_EXP", e.message ?: "Insufficient evolution exp"))
+
+    @ExceptionHandler(ConstraintViolationException::class)
+    fun handleConstraintViolation(e: ConstraintViolationException): ResponseEntity<ErrorResponse> =
+        ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .body(ErrorResponse("INVALID_PARAMETER", e.message ?: "Invalid request parameter"))
 }

@@ -17,6 +17,7 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -159,5 +160,22 @@ class EvolutionServiceTest : FunSpec({
         val state = service.getState(userId)
 
         state.currentExp shouldBe 750L
+    }
+
+    test("getAttempts returns own records newest-first limited by limit") {
+        val now = java.time.Instant.parse("2026-06-25T12:34:56Z")
+        val a1 = EvolutionAttempt(userId = userId, fromLevel = 2, cost = 1200, success = true, resultLevel = 3, idempotencyKey = "k1")
+            .apply { createdAt = now }
+        whenever(evolutionAttemptRepository.findByUserIdOrderByCreatedAtDesc(eq(userId), any()))
+            .thenReturn(listOf(a1))
+
+        val records = service.getAttempts(userId, 20)
+
+        records.size shouldBe 1
+        records[0].success shouldBe true
+        records[0].fromLevel shouldBe 2
+        records[0].resultLevel shouldBe 3
+        records[0].cost shouldBe 1200L
+        records[0].attemptedAt shouldBe now
     }
 })

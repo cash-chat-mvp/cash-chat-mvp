@@ -9,6 +9,7 @@ import com.wnl.cashchat.api.domain.evolution.persistence.repository.UserEvolutio
 import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -46,6 +47,19 @@ class EvolutionService(
             currentExp = evo.exp,
         )
     }
+
+    @Transactional(readOnly = true)
+    fun getAttempts(userId: Long, limit: Int): List<EvolutionAttemptRecordResult> =
+        evolutionAttemptRepository.findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(0, limit))
+            .map {
+                EvolutionAttemptRecordResult(
+                    success = it.success,
+                    fromLevel = it.fromLevel,
+                    resultLevel = it.resultLevel,
+                    cost = it.cost,
+                    attemptedAt = it.createdAt,
+                )
+            }
 
     /** 채팅 완료 보상: 진화 경험치 적립(개정 모델 CC-283 R1). */
     @Transactional
