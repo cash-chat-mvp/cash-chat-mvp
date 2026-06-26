@@ -32,11 +32,12 @@ actual fun readFileBytes(path: String): ByteArray? {
     return if (file.exists()) file.readBytes() else null
 }
 
-actual fun writeFileBytes(path: String, bytes: ByteArray, append: Boolean) {
+actual fun writeFileBytes(path: String, bytes: ByteArray, append: Boolean, offset: Int, length: Int) {
+    check(offset >= 0 && length >= 0 && offset + length <= bytes.size) { "Invalid byte range." }
     val file = File(path)
     file.parentFile?.mkdirs()
     FileOutputStream(file, append).use { output ->
-        output.write(bytes)
+        output.write(bytes, offset, length)
     }
 }
 

@@ -68,7 +68,7 @@ struct ChatScreen: View {
         .sheet(
             isPresented: Binding(
                 get: { vm.selectedModel == .cashAi && vm.energyGateVisible },
-                set: { if !$0 { vm.dismissGate() } }
+                set: { if !$0 { vm.energyGateVisible = false } }
             ),
             onDismiss: { vm.dismissGate() }
         ) {

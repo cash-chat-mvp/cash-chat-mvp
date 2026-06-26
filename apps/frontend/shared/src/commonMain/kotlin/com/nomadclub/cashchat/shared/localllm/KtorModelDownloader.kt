@@ -79,8 +79,9 @@ class KtorModelDownloader(
 
                 writeFileBytes(
                     path = tempPath,
-                    bytes = buffer.copyOf(read),
+                    bytes = buffer,
                     append = append,
+                    length = read,
                 )
                 append = true
                 receivedBytes += read

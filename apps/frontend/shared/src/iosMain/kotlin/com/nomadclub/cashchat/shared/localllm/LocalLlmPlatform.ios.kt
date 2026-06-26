@@ -76,16 +76,17 @@ actual fun readFileBytes(path: String): ByteArray? {
     }
 }
 
-actual fun writeFileBytes(path: String, bytes: ByteArray, append: Boolean) {
+actual fun writeFileBytes(path: String, bytes: ByteArray, append: Boolean, offset: Int, length: Int) {
+    check(offset >= 0 && length >= 0 && offset + length <= bytes.size) { "Invalid byte range." }
     parentPath(path)?.let(::ensureDirectory)
     val file = fopen(path, if (append) "ab" else "wb")
         ?: error("Unable to open $path for writing.")
     try {
-        if (bytes.isNotEmpty()) {
+        if (length > 0) {
             val written = bytes.usePinned {
-                fwrite(it.addressOf(0), 1.convert(), bytes.size.convert(), file).toInt()
+                fwrite(it.addressOf(offset), 1.convert(), length.convert(), file).toInt()
             }
-            check(written == bytes.size) { "Unable to write all bytes to $path." }
+            check(written == length) { "Unable to write all bytes to $path." }
         }
     } finally {
         fclose(file)

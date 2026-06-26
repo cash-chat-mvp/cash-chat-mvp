@@ -283,9 +283,9 @@ final class ChatViewModel: ObservableObject {
     func send(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
+        gemmaSendBlockedMessage = nil
         switch selectedModel {
         case .cashAi:
-            gemmaSendBlockedMessage = nil
             store.sendMessage(text: trimmed)
             return true
         case .gemma:
@@ -294,7 +294,6 @@ final class ChatViewModel: ObservableObject {
                 gemmaSendBlockedMessage = "Gemma 모델 다운로드와 검증이 끝난 뒤 전송할 수 있어요."
                 return false
             }
-            gemmaSendBlockedMessage = nil
             localChatStore.sendMessage(text: trimmed)
             return true
         }

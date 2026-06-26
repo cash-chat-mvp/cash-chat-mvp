@@ -14,7 +14,13 @@ expect fun fileSize(path: String): Long
 
 expect fun readFileBytes(path: String): ByteArray?
 
-expect fun writeFileBytes(path: String, bytes: ByteArray, append: Boolean = false)
+expect fun writeFileBytes(
+    path: String,
+    bytes: ByteArray,
+    append: Boolean = false,
+    offset: Int = 0,
+    length: Int = bytes.size,
+)
 
 expect fun deleteFile(path: String): Boolean
 
