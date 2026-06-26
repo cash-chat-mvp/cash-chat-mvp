@@ -18,6 +18,7 @@ import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import java.time.Instant
@@ -31,6 +32,8 @@ class EvolutionControllerTest : FunSpec() {
     @Autowired lateinit var mockMvc: MockMvc
 
     @MockBean lateinit var evolutionService: EvolutionService
+    @MockBean lateinit var timingSessionStore: com.wnl.cashchat.api.domain.evolution.service.TimingSessionStore
+    @MockBean lateinit var timingConfig: com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties.TimingConfig
     @MockBean lateinit var jwtTokenHandler: JwtTokenHandler
     @MockBean(name = "jpaMappingContext") lateinit var jpaMappingContext: JpaMetamodelMappingContext
 
@@ -64,6 +67,25 @@ class EvolutionControllerTest : FunSpec() {
         test("GET /attempts with limit 0 returns 400") {
             mockMvc.perform(get("/api/evolution/attempts").param("limit", "0").principal(principal))
                 .andExpect(status().isBadRequest)
+        }
+
+        test("POST /timing-sessions returns session window params") {
+            val started = Instant.parse("2026-06-26T00:00:00Z")
+            whenever(timingSessionStore.issue(eq(1L))).thenReturn(
+                com.wnl.cashchat.api.domain.evolution.service.TimingSession(
+                    sessionId = "sess-1", userId = 1L,
+                    serverStartedAt = started, expiresAt = started.plusSeconds(120),
+                )
+            )
+            whenever(timingConfig.minimumHoldMs).thenReturn(600)
+            whenever(timingConfig.cycleDurationMs).thenReturn(1800)
+
+            mockMvc.perform(post("/api/evolution/timing-sessions").principal(principal))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.sessionId").value("sess-1"))
+                .andExpect(jsonPath("$.serverStartedAt").value("2026-06-26T00:00:00Z"))
+                .andExpect(jsonPath("$.minimumHoldMs").value(600))
+                .andExpect(jsonPath("$.cycleDurationMs").value(1800))
         }
     }
 }

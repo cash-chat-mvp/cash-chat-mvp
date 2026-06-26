@@ -1,10 +1,13 @@
 package com.wnl.cashchat.api.domain.evolution.web.controller
 
+import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
+import com.wnl.cashchat.api.domain.evolution.service.TimingSessionStore
 import com.wnl.cashchat.api.domain.evolution.web.request.EvolutionAttemptRequest
 import com.wnl.cashchat.api.domain.evolution.web.response.EvolutionAttemptResponse
 import com.wnl.cashchat.api.domain.evolution.web.response.EvolutionAttemptsResponse
 import com.wnl.cashchat.api.domain.evolution.web.response.EvolutionStateResponse
+import com.wnl.cashchat.api.domain.evolution.web.response.TimingSessionResponse
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
@@ -23,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController
 @Validated
 class EvolutionController(
     private val evolutionService: EvolutionService,
+    private val timingSessionStore: TimingSessionStore,
+    private val timingConfig: EvolutionProperties.TimingConfig,
 ) {
     @GetMapping("/me")
     fun getState(authentication: Authentication): EvolutionStateResponse =
@@ -43,6 +48,10 @@ class EvolutionController(
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) limit: Int,
     ): EvolutionAttemptsResponse =
         EvolutionAttemptsResponse.from(evolutionService.getAttempts(authentication.userId(), limit))
+
+    @PostMapping("/timing-sessions")
+    fun createTimingSession(authentication: Authentication): TimingSessionResponse =
+        TimingSessionResponse.from(timingSessionStore.issue(authentication.userId()), timingConfig)
 
     private fun Authentication.userId(): Long =
         principal as? Long ?: throw AuthenticationCredentialsNotFoundException("Invalid authenticated principal")
