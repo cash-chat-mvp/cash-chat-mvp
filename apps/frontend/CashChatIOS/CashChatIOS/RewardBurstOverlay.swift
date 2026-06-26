@@ -151,39 +151,38 @@ struct RewardTokenOverlay: View {
             .frame(width: geo.size.width, height: geo.size.height)
         }
         .allowsHitTesting(false)
-        .onChange(of: reward) { newValue in
-            guard let r = newValue, r != current else { return }
+        // 보상이 짧은 간격으로 연달아 들어와도 .task(id:) 가 이전 연출을 자동 취소하므로
+        // 취소 불가능한 타이머가 중첩돼 onPointArrived/onExpArrived 가 중복 호출되는
+        // 레이스 컨디션을 방지한다.
+        .task(id: reward) {
+            guard let r = reward, r != current else { return }
             current = r
-            play()
+
+            if reduceMotion {
+                coinVisible = true; expVisible = true
+                onPointArrived()
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                onExpArrived()
+                try? await Task.sleep(nanoseconds: 680_000_000)
+                coinVisible = false; expVisible = false
+                return
+            }
+
+            // 코인 — 즉시 출발 / 별 — 0.12초 뒤 출발, 각각 1.4초 이동
+            resetThenAnimate(coin: true)
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            resetThenAnimate(coin: false)
+
+            try? await Task.sleep(nanoseconds: 1_280_000_000)
+            onPointArrived(); coinVisible = false
+
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            onExpArrived(); expVisible = false
         }
     }
 
     private func control(_ a: CGPoint, _ b: CGPoint, _ dir: CGFloat) -> CGPoint {
         CGPoint(x: (a.x + b.x) / 2 + dir * 36, y: min(a.y, b.y) - 90)
-    }
-
-    private func play() {
-        if reduceMotion {
-            coinVisible = true; expVisible = true
-            onPointArrived()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { onExpArrived() }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                coinVisible = false; expVisible = false
-            }
-            return
-        }
-        // 코인 — 즉시 출발
-        resetThenAnimate(coin: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            onPointArrived(); coinVisible = false
-        }
-        // 별 — 0.12초 뒤 출발
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            resetThenAnimate(coin: false)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-                onExpArrived(); expVisible = false
-            }
-        }
     }
 
     private func resetThenAnimate(coin: Bool) {

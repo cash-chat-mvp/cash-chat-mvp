@@ -40,7 +40,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -100,7 +99,10 @@ fun ChatScreen(
     val listState = rememberLazyListState()
 
     // 보상 토큰 연출용 좌표/펄스 (모두 root px 기준)
-    val bubbleOrigins = remember { mutableStateMapOf<String, Offset>() }
+    // 좌표는 보상 이벤트가 떴을 때 LaunchedEffect 안에서 단발성으로만 읽으므로 관찰 가능한
+    // 상태가 필요 없다. 스크롤마다 onGloballyPositioned 가 갱신해도 리컴포지션이 일어나지 않도록
+    // 일반 HashMap 을 쓴다.
+    val bubbleOrigins = remember { HashMap<String, Offset>() }
     var pointHud by remember { mutableStateOf<Offset?>(null) }
     var expHud by remember { mutableStateOf<Offset?>(null) }
     var pointPulse by remember { mutableIntStateOf(0) }

@@ -85,12 +85,14 @@ final class EvolutionViewModel: ObservableObject {
         predictedGrade = .normal
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         tickerTask?.cancel()
-        tickerTask = Task { @MainActor in
-            while !Task.isCancelled && phase == .charging {
-                let elapsedMs = Int64((CACurrentMediaTime() - holdStartedAt) * 1000)
-                let pos = position(elapsedMs, w)
-                timingPosition = CGFloat(pos)
-                predictedGrade = EvolutionTimingKt.localTimingGrade(position: pos, window: w)
+        // [weak self] 로 캡처해 뷰가 사라져도(누른 채 이탈 등) 순환 참조로 인한
+        // 메모리 누수·백그라운드 루프가 생기지 않게 한다.
+        tickerTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled, self.phase == .charging {
+                let elapsedMs = Int64((CACurrentMediaTime() - self.holdStartedAt) * 1000)
+                let pos = self.position(elapsedMs, w)
+                self.timingPosition = CGFloat(pos)
+                self.predictedGrade = EvolutionTimingKt.localTimingGrade(position: pos, window: w)
                 try? await Task.sleep(nanoseconds: 16_000_000)
             }
         }

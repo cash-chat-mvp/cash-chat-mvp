@@ -90,6 +90,9 @@ fun EvolutionScreen(
         runCatching { shopApi.getInventory() }.onSuccess { inventory = it }
     }
     val uiState by viewModel.uiState.collectAsState()
+    // 등급(predictedGrade)은 임계값을 넘을 때만 바뀌므로 햅틱용으로 상위에서 구독해도
+    // 16ms마다 재구성되지 않는다. 위치(timingPosition)는 게이지 컴포넌트에서만 구독한다.
+    val predictedGrade by viewModel.predictedGrade.collectAsState()
     val history by viewModel.evolutionStore.history.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val haptic = LocalHapticFeedback.current
@@ -114,9 +117,9 @@ fun EvolutionScreen(
         }
     }
     // 등급 향상 시 미세 햅틱
-    LaunchedEffect(content?.predictedGrade) {
-        if (phase == EvolutionViewModel.Phase.CHARGING && content?.predictedGrade != null &&
-            content.predictedGrade != TimingGrade.NORMAL
+    LaunchedEffect(predictedGrade) {
+        if (phase == EvolutionViewModel.Phase.CHARGING && predictedGrade != null &&
+            predictedGrade != TimingGrade.NORMAL
         ) {
             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
@@ -345,6 +348,9 @@ private fun TimingEvolveControls(
     viewModel: EvolutionViewModel,
 ) {
     val session = viewModel.evolutionStore.timingSession.collectAsState().value
+    // 게이지 위치/등급은 이 컴포넌트에서만 구독해 16ms 갱신이 화면 전체로 번지지 않게 한다.
+    val timingPosition by viewModel.timingPosition.collectAsState()
+    val predictedGrade by viewModel.predictedGrade.collectAsState()
     val window = remember(session) {
         session?.let { TimingWindow(minimumHoldMs = it.minimumHoldMs, cycleDurationMs = it.cycleDurationMs) }
     } ?: TimingWindow(minimumHoldMs = 600, cycleDurationMs = 1800)
@@ -357,8 +363,8 @@ private fun TimingEvolveControls(
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         EvolutionTimingGauge(
             window = window,
-            position = content.timingPosition,
-            predictedGrade = content.predictedGrade,
+            position = timingPosition,
+            predictedGrade = predictedGrade,
             active = charging,
             modifier = Modifier.fillMaxWidth(),
         )

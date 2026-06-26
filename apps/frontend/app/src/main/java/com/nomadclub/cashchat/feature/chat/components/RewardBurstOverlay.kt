@@ -56,31 +56,47 @@ fun RewardTokenOverlay(
     var origin by remember { mutableStateOf(Offset.Zero) }
 
     LaunchedEffect(event?.eventId) {
-        val e = event ?: return@LaunchedEffect
+        val e = event
+        if (e == null) {
+            // 이벤트가 비워지면(소비 완료) 토큰을 확실히 감춘다.
+            coinVisible = false; expVisible = false
+            return@LaunchedEffect
+        }
         origin = originOf(e.messageId) ?: fallbackOrigin
         if (reducedMotion) {
             // 이동 대신 버블 위치 토큰 + HUD 크로스페이드(펄스)
-            coinProgress.snapTo(0f); expProgress.snapTo(0f)
-            coinVisible = true; expVisible = true
-            onPointArrived()
-            delay(120); onExpArrived()
-            delay(700); coinVisible = false; expVisible = false
+            try {
+                coinProgress.snapTo(0f); expProgress.snapTo(0f)
+                coinVisible = true; expVisible = true
+                onPointArrived()
+                delay(120); onExpArrived()
+                delay(700)
+            } finally {
+                // 취소돼도 토큰이 화면에 영구히 남지 않도록 상태를 되돌린다.
+                coinVisible = false; expVisible = false
+            }
             return@LaunchedEffect
         }
         launch {
-            coinVisible = true
-            coinProgress.snapTo(0f)
-            coinProgress.animateTo(1f, tween(1400, easing = FastOutSlowInEasing))
-            onPointArrived()
-            coinVisible = false
+            try {
+                coinVisible = true
+                coinProgress.snapTo(0f)
+                coinProgress.animateTo(1f, tween(1400, easing = FastOutSlowInEasing))
+                onPointArrived()
+            } finally {
+                coinVisible = false
+            }
         }
         delay(120)
         launch {
-            expVisible = true
-            expProgress.snapTo(0f)
-            expProgress.animateTo(1f, tween(1400, easing = FastOutSlowInEasing))
-            onExpArrived()
-            expVisible = false
+            try {
+                expVisible = true
+                expProgress.snapTo(0f)
+                expProgress.animateTo(1f, tween(1400, easing = FastOutSlowInEasing))
+                onExpArrived()
+            } finally {
+                expVisible = false
+            }
         }
     }
 

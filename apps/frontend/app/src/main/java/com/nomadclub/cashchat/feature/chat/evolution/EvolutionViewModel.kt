@@ -40,14 +40,20 @@ class EvolutionViewModel(
             val evolution: EvolutionStateDto,
             val capability: TimingCapability = TimingCapability.UNKNOWN,
             val phase: Phase = Phase.IDLE,
-            val timingPosition: Float = 0f,
-            val predictedGrade: TimingGrade? = null,
             val result: EvolutionAttemptDto? = null,
         ) : UiState
     }
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
     val uiState = _uiState.asStateFlow()
+
+    // 게이지는 16ms마다 갱신되므로 화면 전체 리컴포지션을 피하려 _uiState 와 분리한다.
+    // 게이지 컴포넌트만 이 Flow 들을 구독해 국소적으로 재구성된다.
+    private val _timingPosition = MutableStateFlow(0f)
+    val timingPosition = _timingPosition.asStateFlow()
+
+    private val _predictedGrade = MutableStateFlow<TimingGrade?>(null)
+    val predictedGrade = _predictedGrade.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage = _errorMessage.asStateFlow()
@@ -97,15 +103,16 @@ class EvolutionViewModel(
         if (content.phase != Phase.IDLE || content.capability != TimingCapability.SUPPORTED) return
         val window = currentWindow() ?: return
         holdStartedAt = SystemClock.elapsedRealtime()
-        updateContent { it.copy(phase = Phase.CHARGING, timingPosition = 0f, predictedGrade = TimingGrade.NORMAL) }
+        updateContent { it.copy(phase = Phase.CHARGING) }
+        _timingPosition.value = 0f
+        _predictedGrade.value = TimingGrade.NORMAL
         tickerJob?.cancel()
         tickerJob = viewModelScope.launch {
             while ((_uiState.value as? UiState.Content)?.phase == Phase.CHARGING) {
                 val elapsed = SystemClock.elapsedRealtime() - holdStartedAt
                 val position = positionFor(elapsed, window)
-                updateContent {
-                    it.copy(timingPosition = position, predictedGrade = localTimingGrade(position, window))
-                }
+                _timingPosition.value = position
+                _predictedGrade.value = localTimingGrade(position, window)
                 delay(16)
             }
         }
@@ -113,7 +120,13 @@ class EvolutionViewModel(
 
     fun cancelHold() {
         tickerJob?.cancel()
-        updateContent { it.copy(phase = Phase.IDLE, timingPosition = 0f, predictedGrade = null) }
+        updateContent { it.copy(phase = Phase.IDLE) }
+        resetTiming()
+    }
+
+    private fun resetTiming() {
+        _timingPosition.value = 0f
+        _predictedGrade.value = null
     }
 
     fun releaseHold() {
@@ -148,7 +161,8 @@ class EvolutionViewModel(
             val result = try {
                 evolutionStore.attempt(timing)
             } catch (e: ApiException) {
-                updateContent { it.copy(phase = Phase.IDLE, timingPosition = 0f, predictedGrade = null) }
+                updateContent { it.copy(phase = Phase.IDLE) }
+                resetTiming()
                 _errorMessage.value = when (e.code) {
                     ApiException.INSUFFICIENT_EVOLUTION_EXP,
                     ApiException.INSUFFICIENT_POINTS -> "경험치가 부족해요. 채팅으로 모아볼까요?"
@@ -160,7 +174,8 @@ class EvolutionViewModel(
                 }
                 return@launch
             } catch (e: Exception) {
-                updateContent { it.copy(phase = Phase.IDLE, timingPosition = 0f, predictedGrade = null) }
+                updateContent { it.copy(phase = Phase.IDLE) }
+                resetTiming()
                 _errorMessage.value = "네트워크 오류 — 다시 시도해주세요"
                 return@launch
             }
@@ -174,7 +189,8 @@ class EvolutionViewModel(
     }
 
     fun dismissResult() {
-        updateContent { it.copy(phase = Phase.IDLE, result = null, timingPosition = 0f, predictedGrade = null) }
+        updateContent { it.copy(phase = Phase.IDLE, result = null) }
+        resetTiming()
     }
 
     fun clearError() { _errorMessage.value = null }
