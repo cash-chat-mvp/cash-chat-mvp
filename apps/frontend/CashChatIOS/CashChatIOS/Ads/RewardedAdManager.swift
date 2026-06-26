@@ -46,9 +46,9 @@ final class RewardedAdManager: NSObject {
             return
         }
         if let nonce {
-            // customRewardString 이 SSV 콜백의 custom_data 파라미터로 전달된다(서버 nonce 검증용).
+            // customRewardText(ObjC customRewardString) 가 SSV 콜백의 custom_data 파라미터로 전달된다(서버 nonce 검증용).
             let options = ServerSideVerificationOptions()
-            options.customRewardString = nonce
+            options.customRewardText = nonce
             ad.serverSideVerificationOptions = options
         }
         self.onRewarded = onRewarded
