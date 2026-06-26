@@ -7,11 +7,11 @@ CARD_DOCS_PATH="docs/review/ai-code-review.md"
 # 상태(KIND) → GitHub Alert 토큰
 _card_alert() {
   case "${1:-}" in
-    progress|help|hold) echo "NOTE" ;;
-    clean|approve)      echo "TIP" ;;
-    quota)              echo "WARNING" ;;
-    error)              echo "CAUTION" ;;
-    *)                  echo "NOTE" ;;
+    progress|help|hold|autostop) echo "NOTE" ;;
+    clean|approve|autostart)     echo "TIP" ;;
+    quota)                       echo "WARNING" ;;
+    error)                       echo "CAUTION" ;;
+    *)                           echo "NOTE" ;;
   esac
 }
 
