@@ -1,5 +1,6 @@
 package com.wnl.cashchat.api.domain.chat.web.controller
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.wnl.cashchat.api.common.web.response.ErrorResponse
 import com.wnl.cashchat.api.domain.chat.properties.ChatRewardProperties
 import com.wnl.cashchat.api.domain.chat.service.ChatService
@@ -42,6 +43,7 @@ import java.util.UUID
 class ChatController(
     private val chatService: ChatService,
     private val chatRewardProperties: ChatRewardProperties,
+    private val objectMapper: ObjectMapper,
 ) {
 
     @PostMapping("/conversations")
@@ -283,7 +285,12 @@ class ChatController(
      * rewards become variable. Both fields are Long, so manual JSON needs no escaping.
      */
     private fun doneRewardPayload(): String =
-        """{"pointDelta":${chatRewardProperties.chatRewardPt},"expDelta":${chatRewardProperties.evolutionExpPerChat}}"""
+        objectMapper.writeValueAsString(
+            mapOf(
+                "pointDelta" to chatRewardProperties.chatRewardPt,
+                "expDelta" to chatRewardProperties.evolutionExpPerChat,
+            )
+        )
 
     companion object {
         /** Heartbeat cadence; must stay well below the nginx SSE read timeout (60s). */
