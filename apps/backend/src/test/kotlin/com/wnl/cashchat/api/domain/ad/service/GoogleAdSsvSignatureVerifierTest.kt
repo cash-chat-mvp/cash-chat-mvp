@@ -70,6 +70,20 @@ class GoogleAdSsvSignatureVerifierTest : FunSpec({
             verifier.verify("payload=one", "MEU", 1L)
         }
     }
+
+    test("signature over the url-decoded payload passes even when raw payload is percent-encoded") {
+        val keyPair = ecKeyPair()
+        val publicKeyClient = mock<GoogleAdPublicKeyClient>()
+        whenever(publicKeyClient.getPublicKey(7L)).thenReturn(keyPair.public)
+        val verifier = GoogleAdSsvSignatureVerifier(publicKeyClient)
+        // 검증기에 전달되는 raw 페이로드(인코딩됨)와, Google 이 서명한 디코딩 페이로드
+        val rawPayload = "ad_unit=au&reward_item=%EC%97%90&user_id=1"
+        val decodedPayload = "ad_unit=au&reward_item=에&user_id=1"
+        val signature = webSafeBase64Signature(decodedPayload, keyPair)
+
+        // raw 로는 서명이 안 맞지만 decoded 로 재시도해 통과해야 한다.
+        verifier.verify(rawPayload, signature, 7L)
+    }
 })
 
 private fun ecKeyPair(): KeyPair {

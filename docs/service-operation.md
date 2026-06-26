@@ -130,7 +130,7 @@ Cash Chat은 **성격이 완전히 다른 세 화폐**를 운용한다(개정 �
 - 리워드 광고 1회 정상 시청 → **밥(energy) 3 적립**(`energy-amount: 3`, 개정 모델). 코인은 적립하지 않는다.
   상한(`max-energy: 50`) 초과분은 잘린다(밥이 가득 차 있으면 적립 없음).
 - **일일 한도 10회**(`daily-limit: 10`), KST 자정 리셋. 한도 초과 시 `REJECTED_OVER_QUOTA`.
-- **nonce 단일 사용**: 서버가 발급한 nonce(TTL 10분)를 광고 SDK의 `user_id`에 실어 보내고,
+- **nonce 단일 사용**: 서버가 발급한 nonce(TTL 10분)를 광고 SDK의 `custom_data`에 실어 보내고,
   콜백에서 1회만 소모. 재사용 시 `REJECTED_INVALID_NONCE`.
 - 멱등: 이벤트 상태 가드(`VERIFIED`→`GRANTED`, 비관락)가 재전송 시 재적립을 막는다(별도 포인트 멱등키 없음 — 밥 적립으로 전환되며 포인트 원장을 쓰지 않음).
 
@@ -178,7 +178,7 @@ GET /api/ads/google/ssv
 > 의도이나, **아직 어떤 수익 경로와도 연결되지 않은 상태**다. 활성화 여부는 운영 결정 사항(§부록 C).
 
 - 서명 검증: Google 공개키(`verifier-keys.json`, 24h 캐시)로 SSV 서명 검증.
-- 광고 단위 검증: `rewarded-ad-unit-id` 설정 시 일치 확인.
+- 광고 단위 검증: `rewarded-ad-unit-ids`(`APP_ADS_GOOGLE_REWARDED_AD_UNIT_IDS`) 설정 시 일치 확인.
 - 실패해도 SSV 엔드포인트는 2xx 반환 → Google 재시도 폭주(retry storm) 방지.
 - 설정: `infra`/환경변수 `APP_ADS_GOOGLE_*`, 상세는 `docs/admob-production-setup.md`.
 
@@ -294,9 +294,9 @@ GET /api/ads/google/ssv
 
 **현행 (as-is)**
 - 클라이언트가 리워드 광고 표시 전 `POST /api/ads/reward/issue-nonce`로 서버 nonce 발급.
-- nonce를 AdMob SDK의 SSV `user_id` 파라미터에 실어 광고 노출.
+- nonce를 AdMob SDK의 SSV `custom_data` 파라미터에 실어 광고 노출(Android `setCustomData`, iOS `customRewardString`).
 - 광고 완료 → Google 서버가 `GET /api/ads/google/ssv?...` 콜백 → 서버가 서명 검증 후 적립.
-- **클라이언트가 보낸 user_id를 직접 신뢰하지 않는다** — 서버 발급 nonce를 통해서만 유저 식별.
+- **클라이언트가 보낸 custom_data를 직접 신뢰하지 않는다** — 서버 발급 nonce를 통해서만 유저 식별.
 
 ### 5.2 TNK Offerwall 연동 방식
 

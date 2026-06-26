@@ -30,9 +30,9 @@ class AdRewardServiceTest : FunSpec({
     val kstToday = LocalDate.of(2026, 5, 31)
     val txnId = "txn-1"
 
-    fun callback(userIdNonce: String) = GoogleAdSsvCallback(
+    fun callback(nonceCustomData: String) = GoogleAdSsvCallback(
         adUnit = "rewarded", rewardAmount = 10, rewardItem = "coin", timestamp = 1L,
-        transactionId = txnId, userId = userIdNonce, signature = "sig", keyId = 1L,
+        transactionId = txnId, userId = null, customData = nonceCustomData, signature = "sig", keyId = 1L,
         rawQueryString = "raw", signedPayload = "raw",
     )
 
@@ -108,6 +108,22 @@ class AdRewardServiceTest : FunSpec({
 
         // 거절 종결 상태는 재전송돼도 그대로 유지되고, nonce 락 획득·적립을 시도하지 않는다.
         event.rewardStatus shouldBe RewardStatus.REJECTED_OVER_QUOTA
+        verify(nonceRepository, never()).findForUpdate(any())
+        verify(energyService, never()).charge(any(), any())
+    }
+
+    test("missing custom_data marks event REJECTED_INVALID_NONCE without nonce lookup") {
+        val event = GoogleAdSsvEvent(transactionId = txnId, userId = null, rewardAmount = 10, rewardItem = "coin", adUnit = "rewarded", keyId = 1L, rawQueryString = "raw", customData = null)
+        whenever(eventRepository.findForUpdateByTransactionId(txnId)).thenReturn(event)
+        val noCustomData = GoogleAdSsvCallback(
+            adUnit = "rewarded", rewardAmount = 10, rewardItem = "coin", timestamp = 1L,
+            transactionId = txnId, userId = null, customData = null, signature = "sig", keyId = 1L,
+            rawQueryString = "raw", signedPayload = "raw",
+        )
+
+        service.grantFromCallback(noCustomData, now)
+
+        event.rewardStatus shouldBe RewardStatus.REJECTED_INVALID_NONCE
         verify(nonceRepository, never()).findForUpdate(any())
         verify(energyService, never()).charge(any(), any())
     }
