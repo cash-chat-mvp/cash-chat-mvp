@@ -13,6 +13,7 @@
 		AD0000010000000000000005 /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = AD0000010000000000000006 /* FirebaseRemoteConfig */; };
 		AD0000010000000000000007 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = AD0000010000000000000008 /* FirebaseAnalytics */; };
 		CC2130032F5D5C2B009F83EE /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = CC2130022F5D5C2B009F83EE /* GoogleSignIn */; };
+		FBE005102FEE9C1B005A5DCE /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = FBE0050F2FEE9C1B005A5DCE /* LiteRTLM */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,6 +83,7 @@
 				AD0000010000000000000005 /* FirebaseRemoteConfig in Frameworks */,
 				AD0000010000000000000007 /* FirebaseAnalytics in Frameworks */,
 				AAE4F1D6EE6E16B7929BF492 /* TnkRwdSdk2.xcframework in Frameworks */,
+				FBE005102FEE9C1B005A5DCE /* LiteRTLM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -150,6 +152,7 @@
 				AD0000010000000000000002 /* GoogleMobileAds */,
 				AD0000010000000000000006 /* FirebaseRemoteConfig */,
 				AD0000010000000000000008 /* FirebaseAnalytics */,
+				FBE0050F2FEE9C1B005A5DCE /* LiteRTLM */,
 			);
 			productName = CashChatIOS;
 			productReference = FBEF9B8E2F5D5C2B009F83ED /* CashChatIOS.app */;
@@ -233,6 +236,7 @@
 				CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				AD0000010000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 				AD0000010000000000000004 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				FBE0050E2FEE9C1B005A5DCE /* XCRemoteSwiftPackageReference "LiteRT-LM" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = FBEF9B8F2F5D5C2B009F83ED /* Products */;
@@ -668,6 +672,14 @@
 				minimumVersion = 7.0.0;
 			};
 		};
+		FBE0050E2FEE9C1B005A5DCE /* XCRemoteSwiftPackageReference "LiteRT-LM" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google-ai-edge/LiteRT-LM";
+			requirement = {
+				kind = revision;
+				revision = a0afb5a56acd106b23a2b2385b8469834dc268c0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -690,6 +702,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = CC2130012F5D5C2B009F83EE /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignIn;
+		};
+		FBE0050F2FEE9C1B005A5DCE /* LiteRTLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FBE0050E2FEE9C1B005A5DCE /* XCRemoteSwiftPackageReference "LiteRT-LM" */;
+			productName = LiteRTLM;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -107,8 +107,21 @@ actual fun moveFile(fromPath: String, toPath: String): Boolean {
 }
 
 actual fun sha256(path: String): String? {
-    // Keep iOS conservative until the platform hashing path is verified against the app's cinterop setup.
-    return null
+    val file = fopen(path, "rb") ?: return null
+    try {
+        val digest = Sha256Digest()
+        val buffer = ByteArray(64 * 1024)
+        while (true) {
+            val read = buffer.usePinned { pinned ->
+                fread(pinned.addressOf(0), 1.convert(), buffer.size.convert(), file).toInt()
+            }
+            if (read <= 0) break
+            digest.update(buffer, read)
+        }
+        return digest.digestHex()
+    } finally {
+        fclose(file)
+    }
 }
 
 actual fun readTextFile(path: String): String? = readFileBytes(path)?.decodeToString()

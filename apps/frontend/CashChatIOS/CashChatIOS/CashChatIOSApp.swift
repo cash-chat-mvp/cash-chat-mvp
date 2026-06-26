@@ -18,11 +18,14 @@ struct CashChatIOSApp: App {
         // Remote Config 초기화(캐시 즉시 반영 + 최신 값 fetch).
         RemoteConfigManager.shared.initialize()
         // 앱 생명주기당 1회 호출. shared Koin 그래프 초기화(데이터 레이어 접근 다리).
+        // 모델 다운로드 URL은 Remote Config로 교체 가능(자체 CDN). 비어 있으면 shared 빌트인 기본값.
+        let gemmaModelUrl = RemoteConfigManager.shared.string(RemoteConfigKeys.gemmaModelUrl)
         KoinIosKt.doInitKoin(
             baseUrl: AppConfig.apiBaseUrl,
             tokenProvider: KeychainTokenProvider(),
             adChatInterval: Int64(AppConfig.adChatInterval),
-            gemmaEngine: SwiftBackedLocalLlmEngine(bridge: GemmaLlmBridge())
+            gemmaEngine: SwiftBackedLocalLlmEngine(bridge: GemmaLlmBridge()),
+            gemmaModelUrl: gemmaModelUrl.isEmpty ? nil : gemmaModelUrl
         )
         // AdMob 초기화 (리워드 광고). 앱 생명주기당 1회.
         MobileAds.shared.start(completionHandler: nil)

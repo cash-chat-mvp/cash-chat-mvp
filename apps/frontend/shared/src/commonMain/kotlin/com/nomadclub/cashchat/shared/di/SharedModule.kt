@@ -10,6 +10,7 @@ import com.nomadclub.cashchat.shared.chat.ChatGateway
 import com.nomadclub.cashchat.shared.chat.ChatStore
 import com.nomadclub.cashchat.shared.core.network.TokenProvider
 import com.nomadclub.cashchat.shared.core.network.createCashChatHttpClient
+import com.nomadclub.cashchat.shared.core.network.createModelDownloadHttpClient
 import com.nomadclub.cashchat.shared.energy.EnergyApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionApi
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
@@ -35,7 +36,12 @@ import org.koin.dsl.module
  * shared 데이터 레이어 Koin 모듈.
  * 사용처(Android/iOS)는 baseUrl과 TokenProvider 구현을 먼저 등록해야 한다.
  */
-fun sharedDataModule(rawBaseUrl: String) = module {
+fun sharedDataModule(
+    rawBaseUrl: String,
+    // 온디바이스 모델 다운로드 URL 오버라이드(Remote Config 주입). 비어 있으면 빌트인 기본값 사용.
+    // HF CDN(IPv4 전용·US 리전) 대신 자체 듀얼스택 CDN 으로 앱 업데이트 없이 바꾸기 위함.
+    gemmaModelUrl: String? = null,
+) = module {
     // API 들이 "$baseUrl/api/..." 로 경로를 이어 붙이므로 끝의 '/'를 제거해
     // "https://host//api/..." 같은 이중 슬래시(서버 401 유발)를 방지한다.
     val baseUrl = rawBaseUrl.trimEnd('/')
@@ -60,8 +66,12 @@ fun sharedDataModule(rawBaseUrl: String) = module {
     single { ChatStore(get(), get(), get()) }
     single { HudStore(get(), get(), get(), get()) }
     single { ChatModeStore() }
-    single<GemmaModelSpec> { DEFAULT_GEMMA_SPEC }
-    single<ModelDownloader> { KtorModelDownloader(get()) }
+    single<GemmaModelSpec> {
+        val override = gemmaModelUrl?.takeIf { it.isNotBlank() }
+        if (override != null) DEFAULT_GEMMA_SPEC.copy(url = override) else DEFAULT_GEMMA_SPEC
+    }
+    // 모델 다운로드는 인증/JSON 협상이 박힌 API 클라이언트가 아니라 전용 클라이언트를 쓴다.
+    single<ModelDownloader> { KtorModelDownloader(createModelDownloadHttpClient()) }
     single {
         ModelDownloadStore(
             spec = get(),

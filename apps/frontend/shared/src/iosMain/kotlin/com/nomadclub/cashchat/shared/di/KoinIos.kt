@@ -16,6 +16,8 @@ fun doInitKoin(
     tokenProvider: TokenProvider,
     adChatInterval: Long,
     gemmaEngine: com.nomadclub.cashchat.shared.localllm.LocalLlmEngine,
+    // Remote Config 의 자체 모델 CDN URL. 빈 문자열/없음이면 빌트인 기본값 사용.
+    gemmaModelUrl: String? = null,
 ) {
     startKoin {
         modules(
@@ -35,7 +37,7 @@ fun doInitKoin(
                     )
                 }
             },
-            sharedDataModule(baseUrl),
+            sharedDataModule(baseUrl, gemmaModelUrl),
         )
     }
 }

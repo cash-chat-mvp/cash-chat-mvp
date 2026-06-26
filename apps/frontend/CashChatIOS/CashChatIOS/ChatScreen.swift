@@ -160,10 +160,18 @@ struct ChatScreen: View {
             if let progress = presentation.progress {
                 ProgressView(value: progress)
             }
-            HStack {
+            HStack(spacing: 8) {
                 if vm.modelDownloadState is ModelDownloadStateDownloading {
+                    // 다운로드 중: 취소만 노출(다운로드 버튼 숨김)
                     Button("취소") { vm.cancelGemmaDownload() }
+                } else if vm.modelDownloadState is ModelDownloadStateVerifying {
+                    // 검증 중: 버튼 없이 진행 표시(무결성 확인은 수십 초 걸릴 수 있음)
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("확인 중…")
+                        .foregroundStyle(.secondary)
                 } else if !(vm.modelDownloadState is ModelDownloadStateReady) {
+                    // 미다운로드/실패: 다운로드(재시도) 버튼
                     Button("다운로드") { vm.startGemmaDownload() }
                 }
                 Spacer()

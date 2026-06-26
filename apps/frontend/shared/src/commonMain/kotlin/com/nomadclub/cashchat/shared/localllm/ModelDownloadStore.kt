@@ -62,12 +62,19 @@ class ModelDownloadStore(
     }
 
     fun start() {
-        if (downloadJob?.isActive == true) return
+        if (downloadJob?.isActive == true) {
+            println("📥GemmaDL start(): 이미 진행 중인 job 있음 — 무시")
+            return
+        }
         ensureDirectory(modelDirectory)
+        println("📥GemmaDL start(): localPath=$localPath dir=$modelDirectory")
 
         downloadJob = scope.launch {
             try {
                 downloader.download(spec, localPath).collect { next ->
+                    if (next !is ModelDownloadState.Downloading) {
+                        println("📥GemmaDL state -> ${next::class.simpleName}")
+                    }
                     _state.value = next
                     when (next) {
                         is ModelDownloadState.Ready -> writeRecord(
@@ -84,8 +91,10 @@ class ModelDownloadStore(
                     }
                 }
             } catch (_: CancellationException) {
+                println("📥GemmaDL 취소됨")
                 _state.value = ModelDownloadState.NotDownloaded
             } catch (t: Throwable) {
+                println("📥GemmaDL 예외: ${t::class.simpleName}: ${t.message}")
                 deleteFile(metadataPath())
                 _state.value = ModelDownloadState.Failed(t.message ?: "Download failed.")
             } finally {
