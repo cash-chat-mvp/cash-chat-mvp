@@ -23,10 +23,13 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.springframework.transaction.annotation.Propagation
+import org.springframework.transaction.annotation.Transactional
 
 class EvolutionServiceTest : FunSpec({
     lateinit var userEvolutionRepository: UserEvolutionRepository
     lateinit var evolutionAttemptRepository: EvolutionAttemptRepository
+    lateinit var evolutionStateInitializer: EvolutionStateInitializer
     lateinit var probabilityRoller: ProbabilityRoller
     lateinit var energyService: EnergyService
     lateinit var timingSessionStore: TimingSessionStore
@@ -49,6 +52,7 @@ class EvolutionServiceTest : FunSpec({
     beforeTest {
         userEvolutionRepository = mock()
         evolutionAttemptRepository = mock()
+        evolutionStateInitializer = mock()
         probabilityRoller = mock()
         energyService = mock()
         timingSessionStore = mock()
@@ -56,6 +60,7 @@ class EvolutionServiceTest : FunSpec({
         service = EvolutionService(
             userEvolutionRepository,
             evolutionAttemptRepository,
+            evolutionStateInitializer,
             probabilityRoller,
             properties,
             energyService,
@@ -74,6 +79,30 @@ class EvolutionServiceTest : FunSpec({
         state.isMaxLevel shouldBe false
         state.nextAttemptCost shouldBe 500L
         state.nextSuccessRate shouldBe 0.7
+    }
+
+    test("getState initializes evolution state for an existing user when missing") {
+        val user = user()
+        whenever(userEvolutionRepository.findByUserId(userId)).thenReturn(null)
+        whenever(evolutionStateInitializer.initializeExistingUser(userId)).thenReturn(UserEvolution(user = user, level = 1))
+
+        val state = service.getState(userId)
+
+        state.level shouldBe 1
+        state.currentExp shouldBe 0L
+        verify(evolutionStateInitializer).initializeExistingUser(userId)
+    }
+
+    test("getState remains read-only and initializer opens an independent write transaction") {
+        val getStateTx = EvolutionService::class.java
+            .getMethod("getState", java.lang.Long.TYPE)
+            .getAnnotation(Transactional::class.java)
+        val initializerTx = EvolutionStateInitializer::class.java
+            .getMethod("initializeExistingUser", java.lang.Long.TYPE)
+            .getAnnotation(Transactional::class.java)
+
+        getStateTx.readOnly shouldBe true
+        initializerTx.propagation shouldBe Propagation.REQUIRES_NEW
     }
 
     test("getState at a level with no rule is reported as max") {

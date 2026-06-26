@@ -8,7 +8,6 @@ import com.wnl.cashchat.api.domain.evolution.persistence.repository.EvolutionAtt
 import com.wnl.cashchat.api.domain.evolution.persistence.repository.UserEvolutionRepository
 import com.wnl.cashchat.api.domain.evolution.properties.EvolutionProperties
 import com.wnl.cashchat.api.domain.user.persistence.entity.User
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.domain.PageRequest
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -27,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional
 class EvolutionService(
     private val userEvolutionRepository: UserEvolutionRepository,
     private val evolutionAttemptRepository: EvolutionAttemptRepository,
+    private val evolutionStateInitializer: EvolutionStateInitializer,
     private val probabilityRoller: ProbabilityRoller,
     private val evolutionProperties: EvolutionProperties,
     private val energyService: EnergyService,
@@ -34,12 +34,12 @@ class EvolutionService(
     private val evolutionTimingJudge: EvolutionTimingJudge,
 ) {
     fun ensureInitialized(user: User): UserEvolution =
-        userEvolutionRepository.findByUserId(user.id) ?: createInitial(user)
+        evolutionStateInitializer.ensureInitialized(user)
 
     @Transactional(readOnly = true)
     fun getState(userId: Long): EvolutionStateResult {
         val evo = userEvolutionRepository.findByUserId(userId)
-            ?: throw IllegalStateException("UserEvolution not initialized for userId=$userId")
+            ?: evolutionStateInitializer.initializeExistingUser(userId)
         val rule = evolutionProperties.ruleFor(evo.level)
         return EvolutionStateResult(
             level = evo.level,
@@ -127,13 +127,6 @@ class EvolutionService(
             finalSuccessRate = judgement?.finalSuccessRate,
         )
     }
-
-    private fun createInitial(user: User): UserEvolution =
-        try {
-            userEvolutionRepository.saveAndFlush(UserEvolution(user = user, level = 1))
-        } catch (e: DataIntegrityViolationException) {
-            userEvolutionRepository.findByUserId(user.id) ?: throw e
-        }
 
     private fun EvolutionAttempt.toResult() =
         EvolutionAttemptResult(
