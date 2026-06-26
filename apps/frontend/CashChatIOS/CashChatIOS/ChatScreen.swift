@@ -156,10 +156,16 @@ struct ChatScreen: View {
         if let u = item as? ChatItemUserMessage {
             HStack {
                 Spacer()
-                Text(u.text)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(accent).foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                ZStack(alignment: .topTrailing) {
+                    Text(u.text)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(accent).foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    if let energy = vm.energyFeedback, energy.messageId == u.id {
+                        ResourceDeltaBadge(eventId: energy.eventId, amount: energy.amount)
+                            .offset(x: 6, y: -14)
+                    }
+                }
             }
         } else if let a = item as? ChatItemAssistantMessage {
             if a.gated && !a.isStreaming {

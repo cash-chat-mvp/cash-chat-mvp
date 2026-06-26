@@ -23,6 +23,10 @@ final class ChatViewModel: ObservableObject {
     @Published var nextRecoverAt: String? = nil
     @Published var hudLoaded = false
 
+    // 자원 피드백 — 사용자 버블 ⚡-1 차감, 완료 보상 🪙/⭐ 토큰 연출.
+    @Published var energyFeedback: EnergyFeedback? = nil
+    @Published var rewardFeedback: RewardFeedback? = nil
+
     // 에너지 게이트 리워드 광고 보상 단계 (Android RewardPhase 미러).
     enum RewardPhase { case idle, showingAd, polling, failed }
     @Published var rewardPhase: RewardPhase = .idle
@@ -86,6 +90,22 @@ final class ChatViewModel: ObservableObject {
                 guard let self, let info else { return }
                 self.gateTeaserChars = Int(info.teaserChars)
                 self.gateRewardCoin = Int(info.rewardCoin)
+            }
+        }
+        // 메시지 ID 기반 자원 피드백 이벤트(에너지 차감 / 완료 보상).
+        collector.collectResourceFeedback(store: store) { [weak self] feedback in
+            Task { @MainActor in
+                guard let self else { return }
+                if let e = feedback as? ChatResourceFeedbackEnergySpent {
+                    self.energyFeedback = EnergyFeedback(
+                        eventId: e.eventId, messageId: e.messageId, amount: Int(e.amount)
+                    )
+                } else if let r = feedback as? ChatResourceFeedbackRewardEarned {
+                    self.rewardFeedback = RewardFeedback(
+                        eventId: r.eventId, messageId: r.messageId,
+                        pointDelta: r.pointDelta, expDelta: r.expDelta
+                    )
+                }
             }
         }
     }
