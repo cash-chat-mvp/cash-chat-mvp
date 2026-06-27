@@ -82,6 +82,29 @@ fun createCashChatHttpClient(
 }
 
 /**
+ * 온디바이스 모델(.litertlm, ~2.5GB) 다운로드 전용 HttpClient.
+ *
+ * API용 [createCashChatHttpClient] 를 그대로 쓰면 안 되는 이유:
+ * - 모든 요청에 CashChat JWT 를 Bearer 로 붙인다 → HuggingFace 가 외부 토큰을 보고 401 을 줄 수
+ *   있고, 그러면 우리 백엔드로 refresh 까지 시도하는 엉뚱한 경로를 탄다.
+ * - JSON ContentNegotiation 은 바이너리 다운로드에 불필요하다.
+ * - socketTimeout 60s 는 SSE 하트비트 기준이라, NAT64/CDN 정체로 잠깐 끊겨도 바로 실패한다.
+ *
+ * 그래서 인증·협상 없이, 대용량 전송에 맞는 타임아웃만 둔 별도 클라이언트를 쓴다.
+ * 리다이렉트(HF resolve → CDN 302)는 기본 설치된 HttpRedirect 가 따라간다.
+ */
+fun createModelDownloadHttpClient(
+    engine: HttpClientEngine? = null,
+): HttpClient = HttpClient(engine ?: defaultClientEngine()) {
+    expectSuccess = false
+    install(HttpTimeout) {
+        requestTimeoutMillis = HttpTimeout.INFINITE_TIMEOUT_MS
+        socketTimeoutMillis = 120_000
+        connectTimeoutMillis = 30_000
+    }
+}
+
+/**
  * 플랫폼별 Ktor HTTP 기본 엔진(Android: OkHttp, iOS: Darwin). HTTP 버전은 강제하지 않고
  * 서버와 협상(HTTP/2 가능)한다.
  *
