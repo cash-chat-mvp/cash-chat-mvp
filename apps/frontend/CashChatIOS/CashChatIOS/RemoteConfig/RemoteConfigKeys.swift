@@ -23,6 +23,11 @@ enum RemoteConfigKeys {
     static let rewardRequired = "reward_required"
     static let interstitialTriggerAction = "interstitial_trigger_action"
 
+    // D. 온디바이스 Gemma 모델
+    /// 모델 파일(.litertlm) 다운로드 URL. 비워두면 shared 빌트인 기본값(HF) 사용.
+    /// 자체 듀얼스택·Asia 리전 CDN URL로 교체 시 앱 업데이트 없이 반영된다.
+    static let gemmaModelUrl = "gemma_model_url"
+
     /// 인앱 기본값. 광고 단위 ID는 의도적으로 비워둔다 → AppConfig가 Secrets→테스트ID로 폴백.
     static let defaults: [String: NSObject] = [
         adsEnabled: true as NSNumber,
@@ -39,6 +44,7 @@ enum RemoteConfigKeys {
         rewardChatInterval: 3 as NSNumber,
         rewardRequired: true as NSNumber,
         interstitialTriggerAction: "new_chat" as NSString,
+        gemmaModelUrl: "" as NSString,
     ]
 }
 

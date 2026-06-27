@@ -60,7 +60,7 @@ class ChatModelRouterTest : FunSpec() {
             )
 
             whenever(evolutionService.getState(USER_ID)).thenReturn(
-                EvolutionStateResult(level = LEVEL, isMaxLevel = false, nextAttemptCost = null, nextSuccessRate = null)
+                EvolutionStateResult(level = LEVEL, isMaxLevel = false, nextAttemptCost = null, nextSuccessRate = null, currentExp = 0L)
             )
             whenever(qualityPoolService.throttleScale()).thenReturn(1.0)
         }
@@ -135,7 +135,7 @@ class ChatModelRouterTest : FunSpec() {
         test("레벨에 확률 정보가 없을 때 nano 확정 반환, tryConsumePremium 미호출") {
             // 레벨 999 는 RoutingProperties 기본값에 없음
             whenever(evolutionService.getState(USER_ID)).thenReturn(
-                EvolutionStateResult(level = 999, isMaxLevel = true, nextAttemptCost = null, nextSuccessRate = null)
+                EvolutionStateResult(level = 999, isMaxLevel = true, nextAttemptCost = null, nextSuccessRate = null, currentExp = 0L)
             )
 
             val result = router.routeAndConsume(USER_ID, TODAY)

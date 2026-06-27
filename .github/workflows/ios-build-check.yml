@@ -43,6 +43,8 @@ jobs:
     needs: detect
     if: needs.detect.outputs.build == 'true'
     runs-on: macos-latest
+    env:
+      GIT_LFS_SKIP_SMUDGE: "1"
     defaults:
       run:
         working-directory: apps/frontend/CashChatIOS
@@ -124,5 +126,6 @@ jobs:
             -scheme CashChatIOS \
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
+            ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO \
             build

@@ -226,6 +226,8 @@ jobs:
   ios:
     needs: version
     runs-on: macos-26
+    env:
+      GIT_LFS_SKIP_SMUDGE: "1"
     defaults:
       run:
         working-directory: apps/frontend

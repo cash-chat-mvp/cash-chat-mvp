@@ -7,6 +7,7 @@ import com.nomadclub.cashchat.shared.auth.model.AuthResponse
 import com.nomadclub.cashchat.shared.auth.model.GoogleOAuthCallbackRequest
 import com.nomadclub.cashchat.shared.auth.model.LogoutRequest
 import com.nomadclub.cashchat.shared.auth.model.TokenRefreshRequest
+import com.nomadclub.cashchat.shared.localllm.LocalChatStore
 import com.nomadclub.cashchat.shared.session.SessionResetter
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -20,6 +21,7 @@ class AuthRepository(
     // 로 이어지는 DI 순환을 끊는다. reset()이 실제 호출될 때(로그아웃/재인증) 그래프가 이미
     // 구성된 뒤 해소되므로 StackOverflow(순환 생성)가 발생하지 않는다.
     sessionResetter: Lazy<SessionResetter>,
+    private val localChatStore: Lazy<LocalChatStore>,
 ) {
     private val sessionResetter by sessionResetter
 
@@ -61,7 +63,7 @@ class AuthRepository(
                 if (refreshToken == null) {
                     // 회원인데 refresh token이 없으면 복구 불가 — 세션 정리 후 재인증으로 넘긴다.
                     tokenDataStore.clearTokens()
-                    sessionResetter.reset()
+                    resetSessionState()
                     _reAuthRequired.tryEmit(Unit)
                     error("Refresh Token 없음")
                 }
@@ -72,7 +74,7 @@ class AuthRepository(
                 // 멀쩡한 세션을 날려 재로그인을 강요하지 않도록 한다.
                 if (response.code() == 401 || response.code() == 403) {
                     tokenDataStore.clearTokens()
-                    sessionResetter.reset()
+                    resetSessionState()
                     _reAuthRequired.tryEmit(Unit)
                 }
                 error("${if (isGuest) "게스트 재인증" else "Refresh"} 실패 (${response.code()})")
@@ -98,7 +100,12 @@ class AuthRepository(
         }
         tokenDataStore.clearTokens()
         // 계정 전환 시 다음 사용자에게 이전 사용자의 대화·출석·잔액 등이 노출되지 않도록 공유 스토어 초기화
+        resetSessionState()
+    }
+
+    private fun resetSessionState() {
         sessionResetter.reset()
+        localChatStore.value.clear()
     }
 
     fun getAccessToken() = tokenDataStore.getAccessTokenBlocking()
