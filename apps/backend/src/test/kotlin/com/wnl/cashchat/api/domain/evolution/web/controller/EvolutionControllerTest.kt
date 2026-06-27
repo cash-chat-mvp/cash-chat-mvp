@@ -3,6 +3,7 @@ package com.wnl.cashchat.api.domain.evolution.web.controller
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
 import com.wnl.cashchat.api.domain.evolution.service.EvolutionAttemptRecordResult
 import com.wnl.cashchat.api.domain.evolution.service.EvolutionService
+import com.wnl.cashchat.api.domain.evolution.service.EvolutionStateResult
 import com.wnl.cashchat.api.domain.evolution.web.exception.EvolutionExceptionHandler
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.extensions.spring.SpringExtension
@@ -41,6 +42,22 @@ class EvolutionControllerTest : FunSpec() {
     private val principal = UsernamePasswordAuthenticationToken(1L, null)
 
     init {
+        test("GET /me serializes the max-level flag as isMaxLevel (not maxLevel)") {
+            // Jackson 이 Kotlin boolean 의 is 접두사를 떼어 maxLevel 로 직렬화하면
+            // 프론트(kotlinx.serialization, isMaxLevel 필수)가 역직렬화에 실패한다(CC-352).
+            whenever(evolutionService.getState(eq(1L))).thenReturn(
+                EvolutionStateResult(
+                    level = 1, isMaxLevel = false,
+                    nextAttemptCost = 500, nextSuccessRate = 0.7, currentExp = 0,
+                )
+            )
+
+            mockMvc.perform(get("/api/evolution/me").principal(principal))
+                .andExpect(status().isOk)
+                .andExpect(jsonPath("$.isMaxLevel").value(false))
+                .andExpect(jsonPath("$.maxLevel").doesNotExist())
+        }
+
         test("GET /attempts returns records with ISO-8601 UTC attemptedAt") {
             whenever(evolutionService.getAttempts(eq(1L), any())).thenReturn(
                 listOf(
