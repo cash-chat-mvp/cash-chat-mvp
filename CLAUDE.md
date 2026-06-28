@@ -25,9 +25,21 @@ cd apps/backend
 ```
 
 ### Architecture
+도메인은 `domain/<name>/` 아래에 위치하며, 각 도메인은 동일한 레이어링을 따릅니다:
+`persistence/{entity,repository}` · `service` · `web/{controller,response,exception}` · (필요 시 `properties`, `exception`).
+
+도메인 목록: `auth`, `user`, `chat`, `ad`, `point`, `ledger`, `shop`, `inventory`,
+`attendance`, `energy`, `evolution`, `offerwall`, `invite`, `quality`.
 - `domain/auth/` — OAuth2(Google) 로그인, JWT access/refresh 토큰 발급 및 갱신
 - `domain/user/` — 사용자 관리
+- `domain/chat/` — Gemini 연동 채팅 (SSE 스트리밍 응답)
+- `domain/ad/` — 광고/리워드, Google Ad SSV(Server-Side Verification) 콜백
+- `domain/point/`, `domain/ledger/` — 포인트 잔액·거래 원장
+- `domain/shop/`, `domain/inventory/` — 상점 아이템·보유 인벤토리
+- `domain/attendance/`, `domain/energy/`, `domain/evolution/`, `domain/offerwall/` — 리텐션/게이미피케이션 기능
+- `domain/invite/` — 친구 초대 코드 발급/사용(redeem), 초대자 보상 한도(동시성 락) 처리
 - `common/security/` — JWT 필터, Spring Security 설정
+- `common/web/response/` — 공통 API 응답 래퍼
 - `common/entity/` — 공통 BaseEntity
 
 개발 환경은 H2 인메모리 DB, 프로덕션은 MySQL 8 사용.
@@ -54,7 +66,7 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 ```
 
 ### Architecture
-- `app/src/main/.../feature/` — 기능별 화면 + ViewModel (auth, chat, main, rewards, shop, mypage, onboarding)
+- `app/src/main/.../feature/` — 기능별 화면 + ViewModel (auth, chat, gate, main, rewards, shop, settings, mypage, onboarding)
 - `shared/src/commonMain/` — KMM 공유 비즈니스 로직 (Android/iOS 공통)
 - `shared/src/androidMain/`, `shared/src/iosMain/` — 플랫폼별 구현체
 - iOS는 `CashChatShared.framework` (static) 를 통해 공유 코드 사용
