@@ -1,5 +1,7 @@
 # Claude
+/CLAUDE.local.md
 .claude
+.claude/worktrees
 
 # CURSOR
 .cursor
