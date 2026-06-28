@@ -6,12 +6,14 @@ import com.tnkfactory.ad.TnkSession
 import com.nomadclub.cashchat.config.RemoteConfigManager
 import com.nomadclub.cashchat.di.appModule
 import com.nomadclub.cashchat.shared.di.sharedDataModule
+import com.nomadclub.cashchat.shared.localllm.AndroidLocalLlmContext
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
 
 class CashChatApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        AndroidLocalLlmContext.init(this)
         val koin = startKoin {
             androidContext(this@CashChatApplication)
             modules(appModule, sharedDataModule(BuildConfig.BASE_URL))

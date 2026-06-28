@@ -11,10 +11,15 @@ import com.nomadclub.cashchat.shared.attendance.AttendanceUiState
 import com.nomadclub.cashchat.shared.attendance.CheckInRewardEvent
 import com.nomadclub.cashchat.shared.chat.ChatApi
 import com.nomadclub.cashchat.shared.chat.ChatStore
+import com.nomadclub.cashchat.shared.chat.ChatResourceFeedback
 import com.nomadclub.cashchat.shared.chat.model.ChatItem
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudState
 import com.nomadclub.cashchat.shared.hud.HudStore
+import com.nomadclub.cashchat.shared.localllm.ChatModeStore
+import com.nomadclub.cashchat.shared.localllm.ChatModelMode
+import com.nomadclub.cashchat.shared.localllm.ModelDownloadState
+import com.nomadclub.cashchat.shared.localllm.ModelDownloadStore
 import com.nomadclub.cashchat.shared.points.PointsRepository
 import com.nomadclub.cashchat.shared.session.SessionResetter
 import com.nomadclub.cashchat.shared.shop.ShopApi
@@ -29,6 +34,9 @@ import org.koin.core.component.inject
 /** Swift 에서 Koin 그래프의 store 인스턴스에 접근하기 위한 헬퍼. */
 class KoinHelper : KoinComponent {
     private val chat: ChatStore by inject()
+    private val chatMode: ChatModeStore by inject()
+    private val modelDownload: ModelDownloadStore by inject()
+    private val localChat: com.nomadclub.cashchat.shared.localllm.LocalChatStore by inject()
     private val attendance: AttendanceStore by inject()
     private val points: PointsRepository by inject()
     private val hud: HudStore by inject()
@@ -42,6 +50,9 @@ class KoinHelper : KoinComponent {
     private val sessionResetter: SessionResetter by inject()
 
     fun chatStore(): ChatStore = chat
+    fun chatModeStore(): ChatModeStore = chatMode
+    fun modelDownloadStore(): ModelDownloadStore = modelDownload
+    fun localChatStore(): com.nomadclub.cashchat.shared.localllm.LocalChatStore = localChat
     fun chatApi(): ChatApi = chatApiInstance
     fun shopApi(): ShopApi = shopApiInstance
     fun offerwallApi(): com.nomadclub.cashchat.shared.offerwall.OfferwallApi = offerwallApiInstance
@@ -80,6 +91,32 @@ class FlowCollector {
 
     fun collectChatItems(store: ChatStore, onEach: (List<ChatItem>) -> Unit) {
         scope.launch { store.items.collect { onEach(it) } }
+    }
+
+    fun collectChatMode(store: ChatModeStore, onEach: (ChatModelMode) -> Unit) {
+        scope.launch { store.mode.collect { onEach(it) } }
+    }
+
+    fun collectModelDownloadState(store: ModelDownloadStore, onEach: (ModelDownloadState) -> Unit) {
+        scope.launch { store.state.collect { onEach(it) } }
+    }
+
+    fun collectLocalChatItems(
+        store: com.nomadclub.cashchat.shared.localllm.LocalChatStore,
+        onEach: (List<ChatItem>) -> Unit,
+    ) {
+        scope.launch { store.items.collect { onEach(it) } }
+    }
+
+    fun collectLocalStreaming(
+        store: com.nomadclub.cashchat.shared.localllm.LocalChatStore,
+        onEach: (Boolean) -> Unit,
+    ) {
+        scope.launch { store.isStreaming.collect { onEach(it) } }
+    }
+
+    fun collectResourceFeedback(store: ChatStore, onEach: (ChatResourceFeedback) -> Unit) {
+        scope.launch { store.resourceFeedback.collect { onEach(it) } }
     }
 
     fun collectIsStreaming(store: ChatStore, onEach: (Boolean) -> Unit) {

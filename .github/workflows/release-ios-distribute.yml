@@ -226,6 +226,8 @@ jobs:
   ios:
     needs: version
     runs-on: macos-26
+    env:
+      GIT_LFS_SKIP_SMUDGE: "1"
     defaults:
       run:
         working-directory: apps/frontend
@@ -406,6 +408,13 @@ jobs:
           VERSION_NAME:            ${{ needs.version.outputs.name }}
           VERSION_CODE:            ${{ needs.version.outputs.code }}
           RELEASE_NOTES:           ${{ needs.version.outputs.release_notes }}
+          # 앱 단위 고정 메타데이터(외부 Beta App Review용). 미설정 시 Fastfile 기본값 사용.
+          BETA_APP_DESCRIPTION:    ${{ vars.BETA_APP_DESCRIPTION }}
+          BETA_APP_FEEDBACK_EMAIL: ${{ vars.BETA_APP_FEEDBACK_EMAIL }}
+          # 배포 대상 제어. 미설정 시 내부 전용(CashChatPrivateTester).
+          # 외부 전환 예: DISTRIBUTE_EXTERNAL=true + TESTFLIGHT_GROUPS=CashChatPublicTester
+          DISTRIBUTE_EXTERNAL:     ${{ vars.DISTRIBUTE_EXTERNAL }}
+          TESTFLIGHT_GROUPS:       ${{ vars.TESTFLIGHT_GROUPS }}
         run: bundle exec fastlane ios distribute
 
       - name: Upload IPA artifact

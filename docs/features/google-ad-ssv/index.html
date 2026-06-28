@@ -100,7 +100,7 @@
     <p class="sub">구조와 동작 흐름을 시각적으로 — 광고 시청 → 서버 서명 검증 → 코인 적립</p>
     <div class="badges">
       <span class="badge"><span class="dot ok"></span> 백엔드 검증·저장·적립: 구현 완료</span>
-      <span class="badge"><span class="dot warn"></span> 프론트 nonce 전달 위치: 수정 필요</span>
+      <span class="badge"><span class="dot ok"></span> 프론트 nonce 전달 위치: 구현 완료</span>
       <span class="badge"><span class="dot plan"></span> AdMob 콘솔/인프라: 설정 예정</span>
     </div>
     <p class="sub" style="margin-top:14px">상세 문서: <a href="./architecture.md">architecture.md</a> · <a href="./manual.md">manual.md</a></p>
@@ -108,7 +108,7 @@
 
   <div class="callout info">
     <span class="ic">🔑</span>
-    <div><strong>한 줄 요약.</strong> 클라이언트가 "광고를 봤다"는 주장을 믿지 않는다. AdMob 서버가 우리 백엔드로 직접 보내는 <strong>Google 서명된 콜백</strong>만 신뢰한다. 그리고 "누구에게 적립할지"는 클라가 채운 <code>user_id</code>를 직접 믿는 대신, <strong>서버가 발급한 단일 사용 nonce</strong>로만 해석한다.</div>
+    <div><strong>한 줄 요약.</strong> 클라이언트가 "광고를 봤다"는 주장을 믿지 않는다. AdMob 서버가 우리 백엔드로 직접 보내는 <strong>Google 서명된 콜백</strong>만 신뢰한다. 그리고 "누구에게 적립할지"는 클라가 채운 <code>custom_data</code>를 직접 믿는 대신, <strong>서버가 발급한 단일 사용 nonce</strong>로만 해석한다.</div>
   </div>
 
   <h2>1. 구성 요소</h2>
@@ -136,7 +136,7 @@ flowchart LR
     FE -->|1 nonce 요청| NonceApi
     NonceApi <--> Nonce
     NonceApi -->|2 nonce| FE
-    FE -->|3 setUserId nonce| SDK
+    FE -->|3 setCustomData nonce| SDK
     SDK <-->|광고 로드| AdMob
     AdMob -->|4 SSV 콜백 GET| Ssv
     Ssv -->|서명 검증| GKeys
@@ -151,7 +151,7 @@ flowchart LR
   <table>
     <thead><tr><th>주체</th><th>역할</th></tr></thead>
     <tbody>
-      <tr><td>앱 클라이언트</td><td>광고 시청 직전 nonce 발급받아 SSV <code>user_id</code>에 설정하고 보상형 광고 노출</td></tr>
+      <tr><td>앱 클라이언트</td><td>광고 시청 직전 nonce 발급받아 SSV <code>custom_data</code>에 설정하고 보상형 광고 노출 (Android: <code>setCustomData</code>, iOS: <code>customRewardString</code>)</td></tr>
       <tr><td>AdMob SDK / 서버</td><td>광고 제공, 시청 완료 시 백엔드로 서명된 SSV 콜백(GET) 전송</td></tr>
       <tr><td>CashChat 백엔드</td><td>nonce 발급, 콜백 서명 검증·이벤트 저장, nonce→userId 해석·한도·코인 적립</td></tr>
       <tr><td>Google 공개키 서버</td><td>ECDSA 공개키 묶음 제공(<code>verifier-keys.json</code>), 백엔드가 캐시</td></tr>
@@ -177,7 +177,7 @@ sequenceDiagram
     FE->>API: POST /api/ads/reward/issue-nonce (JWT)
     API->>DB: ad_reward_nonce INSERT (used=false)
     API-->>FE: nonce, expiresAt
-    FE->>SDK: setUserId(nonce) 후 광고 노출
+    FE->>SDK: setCustomData(nonce) 후 광고 노출
     User->>SDK: 광고 끝까지 시청
 
     Note over User,DB: 2단계 — SSV 콜백 검증·저장 (무트랜잭션)
@@ -190,7 +190,8 @@ sequenceDiagram
     else 검증 성공
         API->>DB: google_ad_ssv_events UPSERT (VERIFIED)
         Note over API,DB: 3단계 — 적립 (단일 TX · 락: event→nonce→quota→point)
-        API->>DB: ad_reward_nonce 락 조회 (user_id=nonce)
+        API->>DB: event 락 조회 (VERIFIED 인 것만)
+        API->>DB: ad_reward_nonce 락 조회 (custom_data=nonce)
         alt nonce 없음/만료/used
             API->>DB: status=REJECTED_INVALID_NONCE
             API-->>AdMob: 200
@@ -218,7 +219,7 @@ sequenceDiagram
   <h3>핵심 단계</h3>
   <ol class="steps">
     <li><strong>nonce 발급</strong> — 시청 직전 <code>POST /api/ads/reward/issue-nonce</code> → <code>{ nonce, expiresAt }</code>. nonce↔userId 매핑을 서버가 보관.</li>
-    <li><strong>광고 노출</strong> — nonce를 SSV <code>user_id</code>에 실어 보상형 광고 present.</li>
+    <li><strong>광고 노출</strong> — nonce를 SSV <code>custom_data</code>에 실어 보상형 광고 present (Android: <code>setCustomData</code>, iOS: <code>customRewardString</code>).</li>
     <li><strong>SSV 콜백</strong> — AdMob 서버가 <code>GET /api/ads/google/ssv</code>로 서명된 콜백 전송.</li>
     <li><strong>검증·저장</strong> — 서명(<code>SHA256withECDSA</code>) 검증 후 이벤트 저장(<code>VERIFIED</code>). 적립 안 함.</li>
     <li><strong>적립</strong> — nonce→userId 해석 → 일일 한도 확인 → 코인 적립 → <code>GRANTED</code>.</li>
@@ -248,11 +249,11 @@ stateDiagram-v2
   <h2>4. 보안·정합성 설계</h2>
   <div class="grid">
     <div class="card"><h4>🔏 서명 검증 우선</h4><p><code>key_id</code>의 Google 공개키로 <code>SHA256withECDSA</code> 검증. 페이로드는 <code>signature</code> 앞 원본 쿼리스트링 → 파서가 <code>signature</code>·<code>key_id</code>를 마지막 두 파라미터로 강제.</p></div>
-    <div class="card"><h4>🎫 nonce 신뢰 모델</h4><p>SSV <code>user_id</code>는 클라가 임의로 채우는 값 → 직접 신뢰 X. 서버 발급 단일 사용 nonce로만 <code>nonce→userId</code> 해석. 타인 계정 적립 위조 차단.</p></div>
+    <div class="card"><h4>🎫 nonce 신뢰 모델</h4><p>SSV <code>custom_data</code>는 클라가 임의로 채우는 값 → 직접 신뢰 X. 서버 발급 단일 사용 nonce로만 <code>nonce→userId</code> 해석. 타인 계정 적립 위조 차단.</p></div>
     <div class="card"><h4>♻️ 멱등 이중 방어</h4><p><code>transaction_id</code> UNIQUE dedup + 적립 멱등키 <code>admob:reward:{transactionId}</code>. 재전송에도 1회만 적립.</p></div>
     <div class="card"><h4>🔒 락 순서 고정</h4><p>데드락 방지: <code>event → nonce → daily_quota → user_point</code> 비관적 쓰기 락. 동시 콜백의 상태 덮어쓰기·중복 적립(TOCTOU) 차단.</p></div>
     <div class="card"><h4>🔁 재시도 폭주 방지</h4><p>서명만 통과하면 거절 케이스도 <strong>200</strong> 반환. 적립 실패도 5xx 안 던짐 → AdMob 무한 재전송 방지. (서명 실패만 400, 공개키 불가 503.)</p></div>
-    <div class="card"><h4>🎯 광고단위 검증(선택)</h4><p><code>rewarded-ad-unit-id</code> 설정 시 콜백 <code>ad_unit</code> 일치 강제. 빈 값이면 스킵.</p></div>
+    <div class="card"><h4>🎯 광고단위 검증(선택)</h4><p><code>rewarded-ad-unit-ids</code>(콤마 구분, Android·iOS) 설정 시 콜백 <code>ad_unit</code> 목록 일치 강제. 빈 값이면 스킵.</p></div>
   </div>
 
   <h2>5. 엔드포인트</h2>
@@ -265,12 +266,11 @@ stateDiagram-v2
     </tbody>
   </table>
 
-  <h2>6. ⚠️ 현재 핵심 갭 & 설계 이력</h2>
-  <div class="callout gap">
-    <span class="ic">⚠️</span>
+  <h2>6. 설계 이력</h2>
+  <div class="callout info">
+    <span class="ic">ℹ️</span>
     <div>
-      <strong>프론트–백엔드 위치 불일치.</strong> 백엔드는 nonce를 SSV <code>user_id</code>에서 읽지만, 현재 앱 클라이언트는 nonce를 <code>custom_data</code>(<code>setCustomData</code>/<code>customRewardText</code>)로 싣는다.
-      이를 <code>setUserId</code>/<code>userIdentifier</code>로 바꾸기 전까지 <strong>실제 적립은 end-to-end로 동작하지 않는다.</strong> → <a href="./manual.md">manual.md §2</a>
+      <strong>nonce 전달 경로 — <code>custom_data</code> 사용.</strong> 백엔드(<code>AdRewardService</code>)는 nonce를 SSV <code>custom_data</code>에서 읽고(<code>callback.customData</code>), 앱 클라이언트도 이에 맞춰 구현돼 있다 — Android <code>setCustomData</code>, iOS <code>customRewardString</code>. SSV 프로토콜의 <code>user_id</code> 파라미터는 파서가 optional 필드로 수신하지만 nonce 전달에는 사용하지 않는다.
     </div>
   </div>
   <div class="panel">

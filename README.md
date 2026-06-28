@@ -259,6 +259,7 @@ type(scope?): description
 | `/gemini-review` | Gemini 재리뷰 (자동 실행되지만 재요청 시) |
 | `/openai-review` | OpenAI 심층 리뷰 (수동, **비용 발생**) |
 | `/ask "질문"` | AI 코멘트에 답글로 후속 질문 |
+| `/auto-review-stop` · `/auto-review-start` | 푸시 자동 코드 제안(`/improve`) 끄기 / 다시 켜기 (스레드 정리는 유지) |
 | `@coderabbitai review` | CodeRabbit 리뷰 (수동, **비용 발생**) |
 
 ### ⚠️ MR 시 주의할 점

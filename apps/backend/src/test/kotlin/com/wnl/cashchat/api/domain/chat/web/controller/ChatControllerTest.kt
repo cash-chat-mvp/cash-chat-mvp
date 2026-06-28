@@ -61,6 +61,9 @@ class ChatControllerWebMvcTest : FunSpec() {
     lateinit var chatService: ChatService
 
     @MockBean
+    lateinit var chatRewardProperties: com.wnl.cashchat.api.domain.chat.properties.ChatRewardProperties
+
+    @MockBean
     lateinit var jwtTokenHandler: JwtTokenHandler
 
     @MockBean(name = "jpaMappingContext")
@@ -156,6 +159,8 @@ class ChatControllerWebMvcTest : FunSpec() {
 
         test("chat stream endpoint returns text event stream for authenticated user") {
             whenever(chatService.stream(1L, 7L, "hello")).thenReturn(Flux.just("hi there"))
+            whenever(chatRewardProperties.chatRewardPt).thenReturn(1L)
+            whenever(chatRewardProperties.evolutionExpPerChat).thenReturn(1L)
 
             val result = mockMvc.perform(
                 post("/api/v1/chat/stream")
@@ -170,7 +175,7 @@ class ChatControllerWebMvcTest : FunSpec() {
             mockMvc.perform(asyncDispatch(result))
                 .andExpect(status().isOk)
                 .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
-                .andExpect(content().string("event:message\ndata:hi there\n\nevent:done\ndata:[DONE]\n\n"))
+                .andExpect(content().string("event:message\ndata:hi there\n\nevent:done\ndata:{\"pointDelta\":1,\"expDelta\":1}\n\n"))
 
             verify(chatService).stream(eq(1L), eq(7L), eq("hello"))
         }

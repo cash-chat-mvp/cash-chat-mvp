@@ -16,20 +16,42 @@ struct ChatScreen: View {
     @State private var input = ""
     @State private var showConversations = false
     @State private var showEvolution = false
-    @State private var showAttendance = false
     @State private var shareItems: String? = nil
     @FocusState private var isInputFocused: Bool
+
+    // 보상 토큰 연출용 좌표/펄스
+    @State private var rewardFrames: [String: CGRect] = [:]
+    @State private var pointPulse = 0
+    @State private var expPulse = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let accent = Color(red: 0.36, green: 0.42, blue: 0.98)
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            BannerAdView(slotName: "chat_top")
-                .frame(height: 50)
-            messageList
-            inputBar
+        ZStack {
+            VStack(spacing: 0) {
+                header
+                modelSwitcher
+                if vm.selectedModel == .cashAi {
+                    BannerAdView(slotName: "chat_top")
+                        .frame(height: 50)
+                } else {
+                    gemmaStatusCard
+                }
+                messageList
+                inputBar
+            }
+            // 최상위 보상 토큰 오버레이 — 헤더 HUD/입력창 위에서도 잘리지 않게 화면 전체에 그린다.
+            RewardTokenOverlay(
+                reward: vm.selectedModel == .cashAi ? vm.rewardFeedback : nil,
+                frames: rewardFrames,
+                reduceMotion: reduceMotion,
+                onPointArrived: { pointPulse += 1 },
+                onExpArrived: { expPulse += 1 }
+            )
         }
+        .coordinateSpace(name: "chatRoot")
+        .onPreferenceChange(RewardFramePreferenceKey.self) { rewardFrames = $0 }
         .background(Color(.systemGroupedBackground))
         .onAppear { vm.load() }
         // 채팅 화면을 떠나면 캐시된 네이티브 광고를 해제한다(스크롤 재진입 시 재사용하던 캐시).
@@ -37,35 +59,22 @@ struct ChatScreen: View {
         .sheet(isPresented: $showConversations) {
             conversationListSheet
         }
-        .sheet(isPresented: $showAttendance) {
-            AttendanceSheet()
-        }
         .sheet(isPresented: $showEvolution) {
             EvolutionScreen()
         }
         .sheet(isPresented: Binding(get: { shareItems != nil }, set: { if !$0 { shareItems = nil } })) {
             if let text = shareItems { ShareSheet(text: text) }
         }
-        .sheet(isPresented: $vm.energyGateVisible, onDismiss: { vm.dismissGate() }) {
+        .sheet(
+            isPresented: Binding(
+                get: { vm.selectedModel == .cashAi && vm.energyGateVisible },
+                set: { if !$0 { vm.energyGateVisible = false } }
+            ),
+            onDismiss: { vm.dismissGate() }
+        ) {
             EnergyGateSheet(vm: vm, adManager: adManager.manager)
                 .presentationDetents([.height(300)])
         }
-        .overlay(alignment: .top) {
-            if let toast = vm.checkInToast {
-                Text(toast)
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(.orange).foregroundStyle(.white)
-                    .clipShape(Capsule())
-                    .padding(.top, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .task(id: toast) {
-                        try? await Task.sleep(for: .seconds(2))
-                        vm.checkInToast = nil
-                    }
-            }
-        }
-        .animation(.easeInOut, value: vm.checkInToast)
     }
 
     private var header: some View {
@@ -86,13 +95,14 @@ struct ChatScreen: View {
                 }
             }
             Spacer()
-            Button { showAttendance = true } label: {
-                Image(systemName: chatSFSymbol("calendar", fallback: "calendar.circle"))
-                    .foregroundStyle(.primary)
-            }
-            if vm.hudLoaded {
+            if vm.selectedModel == .cashAi && vm.hudLoaded {
                 if let p = vm.points {
-                    chip("🪙", "\(p)")
+                    RewardHudChip(emoji: "🪙", value: "\(p)", pulse: pointPulse)
+                        .reportRewardFrame(rewardPointKey)
+                }
+                if let e = vm.exp {
+                    RewardHudChip(emoji: "⭐", value: "\(e)", pulse: expPulse)
+                        .reportRewardFrame(rewardExpKey)
                 }
                 VStack(alignment: .trailing, spacing: 2) {
                     chip("⚡", "\(vm.energy)/\(vm.maxEnergy)", warning: vm.energy == 0)
@@ -101,21 +111,84 @@ struct ChatScreen: View {
                     }
                 }
             }
-            if !vm.items.isEmpty {
+            if vm.selectedModel == .cashAi && !vm.items.isEmpty {
                 Button { shareItems = exportText(vm.items) } label: {
                     Image(systemName: chatSFSymbol("square.and.arrow.up", fallback: "arrowshape.turn.up.right"))
                         .foregroundStyle(.primary)
                 }
             }
-            Button {
-                vm.startNew()
-            } label: {
-                Image(systemName: chatSFSymbol("square.and.pencil", fallback: "plus.square"))
-                    .foregroundStyle(.primary)
+            if vm.selectedModel == .cashAi {
+                Button {
+                    vm.startNew()
+                } label: {
+                    Image(systemName: chatSFSymbol("square.and.pencil", fallback: "plus.square"))
+                        .foregroundStyle(.primary)
+                }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .background(Color(.systemBackground))
+    }
+
+    private var modelSwitcher: some View {
+        Picker("채팅 모델", selection: Binding(
+            get: { vm.selectedModel },
+            set: { vm.selectModel($0) }
+        )) {
+            Text("Cash AI").tag(ChatModelSelection.cashAi)
+            Text("Gemma").tag(ChatModelSelection.gemma)
+        }
+        .pickerStyle(.segmented)
+        .disabled(vm.isStreaming)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color(.systemBackground))
+    }
+
+    private var gemmaStatusCard: some View {
+        let presentation = GemmaDownloadPresentation(
+            state: vm.modelDownloadState,
+            engineUnavailableReason: vm.gemmaEngineUnavailableReason
+        )
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(presentation.title)
+                .font(.subheadline.weight(.semibold))
+            Text(presentation.body)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let blockedMessage = vm.gemmaSendBlockedMessage {
+                Text(blockedMessage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+            }
+            if let progress = presentation.progress {
+                ProgressView(value: progress)
+            }
+            HStack(spacing: 8) {
+                if vm.modelDownloadState is ModelDownloadStateDownloading {
+                    // 다운로드 중: 취소만 노출(다운로드 버튼 숨김)
+                    Button("취소") { vm.cancelGemmaDownload() }
+                } else if vm.modelDownloadState is ModelDownloadStateVerifying {
+                    // 검증 중: 버튼 없이 진행 표시(무결성 확인은 수십 초 걸릴 수 있음)
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("확인 중…")
+                        .foregroundStyle(.secondary)
+                } else if !(vm.modelDownloadState is ModelDownloadStateReady) {
+                    // 미다운로드/실패: 다운로드(재시도) 버튼
+                    Button("다운로드") { vm.startGemmaDownload() }
+                }
+                Spacer()
+            }
+            .font(.caption.weight(.semibold))
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
         .background(Color(.systemBackground))
     }
 
@@ -133,9 +206,10 @@ struct ChatScreen: View {
                 LazyVStack(spacing: 10) {
                     if vm.items.isEmpty {
                         emptyState
-                    }
-                    ForEach(vm.items, id: \.id) { item in
-                        row(for: item).id(item.id)
+                    } else {
+                        ForEach(vm.items, id: \.id) { item in
+                            row(for: item).id(item.id)
+                        }
                     }
                     if vm.isStreaming {
                         HStack { ProgressView(); Spacer() }.padding(.horizontal, 4)
@@ -144,21 +218,25 @@ struct ChatScreen: View {
                 .padding()
             }
             .onChange(of: vm.items.count) { _ in
-                if let last = vm.items.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                if let last = vm.items.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
             }
         }
     }
 
     private var emptyState: some View {
         VStack(spacing: 10) {
-            Text("CashAI 비서").font(.system(size: 26, weight: .bold))
-            Text("궁금한 것은 무엇이든 물어보세요.\n대화할수록 포인트가 쌓여요!")
+            Text(vm.selectedModel == .cashAi ? "CashAI 비서" : "Gemma 온디바이스")
+                .font(.system(size: 26, weight: .bold))
+            Text(vm.selectedModel == .cashAi ? "궁금한 것은 무엇이든 물어보세요.\n대화할수록 포인트가 쌓여요!" : "모델과 엔진 준비가 끝나면 기기 안에서 대화할 수 있어요.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             VStack(spacing: 8) {
                 ForEach(suggestedQuestions, id: \.self) { q in
                     Button(q) { vm.send(q) }
+                        .disabled(!vm.canSend)
                         .font(.caption.weight(.semibold))
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(Color(.secondarySystemGroupedBackground))
@@ -176,10 +254,16 @@ struct ChatScreen: View {
         if let u = item as? ChatItemUserMessage {
             HStack {
                 Spacer()
-                Text(u.text)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(accent).foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                ZStack(alignment: .topTrailing) {
+                    Text(u.text)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .background(accent).foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    if let energy = vm.energyFeedback, energy.messageId == u.id {
+                        ResourceDeltaBadge(eventId: energy.eventId, amount: energy.amount)
+                            .offset(x: 6, y: -14)
+                    }
+                }
             }
         } else if let a = item as? ChatItemAssistantMessage {
             if a.gated && !a.isStreaming {
@@ -210,6 +294,7 @@ struct ChatScreen: View {
                             .background(Color(.secondarySystemGroupedBackground))
                             .foregroundStyle(.primary)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .reportRewardFrame(rewardBubbleKey(a.id))
                         if a.isError {
                             Button {
                                 vm.retry()
@@ -239,7 +324,7 @@ struct ChatScreen: View {
 
     private var inputBar: some View {
         HStack(spacing: 8) {
-            TextField("메시지를 입력하세요...", text: $input)
+            TextField(inputPlaceholder, text: $input)
                 .textFieldStyle(.roundedBorder)
                 .tint(accent)
                 .focused($isInputFocused)
@@ -247,16 +332,28 @@ struct ChatScreen: View {
             Button(action: sendCurrent) {
                 Image(systemName: chatSFSymbol("paperplane.fill", fallback: "arrow.up.circle.fill"))
             }
-            .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isStreaming)
+            .disabled(
+                input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                vm.isStreaming ||
+                !vm.canSend
+            )
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(Color(.systemBackground))
     }
 
+    private var inputPlaceholder: String {
+        switch vm.selectedModel {
+        case .cashAi: return "메시지를 입력하세요..."
+        case .gemma: return vm.gemmaModelReady ? "Gemma에게 물어보세요..." : "Gemma 모델 다운로드 후 사용할 수 있어요"
+        }
+    }
+
     private func sendCurrent() {
         let text = input
-        input = ""
-        vm.send(text)
+        if vm.send(text) {
+            input = ""
+        }
     }
 
     /// 어시스턴트 응답의 인라인 마크다운(**굵게**, *기울임*, `코드`, 링크)을 렌더한다.
@@ -435,21 +532,6 @@ private struct EnergyGateSheet: View {
                 .frame(maxWidth: .infinity).padding(.vertical, 12)
                 .background(.orange).foregroundStyle(.white)
                 .clipShape(Capsule())
-        }
-    }
-}
-
-/// 출석 캘린더 시트 — BenefitZone의 AttendanceWidgetView 재사용.
-private struct AttendanceSheet: View {
-    @StateObject private var vm = AttendanceViewModel()
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                AttendanceWidgetView(vm: vm).padding()
-            }
-            .navigationTitle("출석 체크")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear { vm.load() }
         }
     }
 }
