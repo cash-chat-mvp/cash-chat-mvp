@@ -26,7 +26,7 @@ cd apps/backend
 
 ### Architecture
 도메인은 `domain/<name>/` 아래에 위치하며, 각 도메인은 동일한 레이어링을 따릅니다:
-`persistence/{entity,repository}` · `service` · `web/{controller,response,exception}` · (필요 시 `properties`, `exception`).
+`persistence/{entity,repository}` · `service` · `web/{controller,response,exception}` · (필요 시 `properties`).
 
 도메인 목록: `auth`, `user`, `chat`, `ad`, `point`, `ledger`, `shop`, `inventory`,
 `attendance`, `energy`, `evolution`, `offerwall`, `invite`, `quality`.

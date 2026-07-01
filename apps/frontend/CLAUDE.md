@@ -62,9 +62,9 @@ shared/src/commonMain/kotlin/com/nomadclub/cashchat/shared/
 ├── chat/                    # ChatApi(SSE streamMessage) + ChatStore + model
 ├── localllm/                # 온디바이스 Gemma 로컬 채팅 (서버↔로컬 전환, 모델 다운로드/검증)
 ├── auth/                    # LoginStore
-├── points/, wallet/         # 포인트 잔액(PointsStore, PointsApi)
+├── points/, wallet/         # 포인트 잔액(PointsStore, PointsApi) — BE 도메인은 `point`(단수)
 ├── ads/                     # 광고 정책/모델 공통 로직
-├── attendance/, energy/, evolution/, roulette/, invite/, offerwall/  # 리텐션/게이미피케이션
+├── attendance/, energy/, evolution/, roulette/, invite/, offerwall/  # 리텐션/게이미피케이션 (roulette은 FE 전용·FakeRepository, 대응 BE 도메인 없음)
 ├── shop/, session/, hud/    # 상점 / 세션 리셋 / HUD 상태
 └── platform/TimeProvider.kt # expect/actual — currentTimeMillis()
 ```
@@ -102,8 +102,8 @@ Store/Repository/HttpClient는 Koin 모듈에서 주입 (직접 인스턴스화 
 서버 채팅과 별개로 기기 내 Gemma 모델로 추론하는 로컬 채팅 모드.
 
 - `ChatModeStore`의 `ChatModelMode`(`GEMMA_LOCAL` ↔ 서버)로 모드 전환. 로컬 모드는 `LocalChatStore`/`LocalChatViewModel` 사용.
-- 모델은 nginx 정적 서빙에서 다운로드: `KtorModelDownloader` + `ModelDownloadStore`(진행률/재개), `Sha256Digest`로 무결성 검증.
-- `DeviceCapability`로 RAM/저장공간을 검사해 미달 기기에서는 로컬 모드 비활성(게이팅).
+- 모델은 백엔드 nginx 정적 서빙(HTTPS)에서 다운로드: `KtorModelDownloader` + `ModelDownloadStore`(진행률/재개), `Sha256Digest`로 무결성 검증.
+- `DeviceCapability`로 RAM/저장공간을 검사해 미달 기기에서는 로컬 모드 비활성(게이팅). 기준: RAM ≥ `GemmaModelSpec.minRamBytes`(기본 4GB), 여유 공간 ≥ 모델 크기 × 1.1(기본 스펙 ≈ 2.85GB).
 - 플랫폼 추상화는 `LocalLlmPlatform` (`expect`/`actual`): Android(`AndroidLocalLlmContext`),
   iOS는 `SwiftBackedLocalLlmEngine` → Swift `GemmaLlmBridge`로 추론 위임. 미지원 시 `UnavailableLocalLlmEngine` 폴백.
 - `GemmaModelSpec`의 URL/SHA256은 빌드 시 주입(미해소 시 `UNRESOLVED_*` 플레이스홀더).
