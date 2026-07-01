@@ -120,7 +120,8 @@ AdMob(`play-services-ads`), Firebase BOM(Analytics, Remote Config), Ktor(core/ok
 kotlinx.serialization, Koin, Sentry KMP, DataStore Preferences, Navigation Compose, Coroutines/Flow.
 
 > ⚠️ **SQLDelight**: 카탈로그에 의존성은 선언되어 있으나 플러그인(`alias(libs.plugins.sqldelight)`)은
-> 현재 주석 처리되어 **비활성** 상태이며 `.sq` 스키마도 없습니다. 로컬 저장은 현재 **DataStore Preferences** 사용.
+> 현재 주석 처리되어 **비활성** 상태이며 `.sq` 스키마도 없습니다. 로컬 저장은 현재 **DataStore Preferences** 사용
+> (`auth`: access/refresh 토큰·role·user_id·device_token / `settings`: 테마 / `character_prefs`: 캐릭터명).
 > SQLDelight 기반 대화 영속화는 미도입 상태이므로, 관련 작업 전 플러그인 활성화 필요.
 
 ### KMM Shared 모듈
