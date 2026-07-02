@@ -85,9 +85,9 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 # upstream 리모트가 없으면 1회 등록 (gh repo view --json parent 로 parent 확인)
 git remote add upstream https://github.com/<upstream-owner>/<repo>.git
 
-# 작업 시작 전: upstream 의 최신 dev 를 받아 그 위에서 새 브랜치 분기
+# 작업 시작 전: upstream 의 최신 dev 를 받아 그 위에서 새 브랜치 분기 (upstream 추적 방지)
 git fetch upstream
-git switch -c <branch> upstream/dev
+git switch -c <branch> upstream/dev --no-track   # --no-track: 로컬 브랜치가 권한 없는 upstream/dev 를 추적하지 않도록
 
 # 이미 진행 중인 브랜치가 뒤처졌다면(PR out-of-date): 최신 dev 를 병합
 git fetch upstream
@@ -99,8 +99,10 @@ git merge upstream/dev    # 충돌 해결 후 커밋·push
 type(scope?): description
 ```
 - Conventional Commits 형식을 사용합니다.
-- **언어 규칙**: `type(scope):` 는 영어 키워드를 유지하고, **콜론 뒤 설명(description)과 본문은 한국어로 작성**합니다.
+- **언어 규칙**: `type(scope):` 는 영어 키워드를 유지하고, **콜론 뒤 한 칸 띄운 설명(description)과 본문은 한국어로 작성**합니다.
   - `type`/`scope` 를 한글로 바꾸면 commitlint(`config-conventional`)가 커밋을 거부하니 영어를 유지하세요.
+  - **콜론 뒤 공백 필수**: `feat:채팅` 처럼 붙여 쓰면 commitlint 이 거부합니다 (`feat: 채팅` 처럼 한 칸 띄우세요).
+  - **설명은 한글 단어로 시작**: 영어 대문자 약어로 시작하면(`CLAUDE.md …`, `iOS …`, `API …`) commitlint `subject-case` 규칙에 걸립니다. 약어는 문장 중간에 두세요. 예 ✗ `docs: CLAUDE.md 통합` → ✓ `docs: 지침을 통합 (CLAUDE.md)`.
 - 예: `feat: 채팅 스트리밍 추가`
 - 예: `fix(auth): 만료된 토큰 갱신`
 - 예: `chore: husky로 commitlint 설정`
