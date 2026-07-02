@@ -4,7 +4,7 @@ import com.wnl.cashchat.api.common.security.config.SecurityConfig
 import com.wnl.cashchat.api.common.security.jwt.JwtTokenHandler
 import com.wnl.cashchat.api.domain.ad.exception.GoogleAdSsvTransientException
 import com.wnl.cashchat.api.domain.ad.exception.InvalidGoogleAdSsvCallbackException
-import com.wnl.cashchat.api.domain.ad.service.AdRewardService
+import com.wnl.cashchat.api.domain.ad.service.AdSsvRewardRouter
 import com.wnl.cashchat.api.domain.ad.service.GoogleAdSsvCallback
 import com.wnl.cashchat.api.domain.ad.service.GoogleAdSsvService
 import com.wnl.cashchat.api.domain.ad.service.GoogleAdSsvVerificationResult
@@ -15,7 +15,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyNoInteractions
 import org.mockito.kotlin.whenever
@@ -46,7 +45,7 @@ class GoogleAdSsvControllerTest : FunSpec() {
     private lateinit var googleAdSsvService: GoogleAdSsvService
 
     @MockitoBean
-    private lateinit var adRewardService: AdRewardService
+    private lateinit var adSsvRewardRouter: AdSsvRewardRouter
 
     @MockitoBean
     private lateinit var jwtTokenHandler: JwtTokenHandler
@@ -89,7 +88,7 @@ class GoogleAdSsvControllerTest : FunSpec() {
             val verifyNow = argumentCaptor<Instant>()
             val grantNow = argumentCaptor<Instant>()
             verify(googleAdSsvService).verifyAndStore(eq(rawQuery), verifyNow.capture())
-            verify(adRewardService).grantFromCallback(eq(callback), grantNow.capture())
+            verify(adSsvRewardRouter).route(eq(callback), grantNow.capture())
             grantNow.firstValue shouldBe verifyNow.firstValue
         }
 
@@ -107,7 +106,7 @@ class GoogleAdSsvControllerTest : FunSpec() {
             mockMvc.perform(get("/api/ads/google/ssv?$rawQuery"))
                 .andExpect(status().isOk)
 
-            verify(adRewardService, never()).grantFromCallback(any(), any())
+            verifyNoInteractions(adSsvRewardRouter)
         }
 
         test("google ssv callback maps invalid callback to bad request") {
