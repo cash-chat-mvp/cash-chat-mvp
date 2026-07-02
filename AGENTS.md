@@ -97,9 +97,10 @@ export JAVA_HOME="$(/usr/libexec/java_home -v 21)"
 # upstream 리모트가 없으면 1회 등록 (gh repo view --json parent 로 parent 확인)
 git remote add upstream https://github.com/<upstream-owner>/<repo>.git
 
-# 작업 시작 전: upstream 의 최신 dev 를 받아 그 위에서 새 브랜치 분기 (upstream 추적 방지)
+# 작업 시작 전: upstream 의 최신 dev 를 받아 그 위에서 새 브랜치 분기
 git fetch upstream
-git switch -c <branch> upstream/dev --no-track   # --no-track: 로컬 브랜치가 권한 없는 upstream/dev 를 추적하지 않도록
+# --no-track: 로컬 브랜치가 권한 없는 upstream/dev 를 추적하지 않도록 (이후 git push -u origin 으로 origin 추적 설정)
+git switch -c <branch> upstream/dev --no-track
 
 # 이미 진행 중인 브랜치가 뒤처졌다면(PR out-of-date): 최신 dev 를 병합
 git fetch upstream
