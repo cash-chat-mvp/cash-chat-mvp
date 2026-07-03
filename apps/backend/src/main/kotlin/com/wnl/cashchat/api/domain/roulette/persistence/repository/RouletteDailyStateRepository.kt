@@ -16,7 +16,7 @@ interface RouletteDailyStateRepository : JpaRepository<RouletteDailyState, Long>
     @Query("select s from RouletteDailyState s where s.userId = :userId and s.kstDate = :kstDate")
     fun findForUpdate(@Param("userId") userId: Long, @Param("kstDate") kstDate: LocalDate): RouletteDailyState?
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query(
         value = """
             INSERT INTO roulette_daily_state (user_id, kst_date, spins_used, free_spins_used, created_at, updated_at)

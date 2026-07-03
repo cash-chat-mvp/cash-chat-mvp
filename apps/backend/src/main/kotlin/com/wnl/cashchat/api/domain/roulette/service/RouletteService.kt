@@ -94,7 +94,11 @@ class RouletteService(
         ensureAdSpinAllowed(state)
         val nonce = adNonceRepository.findForUpdate(nonceToken) ?: throw AdNotVerifiedException()
         if (nonce.userId != userId || !nonce.verified) throw AdNotVerifiedException()
-        if (nonce.used) throw NonceAlreadyUsedException()
+        if (nonce.used) {
+            val completedSpin = spinRepository.findByNonce(nonceToken)
+            if (completedSpin != null) return replay(completedSpin, now)
+            throw NonceAlreadyUsedException()
+        }
         if (!nonce.isVerifiedAndUsable(now)) throw AdNotVerifiedException()
         nonce.markUsed()
         state.recordAdSpin()
@@ -175,7 +179,9 @@ class RouletteService(
             segments = segments,
         )
 
-    private fun segmentFor(prize: RoulettePrize): Int = segments.first { it.prize == prize }.index
+    private fun segmentFor(prize: RoulettePrize): Int =
+        segments.filter { it.prize == prize }.randomOrNull()?.index
+            ?: throw IllegalStateException("Segment not found for prize: $prize")
 
     private val segments: List<RouletteSegment> = listOf(
         RouletteSegment(0, RoulettePrize.JACKPOT_100, 100),
