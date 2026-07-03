@@ -56,6 +56,24 @@ app:
       energy-amount: ${APP_ADS_REWARD_ENERGY_AMOUNT:3}
       daily-limit: ${APP_ADS_REWARD_DAILY_LIMIT:10}
       nonce-ttl: ${APP_ADS_REWARD_NONCE_TTL:10m}
+  roulette:
+    daily-limit: ${APP_ROULETTE_DAILY_LIMIT:5}
+    free-spin-count: ${APP_ROULETTE_FREE_SPIN_COUNT:1}
+    segment-count: ${APP_ROULETTE_SEGMENT_COUNT:8}
+    nonce-ttl: ${APP_ROULETTE_NONCE_TTL:10m}
+    prizes:
+      - prize: JACKPOT_100
+        prize-energy: 100
+        weight: ${APP_ROULETTE_WEIGHT_JACKPOT_100:1}
+      - prize: E10
+        prize-energy: 10
+        weight: ${APP_ROULETTE_WEIGHT_E10:10}
+      - prize: E3
+        prize-energy: 3
+        weight: ${APP_ROULETTE_WEIGHT_E3:70}
+      - prize: MISS
+        prize-energy: 0
+        weight: ${APP_ROULETTE_WEIGHT_MISS:19}
   offerwall:
     tnk:
       android:
