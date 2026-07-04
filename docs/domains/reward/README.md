@@ -11,6 +11,7 @@
 | [US-REWARD-002](./US-REWARD-002-rewarded-ad.md) | 리워드 광고 시청(AdMob SSV) | implemented | CC-242 | features/reward, features/google-ad-ssv |
 | [US-REWARD-003](./US-REWARD-003-tnk-offerwall.md) | TNK 오퍼월 적립 | implemented | CC-288 | features/offerwall |
 | [US-REWARD-004](./US-REWARD-004-friend-invite.md) | 친구 초대(추천 코드) | implemented | CC-355 | features/invite-friend |
+| [US-REWARD-005](./US-REWARD-005-lucky-roulette.md) | 행운 룰렛 | agreed | CC-376 | Confluence CC-355, superpowers/specs |
 
 - **상태**는 스펙 합의 기준의 응결값이다. 실제 배포/진척 추적은 Jira를 참조.
 - 공유 용어: [_glossary.md](./_glossary.md)
