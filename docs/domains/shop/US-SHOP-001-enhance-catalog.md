@@ -16,17 +16,17 @@ related-domains: [shop, inventory]
 
 ## 수용 조건 (Acceptance Criteria)
 
-- **AC-01 카탈로그 조회**
+- [ ] **AC-01 카탈로그 조회**
   Given Phase 1 시드(5종 ENHANCE)가 적재되어 있다
   When `GET /api/shop/items?category=ENHANCE`
   Then `isActive=true`인 5개 아이템이 `displayOrder` 오름차순으로, 각 `itemCode/name/priceCoin/effectSummary`를 포함해 반환된다.
 
-- **AC-02 Phase 1 비대상 카테고리**
+- [ ] **AC-02 Phase 1 비대상 카테고리**
   Given `COSMETIC`/`VOUCHER`를 요청한다
   When `GET /api/shop/items?category=COSMETIC`
   Then `{ category:<요청값>, phase1Active:false, items:[] }`로 빈 카탈로그를 반환한다.
 
-- **AC-03 비활성 아이템 비노출**
+- [ ] **AC-03 비활성 아이템 비노출**
   Given 운영자가 `isActive=false`로 표시한 아이템이 있다
   Then 해당 아이템은 카탈로그 응답에 포함되지 않는다.
 

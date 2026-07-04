@@ -16,7 +16,7 @@ related-domains: [inventory, evolution]
 
 ## 수용 조건 (Acceptance Criteria)
 
-- **AC-01 보유 수량 조회**
+- [ ] **AC-01 보유 수량 조회**
   Given 진화석 2개, 보호권 1개를 보유한다
   When `GET /api/inventory/me`
   Then `{ items: [{itemCode:"EVO_STONE", qty:2}, {itemCode:"PROTECT_TICKET", qty:1}] }` 형태로 반환된다. 도메인 에러 없음(인증 실패 시 401만).

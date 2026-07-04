@@ -17,37 +17,37 @@ related-domains: [ad, point, energy, ledger]
 
 ## 수용 조건 (Acceptance Criteria)
 
-- **AC-01 nonce 발급 (시청 직전)**
+- [ ] **AC-01 nonce 발급 (시청 직전)**
   Given 인증된 사용자가 광고 시청 직전이다
   When `POST /api/ads/reward/issue-nonce`를 호출한다
   Then 단일 사용·단기 TTL nonce 1건을 저장하고 `{ nonce, expiresAt }`를 반환한다
   And 이 nonce는 AdMob `custom_data`의 `nonce` 필드에만 실린다 (`userId` 등 식별값은 클라이언트가 직접 넣지 않는다).
 
-- **AC-02 한도 내 정상 시청**
+- [ ] **AC-02 한도 내 정상 시청**
   Given 미사용·미만료 nonce가 있고 일일 quota가 한도 미만이다
   When AdMob SSV 콜백이 도착하고 서명 검증을 통과한다
   Then **단일 트랜잭션 + 행 락(`SELECT … FOR UPDATE`)** 안에서 한도 재확인 → `usedCount += 1` → `nonce.used=true` → 멱등 적립(`admob:reward:{nonce}`) → ledger `GRANTED`를 수행한다
   And 동시 도착 콜백 간 TOCTOU 경합이 발생하지 않는다.
 
-- **AC-03 위조·만료·사용된 nonce 거부**
+- [ ] **AC-03 위조·만료·사용된 nonce 거부**
   Given 서명은 통과했으나 nonce가 없거나/만료/이미 used다
   When 콜백을 처리한다
   Then 적립을 거부하고 ledger에 `REJECTED / INVALID_NONCE`를 기록하며, AdMob에는 200을 반환한다(재시도 폭주 방지).
 
-- **AC-04 일일 한도 초과**
+- [ ] **AC-04 일일 한도 초과**
   Given quota가 한도에 도달했다
   When 검증 통과 콜백이 도착한다
   Then 행 락으로 `usedCount >= 한도`를 확인 후 거부하고 ledger에 `REJECTED / OVER_QUOTA`를 기록, nonce.used는 변경하지 않으며 AdMob에 200을 반환한다.
 
-- **AC-05 서명 검증 실패**
+- [ ] **AC-05 서명 검증 실패**
   Given 콜백 `signature`가 공개키 검증에 실패한다
   Then 401로 응답하고 ledger에 `REJECTED / BAD_SIGNATURE`를 기록, 적립하지 않는다.
 
-- **AC-06 콜백 중복 (동일 nonce 재전송)**
+- [ ] **AC-06 콜백 중복 (동일 nonce 재전송)**
   Given 동일 nonce로 콜백이 두 번 도착한다
   Then 두 번째는 `INVALID_NONCE`로 거부되고, 설령 적립 단계에 도달해도 멱등 키 충돌로 중복 적립되지 않는다(이중 방어). 200 반환.
 
-- **AC-07 quota 조회**
+- [ ] **AC-07 quota 조회**
   When `GET /api/ads/reward/quota` → Then `{ usedToday, dailyLimit, remaining, resetAtKst }`를 반환한다.
 
 ## 검증 매핑 (Verification)

@@ -18,26 +18,26 @@ related-domains: [shop, inventory, point]
 
 ## 수용 조건 (Acceptance Criteria)
 
-- **AC-01 정상 구매 (원자성)**
+- [ ] **AC-01 정상 구매 (원자성)**
   Given 잔액 ≥ 가격
   When `POST /api/shop/purchase {itemCode, qty, idempotencyKey}`
   Then **단일 트랜잭션**으로 코인 차감 + `user_inventory` 증가 + `purchase_order(COMPLETED, (userId, idempotencyKey))` 생성 + 멱등 차감(`shop:purchase:{userId}:{idem}`)을 수행하고 갱신된 잔액·보유 수량을 반환한다.
 
-- **AC-02 패키지 구매 (다건 grant)**
+- [ ] **AC-02 패키지 구매 (다건 grant)**
   Given `ENHANCE_PACK`(grant: 진화석×5, 확률부적×1)을 구매한다
   Then 두 grant가 같은 트랜잭션 안에서 인벤토리에 반영된다 (`itemCode` 오름차순 락으로 데드락 방지).
 
-- **AC-03 코인 부족**
+- [ ] **AC-03 코인 부족**
   Given 잔액 < 가격 → Then `INSUFFICIENT_COIN`으로 거부, 잔액·인벤토리·`purchase_order` 무변화.
 
-- **AC-04 멱등 — 동일 키 재호출**
+- [ ] **AC-04 멱등 — 동일 키 재호출**
   Given 직전에 `k1`로 구매 성공 → When 동일 페이로드 재호출 → Then 추가 차감 없이 **현재 시점** 잔액·인벤토리 반환(이중 차감만 방지).
 
-- **AC-05 멱등 — 키 재사용 충돌 (동일 사용자)**
+- [ ] **AC-05 멱등 — 키 재사용 충돌 (동일 사용자)**
   Given `k1`로 구매 성공 → When 같은 사용자가 `k1`을 **다른 itemCode/qty**로 → Then `409 IDEMPOTENCY_KEY_CONFLICT`, 무변화. (멱등 스코프 = `(userId, idempotencyKey)`; 다른 사용자의 동일 키는 별개 주문.)
 
-- **AC-06 잘못된 itemCode** → `400 ITEM_NOT_FOUND`, 무변화.
-- **AC-07 비활성 아이템 구매** → `ITEM_INACTIVE`로 거부.
+- [ ] **AC-06 잘못된 itemCode** → `400 ITEM_NOT_FOUND`, 무변화.
+- [ ] **AC-07 비활성 아이템 구매** → `ITEM_INACTIVE`로 거부.
 
 ## 검증 매핑 (Verification)
 

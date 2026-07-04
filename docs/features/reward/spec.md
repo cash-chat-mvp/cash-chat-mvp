@@ -29,14 +29,14 @@
 ### 출석 적립
 
 - 도장(`attendance_log` INSERT)과 코인/부가 보상 적립(`recordTransaction`)은 **단일 `@Transactional`** 으로 묶어 부분 성공을 배제한다(한쪽 실패 시 전체 롤백).
-- 멱등성 키 `attendance:{userId}:{yyyy-MM-dd}` — `yyyy-MM-dd`는 KST 자정 기준. 같은 날 중복 도장은 `409 ALREADY_CHECKED_IN`.
+- 멱등성 키 `attendance:{userId}:{yyyy-MM-dd}` — `yyyy-MM-dd`는 KST 자정 기준. 같은 날 중복 도장은 애플리케이션 검증 + `attendance_log`의 `(user_id, check_in_date)` 복합 UNIQUE(`uq_attendance_log_user_date`, V3 마이그레이션)로 이중 차단 → `409 ALREADY_CHECKED_IN`(동시 요청도 DB 레벨에서 1건만 성공).
 - 연속 일차: 최근 출석일이 어제면 +1, 2일 이상 전이면 1로 리셋(KST 기준).
 - 누적 보너스는 1~30일만 정의(부록 시드). 31일 이후 사이클은 범위 외.
 
 ### 광고 적립 (AdMob SSV)
 
 - nonce는 **단일 사용·단기 TTL**. `custom_data`는 클라이언트가 임의로 채우는 값이라 신뢰하지 않고, `custom_data.nonce → userId`를 서버측에서 해석한다(위조 `userId` 차단).
-- 정상 적립은 **단일 트랜잭션 + `ad_reward_daily_quota` 행 락(`SELECT ... FOR UPDATE`)** 안에서 한도 재확인 → `usedCount += 1` → `nonce.used=true` → 멱등 적립(`admob:reward:{nonce}`) → ledger `GRANTED` 순으로 수행 → 동시 콜백 간 TOCTOU 경합 차단.
+- 정상 적립은 **단일 트랜잭션** 안에서 `ad_reward_daily_quota` 행을 먼저 보장 생성(`insertIfAbsent`)한 뒤 **행 락(`SELECT ... FOR UPDATE`, `findForUpdate`)** 을 잡아 — 존재하지 않는 행에 곧바로 `FOR UPDATE` 시 발생하는 갭 락 데드락을 회피 — 한도 재확인 → `usedCount += 1` → `nonce.used=true` → 멱등 적립(`admob:reward:{nonce}`) → ledger `GRANTED` 순으로 수행 → 동시 콜백 간 TOCTOU 경합 차단(`AdRewardService.lockOrCreateQuota`).
 - **거절 처리**: 위조/만료/사용된 nonce → ledger `REJECTED/INVALID_NONCE`, 200. 한도 초과 → 행 락으로 재확인 후 `REJECTED/OVER_QUOTA`, `nonce.used`는 미변경, 200. 서명 실패 → `REJECTED/BAD_SIGNATURE`, 401. (200 반환은 AdMob 재시도 폭주 방지.)
 - 멱등 키 `admob:reward:{nonce}`는 콜백 중복에 대한 이중 방어선(nonce.used 검사 + 멱등 키 충돌).
 - `ad_reward_ledger.status`는 운영 알람·집계의 단일 source of truth.
