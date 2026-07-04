@@ -1,7 +1,8 @@
-# 혜택존(Reward) Phase 1 — 출석체크 · 리워드 광고 Spec
+# 혜택존(Reward) Phase 1 — 출석체크 · 리워드 광고 기술 설계
 
 > 상태: Draft
 > 범위: Phase 1 (출석체크 + AdMob 리워드 광고)
+> 유저 스토리·인수 조건(SSOT): [US-REWARD-001](../../domains/reward/US-REWARD-001-daily-attendance.md), [US-REWARD-002](../../domains/reward/US-REWARD-002-rewarded-ad.md)
 > 관련 기획: [Confluence — 혜택존](https://moneyfactoryslave.atlassian.net/wiki/spaces/FCTC/pages/14909530), [Confluence — overview](https://moneyfactoryslave.atlassian.net/wiki/spaces/FCTC/pages/14975052/Cash+Chat+-+overview), `docs/planning/02-rewards-zone.md`
 
 ## 목표 (Goal)
@@ -13,140 +14,32 @@
 
 두 채널 모두 `domain/point/UserPointService`의 멱등성 보장 트랜잭션을 통해 코인을 적립한다. 본 spec은 `UserPointService.recordTransaction(idempotencyKey)` 확장을 함께 다룬다 (Shop spec과 공유되는 선결 조건).
 
-## 유저 스토리 (User Story)
+## 유저 스토리 · 인수 조건
 
-### Story 1: 신규 출석 도장
+> 이 기능의 **유저 스토리와 관찰 가능한 인수 조건(검증 기준선)** 은 도메인 카탈로그가 단일 소유한다(SSOT):
+> - [US-REWARD-001 일일 출석체크](../../domains/reward/US-REWARD-001-daily-attendance.md)
+> - [US-REWARD-002 리워드 광고 시청](../../domains/reward/US-REWARD-002-rewarded-ad.md)
+>
+> 본 문서는 그 계약을 만족시키는 **백엔드 구현 상세**(API 계약·데이터 흐름·트랜잭션 불변식·시퀀스)를 담는다.
 
-신규/기존 사용자는 혜택존 탭에서 오늘자 도장을 1회 찍어 코인을 받고 싶다. 어제 도장을 찍었다면 연속 일차가 1 증가하고, 끊겼다면 1일차로 리셋된다.
+## 구현 불변식 (Design Invariants)
 
-### Story 2: 누적 일차 보너스
+관찰 가능한 AC는 위 US 파일이 소유하고, 아래는 그것을 보장하는 백엔드 구현 규칙이다. 트랜잭션 흐름의 시각적 표현은 아래 "사용자 흐름 > 순차 흐름도" 참조.
 
-연속 출석 7일/14일/30일 시점에는 코인 외 부가 보상(진화석, 확률 부적, 보호권)을 함께 받고 싶다. 보너스는 해당 누적 일차 도달 시 1회만 지급된다.
+### 출석 적립
 
-### Story 3: 리워드 광고 시청
+- 도장(`attendance_log` INSERT)과 코인/부가 보상 적립(`recordTransaction`)은 **단일 `@Transactional`** 으로 묶어 부분 성공을 배제한다(한쪽 실패 시 전체 롤백).
+- 멱등성 키 `attendance:{userId}:{yyyy-MM-dd}` — `yyyy-MM-dd`는 KST 자정 기준. 같은 날 중복 도장은 `409 ALREADY_CHECKED_IN`.
+- 연속 일차: 최근 출석일이 어제면 +1, 2일 이상 전이면 1로 리셋(KST 기준).
+- 누적 보너스는 1~30일만 정의(부록 시드). 31일 이후 사이클은 범위 외.
 
-사용자는 혜택존의 [지금 시청] 버튼으로 AdMob 리워드 광고를 보고 코인을 받고 싶다. 광고를 끝까지 보지 않으면 코인이 지급되지 않는다.
+### 광고 적립 (AdMob SSV)
 
-### Story 4: 광고 일일 한도
-
-운영 정책상 사용자당 하루 N회로 광고 시청을 제한하고 싶다. 한도를 초과하면 시청 버튼은 비활성화되고, KST 자정에 리셋된다.
-
-### Story 5: 적립 무결성 (중복·위조 방어)
-
-백엔드는 다음 두 가지를 모두 만족해야 한다.
-
-1. AdMob이 동일한 reward callback을 재전송하거나 동일 nonce가 동시에 도착할 때 코인을 중복 적립하지 않는다.
-2. AdMob `custom_data`는 클라이언트가 임의로 채울 수 있는 필드이므로 그 안의 `userId` 같은 식별값을 백엔드가 직접 신뢰하지 않는다 — 위조된 `userId`로 다른 사용자 계정에 적립이 일어나면 안 된다. 백엔드는 광고 시청 직전에 서버가 발급한 단일 사용 nonce만 받아 `nonce → userId`를 서버측에서 해석한다.
-
-출석도 마찬가지로 동일 일자 중복 도장을 거부해야 한다.
-
-## 인수 기준 (Acceptance Criteria)
-
-### 첫 출석
-
-Given 사용자가 가입 직후이고 오늘 출석 기록이 없다
-When 사용자가 `POST /api/attendance/check-in`을 호출한다
-Then 백엔드는 **단일 DB 트랜잭션(`@Transactional`) 안에서** `attendance_log` 오늘자 1행 INSERT와 `UserPointService.recordTransaction(idempotencyKey="attendance:{userId}:{yyyy-MM-dd}")` 호출을 함께 수행한다
-And 연속 출석 일차는 1로 저장된다
-And 1일차 보상 시드값(예: +20 코인)이 적립되어 같은 트랜잭션 안의 `point_transaction`에 1행이 기록된다
-And 둘 중 어느 한쪽이라도 실패하면 트랜잭션 전체가 롤백되어 "도장만 찍히고 코인 없음" 같은 부분 성공 상태가 발생하지 않는다
-And 응답에는 적립된 코인, 연속 일차, 다음 보상 미리보기가 포함된다.
-
-### 같은 날 중복 출석
-
-Given 사용자가 오늘 이미 출석을 찍었다
-When 같은 사용자가 같은 날 `POST /api/attendance/check-in`을 다시 호출한다
-Then 백엔드는 409 도메인 에러(`ALREADY_CHECKED_IN`)로 거부한다
-And `attendance_log`에 추가 행이 생기지 않는다
-And 코인이 추가로 적립되지 않는다.
-
-### 연속 출석 카운트 증가
-
-Given 사용자의 가장 최근 출석일이 어제(KST 기준)이다
-When 오늘 출석을 찍는다
-Then 연속 일차는 어제 일차 + 1로 저장된다.
-
-### 연속 출석 끊김
-
-Given 사용자의 가장 최근 출석일이 2일 이상 전(KST 기준)이다
-When 오늘 출석을 찍는다
-Then 연속 일차는 1로 리셋된다.
-
-### 7일/14일/30일 누적 일차 보너스
-
-Given 사용자의 누적 출석 일차가 시드 테이블의 보너스 지급 일차(7/14/30)에 도달한다
-When 해당 회차 출석을 찍는다
-Then 코인 외 부가 보상(진화석/확률 부적/보호권 등) 시드값이 추가로 지급된다
-And 코인·부가 보상 적립은 `attendance_log` 갱신과 동일 트랜잭션 안에서 수행되며 (위 "첫 출석" 기준의 원자성 규칙이 동일하게 적용된다), 어느 한쪽 실패 시 트랜잭션 전체가 롤백된다
-And 본 인수 기준은 누적 1~30일 범위만 정의한다 — 31일 이후 사이클 정책은 Phase 1 범위 외(부록 참고).
-
-### 캘린더 조회
-
-Given 사용자가 이번 달 출석을 7일 동안 찍었다
-When 사용자가 `GET /api/attendance/me`를 호출한다
-And 선택 query 파라미터 `year` (형식 `YYYY`)와 `month` (정수 1~12)는 **둘 다 함께 전달하거나 둘 다 생략**한다 — 한쪽만 전달하면 400 거부, 둘 다 생략 시 KST 기준 현재 연·월로 해석한다
-Then 응답은 `{ year, month, checkedDays:[1..7], currentStreak:7, todayChecked:true, nextRewardPreview:{...} }` 형태로 반환되며 `year`/`month`는 요청에 사용된(또는 기본으로 채워진) 값을 그대로 반영한다.
-
-### nonce 발급 (광고 시청 직전)
-
-Given 인증된 사용자가 광고 시청 직전이다
-When 사용자가 `POST /api/ads/reward/issue-nonce`를 호출한다
-Then 백엔드는 단일 사용·짧은 TTL(예: 10분)의 nonce 1건을 `ad_reward_nonce`에 저장한다 (`nonce`, `userId`, `expiresAt`, `used=false`)
-And 응답은 `{ nonce, expiresAt }` 형태로 반환된다
-And 이 nonce가 AdMob `custom_data`의 `nonce` 필드에만 실려야 하며, 클라이언트는 `userId` 등 식별값을 `custom_data`에 직접 넣지 않는다.
-
-### 광고 일일 한도 내 시청
-
-Given 사용자가 `POST /api/ads/reward/issue-nonce`로 발급받은 nonce가 미사용·미만료 상태이다
-And `ad_reward_daily_quota`의 `(userId, kstDate)` 행 `usedCount`가 일일 한도 미만이다
-When AdMob이 SSV 콜백을 `GET /api/ads/ssv/admob?...`(query string)으로 보내고, `custom_data`에는 nonce만 포함된다
-And 백엔드가 query string의 `signature`를 AdMob 공개키로 검증한다
-And 백엔드가 `custom_data.nonce`로 `ad_reward_nonce`를 조회해 표준 `userId`를 해석한다 (`custom_data` 안의 다른 식별값은 신뢰하지 않음)
-Then 백엔드는 **단일 트랜잭션 안에서** 다음을 순서대로 수행한다 — (a) `ad_reward_daily_quota`의 `(userId, kstDate)` 행을 `SELECT ... FOR UPDATE`로 락을 잡아 `usedCount`를 다시 읽고 한도 미만임을 재확인, (b) `usedCount += 1`, (c) `ad_reward_nonce.used=true` UPDATE, (d) `UserPointService.recordTransaction(멱등성 키 "admob:reward:{nonce}")` 호출, (e) `ad_reward_ledger`에 `status=GRANTED`로 INSERT, (f) COMMIT
-And 위 절차는 트랜잭션 내부에서 한도 검사·증가가 원자적으로 일어나 동시 도착하는 SSV 둘이 동일 시점 `usedCount`를 읽고 모두 통과하는 TOCTOU 경합이 발생하지 않는다
-And 같은 사용자의 `GET /api/ads/reward/quota` 응답에 남은 횟수가 감소된 값으로 반영된다.
-
-### 위조 또는 만료된 nonce 거부
-
-Given AdMob SSV 콜백이 도착했고 서명 검증은 통과했다
-And `custom_data`의 nonce가 (a) `ad_reward_nonce`에 없거나 (b) `expiresAt`을 지났거나 (c) 이미 `used=true`이다
-When 백엔드가 콜백을 처리한다
-Then 백엔드는 적립을 거부한다
-And `ad_reward_ledger`에 `status=REJECTED`, `reason=INVALID_NONCE`로 기록한다
-And 코인이 적립되지 않는다
-And AdMob에는 200을 반환한다 (재시도 폭주 방지).
-
-### 광고 일일 한도 초과
-
-Given `ad_reward_daily_quota`의 `(userId, kstDate)` 행 `usedCount`가 일일 한도에 도달했다
-When 새 SSV 콜백이 도착하고 서명·nonce 검증을 모두 통과한다
-Then 백엔드는 트랜잭션을 시작해 `ad_reward_daily_quota` 행을 `SELECT ... FOR UPDATE`로 락을 잡고 `usedCount >= 한도`를 확인한 뒤 적립을 거부한다
-And `ad_reward_ledger`에 `status=REJECTED`, `reason=OVER_QUOTA`로 기록하고 COMMIT한다
-And 코인이 적립되지 않으며 `ad_reward_nonce.used`는 변경되지 않는다 (재시도 방지를 위해 nonce는 그대로 미사용으로 두되, 호출 측 동일 nonce 재전송은 어차피 한도 초과로 REJECT)
-And AdMob에는 200을 반환한다 (재시도 폭주 방지)
-And 동시에 도착한 두 콜백이 같은 행에 락 경쟁을 하므로 한쪽만 통과·다른 쪽은 거부되어 TOCTOU 경합이 발생하지 않는다.
-
-### SSV 서명 검증 실패
-
-Given AdMob 콜백 query string의 `signature`가 공개키 검증에 실패한다
-When 백엔드가 콜백을 처리한다
-Then 백엔드는 401로 응답한다
-And `ad_reward_ledger`에 `status=REJECTED`, `reason=BAD_SIGNATURE`로 기록한다
-And 코인을 적립하지 않는다.
-
-### SSV 콜백 중복
-
-Given 동일한 `nonce`로 두 번 SSV 콜백이 도착한다
-When 백엔드가 두 번째 콜백을 처리한다
-Then 두 번째 콜백은 nonce가 이미 `used=true`이므로 위 "위조 또는 만료된 nonce 거부" 기준에 따라 `INVALID_NONCE`로 REJECTED 처리된다
-And 만약 어떤 이유로 적립 단계에 도달하더라도 멱등성 키 `admob:reward:{nonce}` 충돌로 중복 적립되지 않는다 (이중 방어선)
-And 두 번째 콜백에도 200을 반환한다.
-
-### Quota 조회
-
-Given 사용자가 오늘 광고를 3회 시청했고 한도는 10회다
-When 사용자가 `GET /api/ads/reward/quota`를 호출한다
-Then 응답은 `{ usedToday:3, dailyLimit:10, remaining:7, resetAtKst:"..." }` 형태로 반환된다.
+- nonce는 **단일 사용·단기 TTL**. `custom_data`는 클라이언트가 임의로 채우는 값이라 신뢰하지 않고, `custom_data.nonce → userId`를 서버측에서 해석한다(위조 `userId` 차단).
+- 정상 적립은 **단일 트랜잭션 + `ad_reward_daily_quota` 행 락(`SELECT ... FOR UPDATE`)** 안에서 한도 재확인 → `usedCount += 1` → `nonce.used=true` → 멱등 적립(`admob:reward:{nonce}`) → ledger `GRANTED` 순으로 수행 → 동시 콜백 간 TOCTOU 경합 차단.
+- **거절 처리**: 위조/만료/사용된 nonce → ledger `REJECTED/INVALID_NONCE`, 200. 한도 초과 → 행 락으로 재확인 후 `REJECTED/OVER_QUOTA`, `nonce.used`는 미변경, 200. 서명 실패 → `REJECTED/BAD_SIGNATURE`, 401. (200 반환은 AdMob 재시도 폭주 방지.)
+- 멱등 키 `admob:reward:{nonce}`는 콜백 중복에 대한 이중 방어선(nonce.used 검사 + 멱등 키 충돌).
+- `ad_reward_ledger.status`는 운영 알람·집계의 단일 source of truth.
 
 ## API 계약 (요약)
 
