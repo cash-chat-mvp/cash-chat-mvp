@@ -79,6 +79,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        com.nomadclub.cashchat.flavor.FlavorModules.onMainActivityCreated(this)
+
         setContent {
             CashChatApp()
         }
