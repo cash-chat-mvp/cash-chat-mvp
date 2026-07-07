@@ -141,6 +141,8 @@ dependencies {
     // mock 플레이버 유닛테스트(testMock) 전용 — FakeBackendEngine 검증용 Ktor 클라이언트 플러그인
     "testMockImplementation"(libs.ktor.client.content.negotiation)
     "testMockImplementation"(libs.ktor.serialization.kotlinx.json)
+    // mock 플레이버 유닛테스트(testMock) 전용 — Activity 목킹(FakeSdkTest)
+    "testMockImplementation"("org.mockito:mockito-core:5.11.0")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
