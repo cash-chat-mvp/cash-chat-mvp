@@ -78,10 +78,20 @@
 - Koin `single` 등록을 인터페이스 기준으로 변경(real/mock flavor에서 각 구현 바인딩)
 - 채팅은 SDK가 없으므로 `ChatApi`/repository 레벨에서 Fake(정해진 SSE 토큰 스트림 방출)
 
-### 5.3 Fake 데이터 계층 (mock DI override)
-- `ChatApi` · `AdsApi`(quota/nonce) · `OfferwallApi`(토큰) · 잔액(`PointsApi`)을 인메모리 Fake로 교체
-- 보상 SSV는 "Fake presenter 완료 → Fake가 인메모리 잔액 증가"로 시뮬레이션 (실제 콜백 없음)
-- 상태는 인메모리로 시나리오 시작 시 결정론적으로 초기화
+### 5.3 인앱 Fake 백엔드 (Ktor MockEngine) — 계획 단계 정제
+> 초안의 "각 `*Api`를 개별 Fake로 교체"보다 **단일 seam**으로 더 단순하고 관통 깊이가 깊은 방식을 채택.
+
+- `HudStore`는 final 구체 클래스이며 `EnergyApi`/`EvolutionApi`/`PointsApi`(구체 클래스)에 의존 → 개별 Fake 교체 불가.
+- 반면 `createCashChatHttpClient(baseUrl, tokenProvider, engine)`는 Ktor `MockEngine` 주입 seam이 이미 존재.
+- **따라서 mock flavor는 Koin의 `HttpClient` single 하나만 MockEngine 기반으로 override**한다. 모든 `*Api`·Store(`ChatStore`/`AdRewardStore`/`HudStore`/`RemotePointsRepository`)는 **무변경**으로 인앱 Fake 백엔드를 호출 → 직렬화·SSE 파서·에러 매핑·401 경로까지 실제로 관통.
+- `MockBackendState`(인메모리): `pointsBalance`·`energy/maxEnergy`·`usedToday/dailyLimit`·시나리오 플래그 보유. 시나리오 시작 시 결정론적 초기화.
+- `fakeBackendEngine(state)`: 요청 경로별로 canned JSON 반환 (`/api/points/me`, `/api/energy/me`, `/api/evolution/...`, `/api/ads/reward/quota`, `/api/ads/reward/issue-nonce`, `/api/offerwall/tnk/user-token`, `/api/v1/chat/stream`(SSE 텍스트 바디)).
+- 보상 SSV 시뮬레이션: Fake SDK presenter 완료 → `state.usedToday++`(광고) / `state.pointsBalance += coins`(오퍼월) → 다음 `getQuota`/`getBalance` 호출이 증가분 반영. `AdRewardStore.awaitRewardApplied`(usedToday 폴링)가 자연히 `APPLIED` 판정. 폴링 지연은 mock에서 `pollDelaysMillis = listOf(0L)`로 즉시화.
+- 이미 이 코드베이스는 `FakeRouletteRepository`·`FakeInviteRepository`를 프로덕션 DI에 사용 → Fake 주입 선례 존재.
+
+### 5.3.1 선택자 전략 (testTag 최소화)
+- 대부분 노드는 표시 텍스트/`contentDescription`으로 선택 가능(예: 입력 placeholder `"메시지를 입력하세요..."`, 전송 `contentDescription="전송"`, `"▶  광고 보기"`, `"TNK 오퍼월"`).
+- 따라서 **testTag는 기본 추가하지 않음**. 특정 flow가 취약할 때만 최소 보강(설계 §5.5 유지).
 
 ### 5.4 시나리오 제어
 - launch intent extra / deep link로 시나리오 선택 (예: `--es scenario ad_quota_exceeded`)
