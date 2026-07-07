@@ -67,7 +67,7 @@ related-domains: [ad, point, energy, ledger]
 - BE 단위: 파서/서명/공개키/검증·적립 (`GoogleAdSsvServiceTest`, `AdRewardServiceTest`, 컨트롤러)
 - BE 통합(TestContainers): 행 락 동시성·한도·멱등 (`AdRewardIntegrationTest`)
 - 실단말 E2E: DB `reward_status=GRANTED` 확인
-- FE(Maestro): apps/frontend/maestro/flows/rewarded-ad/watch-reward.yaml, quota-exceeded.yaml (AC-FE-01/02)
+- FE(Maestro) 여정 `watch-rewarded-ad`: apps/frontend/maestro/flows/watch-rewarded-ad/happy.yaml, quota-exceeded.yaml (AC-FE-01/02)
 - 절차 상세: [manual.md](../../features/google-ad-ssv/manual.md) §4.
 
 ## 관련

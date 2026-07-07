@@ -1,5 +1,4 @@
-# 데모(사람이 보기용) — 구글 보상형 광고 happy.
-# 실행: maestro test maestro/demo/rewarded-ad.yaml
+# 여정: watch-rewarded-ad | US-REWARD-002 / AC-FE-01 — 광고 시청 완료 시 보상이 반영된다
 appId: com.nomadclub.cashchat
 ---
 - launchApp:
@@ -11,11 +10,8 @@ appId: com.nomadclub.cashchat
       visible: "Don't Show Again"
     commands:
       - tapOn: "Don't Show Again"
-- runFlow: _pause.yaml
 - tapOn: "리워드"
-- runFlow: _pause.yaml
-- takeScreenshot: ad-1-rewards
+- takeScreenshot: watch-rewarded-ad-01-rewards   # 상태 변화: 혜택존 진입
 - tapOn: "▶  광고 보기"
 - assertVisible: "에너지를 충전했어요!"
-- runFlow: _pause.yaml
-- takeScreenshot: ad-2-rewarded
+- takeScreenshot: watch-rewarded-ad-02-rewarded  # 상태 변화: 보상 반영 피드백

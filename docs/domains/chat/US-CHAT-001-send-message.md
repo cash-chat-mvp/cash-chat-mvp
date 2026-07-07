@@ -1,19 +1,21 @@
 ---
 id: US-CHAT-001
 domain: chat
-slug: ai-chat-response
+slug: send-message
 status: draft
 jira: CC-391
 source: apps/frontend (feature/chat), docs/superpowers/specs/2026-07-07-maestro-fe-acceptance-spike-design.md
 related-domains: [chat, energy]
 ---
 
-# AI 채팅 응답 수신
+# 메시지 보내기 (send-message)
 
 ## 스토리
 
-사용자로서, 나는 채팅 입력창에 메시지를 보내면 AI의 응답을 화면에서 받고 싶다.
+사용자로서, 나는 채팅 입력창에 메시지를 **보내(send)** AI의 응답을 화면에서 받고 싶다.
 응답 스트림이 실패하면, 잘못된 응답이 정상처럼 표시되지 않기를 바란다.
+
+> FE 여정 식별자: **`send-message`** (`<verb>-<object>`). Maestro flow 디렉터리와 1:1 대응.
 
 ## FE 관통 인수 기준 (Acceptance Criteria)
 
@@ -29,7 +31,7 @@ related-domains: [chat, energy]
 
 ## 검증 매핑 (Verification)
 
-- FE(Maestro): `apps/frontend/maestro/flows/chat/ai-response.yaml`, `stream-error.yaml`
+- FE(Maestro): `apps/frontend/maestro/flows/send-message/happy.yaml`, `stream-error.yaml`
 - 기술 상세: `docs/superpowers/specs/2026-07-07-maestro-fe-acceptance-spike-design.md`
 
 ## 관련

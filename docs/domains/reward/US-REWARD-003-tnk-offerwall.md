@@ -59,7 +59,7 @@ related-domains: [offerwall, point, ledger]
 
 - BE: `md_chk` 서명 검증, 멱등(`seq_id` UNIQUE + 멱등 키), fail-closed 순서 테스트
 - 규격 확인: TNK Android SDK "자체 서버 포인트 관리" 콜백 규격과 일치 확인 완료 (spec §검증 항목)
-- FE(Maestro): apps/frontend/maestro/flows/offerwall/complete-reward.yaml, token-fail.yaml (AC-FE-01/02)
+- FE(Maestro) 여정 `complete-offerwall`: apps/frontend/maestro/flows/complete-offerwall/happy.yaml, token-fail.yaml (AC-FE-01/02)
 
 ## 관련
 

@@ -7,7 +7,7 @@ AI 채팅(서버 SSE 스트리밍) 여정의 유저 스토리 카탈로그. 각 
 
 | ID | 스토리 | 상태 | Jira | 원본 spec |
 | -- | ------ | ---- | ---- | --------- |
-| [US-CHAT-001](./US-CHAT-001-ai-chat-response.md) | AI 채팅 응답 수신 | draft | CC-391 | [../../superpowers/specs/2026-07-07-maestro-fe-acceptance-spike-design.md](../../superpowers/specs/2026-07-07-maestro-fe-acceptance-spike-design.md) |
+| [US-CHAT-001](./US-CHAT-001-send-message.md) | 메시지 보내기 (send-message) | draft | CC-391 | [../../superpowers/specs/2026-07-07-maestro-fe-acceptance-spike-design.md](../../superpowers/specs/2026-07-07-maestro-fe-acceptance-spike-design.md) |
 
 - **상태**는 스펙 합의 기준의 응결값이다. 실제 배포/진척 추적은 Jira를 참조.
 - 공유 용어: [_glossary.md](./_glossary.md)

@@ -1,4 +1,4 @@
-# US-REWARD-002 / AC-FE-02 — 일일 한도 소진 시 시청 불가 표시
+# 여정: watch-rewarded-ad | US-REWARD-002 / AC-FE-02 — 일일 한도 소진 시 시청 불가로 표시된다
 appId: com.nomadclub.cashchat
 ---
 - launchApp:
@@ -12,3 +12,4 @@ appId: com.nomadclub.cashchat
       - tapOn: "Don't Show Again"
 - tapOn: "리워드"
 - assertVisible: "내일 다시 만나요"
+- takeScreenshot: watch-rewarded-ad-03-quota-exceeded   # 상태: 한도 소진 표시

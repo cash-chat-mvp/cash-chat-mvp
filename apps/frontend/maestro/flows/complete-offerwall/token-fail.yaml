@@ -1,4 +1,4 @@
-# US-REWARD-003 / AC-FE-02 — 진입 실패 시 실패 토스트
+# 여정: complete-offerwall | US-REWARD-003 / AC-FE-02 — 진입 실패 시 실패 안내가 뜬다
 appId: com.nomadclub.cashchat
 ---
 - launchApp:
@@ -16,3 +16,4 @@ appId: com.nomadclub.cashchat
     direction: DOWN
 - tapOn: "TNK 오퍼월"
 - assertVisible: "오퍼월 진입에 실패했어요"
+- takeScreenshot: complete-offerwall-03-token-fail   # 상태: 진입 실패 토스트

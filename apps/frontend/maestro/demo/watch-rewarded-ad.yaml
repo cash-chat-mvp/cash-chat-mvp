@@ -1,16 +1,21 @@
-# US-REWARD-002 / AC-FE-01 — 광고 시청 완료 시 보상 반영 토스트
+# 데모(사람이 보기용) — watch-rewarded-ad happy.
+# 실행: maestro test maestro/demo/watch-rewarded-ad.yaml
 appId: com.nomadclub.cashchat
 ---
 - launchApp:
     clearState: true
     arguments:
       scenario: "happy"
-# 일부 에뮬레이터(프리뷰 이미지)에서 첫 실행 시 뜨는 시스템 호환성 다이얼로그를 닫는다(없으면 무시).
 - runFlow:
     when:
       visible: "Don't Show Again"
     commands:
       - tapOn: "Don't Show Again"
+- runFlow: _pause.yaml
 - tapOn: "리워드"
+- runFlow: _pause.yaml
+- takeScreenshot: ad-1-rewards
 - tapOn: "▶  광고 보기"
 - assertVisible: "에너지를 충전했어요!"
+- runFlow: _pause.yaml
+- takeScreenshot: ad-2-rewarded

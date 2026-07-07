@@ -1,5 +1,5 @@
-# 데모(사람이 보기용) — AI 채팅 happy. 단계마다 딜레이 + 스크린샷.
-# 실행: maestro test maestro/demo/chat.yaml (에뮬레이터 화면을 보면서 확인)
+# 데모(사람이 보기용) — send-message happy. 단계마다 딜레이 + 스크린샷.
+# 실행: maestro test maestro/demo/send-message.yaml (에뮬레이터 화면을 보면서 확인)
 appId: com.nomadclub.cashchat
 ---
 - launchApp:

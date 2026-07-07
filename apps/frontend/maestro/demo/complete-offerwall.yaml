@@ -1,5 +1,5 @@
-# 데모(사람이 보기용) — TNK 오퍼월 happy.
-# 실행: maestro test maestro/demo/offerwall.yaml
+# 데모(사람이 보기용) — complete-offerwall happy.
+# 실행: maestro test maestro/demo/complete-offerwall.yaml
 appId: com.nomadclub.cashchat
 ---
 - launchApp:
