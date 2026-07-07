@@ -1,0 +1,12 @@
+# US-CHAT-001 / AC-FE-01 — 메시지 전송 시 AI(목) 응답 수신
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "happy"
+- tapOn: "메시지를 입력하세요..."
+- inputText: "안녕"
+- tapOn:
+    id: "전송"
+- assertVisible: "목킹응답: 반갑습니다 👋"

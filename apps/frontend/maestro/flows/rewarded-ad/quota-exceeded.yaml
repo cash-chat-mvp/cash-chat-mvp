@@ -1,0 +1,9 @@
+# US-REWARD-002 / AC-FE-02 — 일일 한도 소진 시 시청 불가 표시
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "ad_quota_exceeded"
+- tapOn: "리워드"
+- assertVisible: "내일 다시 만나요"

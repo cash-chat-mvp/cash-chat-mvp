@@ -1,0 +1,10 @@
+# US-REWARD-003 / AC-FE-02 — 진입 실패 시 실패 토스트
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "offerwall_fail"
+- tapOn: "리워드"
+- tapOn: "TNK 오퍼월"
+- assertVisible: "오퍼월 진입에 실패했어요"

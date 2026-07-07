@@ -1,0 +1,10 @@
+# US-REWARD-002 / AC-FE-01 — 광고 시청 완료 시 보상 반영 토스트
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "happy"
+- tapOn: "리워드"
+- tapOn: "▶  광고 보기"
+- assertVisible: "에너지를 충전했어요!"

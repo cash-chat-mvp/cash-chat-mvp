@@ -1,0 +1,10 @@
+# US-REWARD-003 / AC-FE-01 — 오퍼 완료(목) 시 코인 잔액 증가
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "happy"
+- tapOn: "리워드"
+- tapOn: "TNK 오퍼월"
+- assertVisible: "🪙 1500"
