@@ -57,6 +57,20 @@ android {
             )
         }
     }
+
+    flavorDimensions += "backend"
+    productFlavors {
+        create("real") {
+            dimension = "backend"
+            isDefault = true
+            buildConfigField("Boolean", "IS_MOCK", "false")
+        }
+        create("mock") {
+            dimension = "backend"
+            // applicationIdSuffix 사용 금지(google-services package_name 불일치 방지)
+            buildConfigField("Boolean", "IS_MOCK", "true")
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
@@ -116,6 +130,11 @@ dependencies {
 
     // 채팅 마크다운 렌더링 (Material3 테마 연동)
     implementation(libs.markdown.renderer.m3)
+
+    // mock 플레이버 전용 — 인앱 Fake 백엔드(Ktor MockEngine)
+    "mockImplementation"(libs.ktor.client.core)
+    "mockImplementation"(libs.ktor.client.mock)
+    "mockImplementation"(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
