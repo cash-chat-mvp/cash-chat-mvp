@@ -50,6 +50,18 @@ related-domains: [ad, point, energy, ledger]
 - [ ] **AC-07 quota 조회**
   When `GET /api/ads/reward/quota` → Then `{ usedToday, dailyLimit, remaining, resetAtKst }`를 반환한다.
 
+## FE 관통 인수 기준 (Acceptance Criteria)
+
+- [ ] **AC-FE-01 광고 시청 완료 → 보상 반영**
+  Given mock 플레이버 앱이 혜택존에 있고 일일 한도가 남아 있다
+  When 리워드 광고 카드의 [광고 보기]를 눌러 (Fake) 광고를 완료한다
+  Then 보상 반영 피드백(`에너지를 충전했어요!`)이 표시된다.
+
+- [ ] **AC-FE-02 일일 한도 소진**
+  Given `ad_quota_exceeded` 시나리오다
+  When 혜택존에 진입한다
+  Then 리워드 광고 카드가 시청 불가(`내일 다시 만나요`)로 표시된다.
+
 ## 검증 매핑 (Verification)
 
 - BE 단위: 파서/서명/공개키/검증·적립 (`GoogleAdSsvServiceTest`, `AdRewardServiceTest`, 컨트롤러)
