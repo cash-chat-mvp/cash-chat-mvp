@@ -5,6 +5,18 @@ appId: com.nomadclub.cashchat
     clearState: true
     arguments:
       scenario: "happy"
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
 - tapOn: "리워드"
+# TNK 오퍼월 카드는 혜택존 하단에 있어 스크롤로 노출한다.
+- scrollUntilVisible:
+    element: "TNK 오퍼월"
+    direction: DOWN
 - tapOn: "TNK 오퍼월"
-- assertVisible: "🪙 1500"
+# 잔액 칩(🪙 1500)은 상단이므로 위로 스크롤해 확인.
+- scrollUntilVisible:
+    element: "🪙 1500"
+    direction: UP

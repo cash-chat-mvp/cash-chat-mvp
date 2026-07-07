@@ -5,6 +5,12 @@ appId: com.nomadclub.cashchat
     clearState: true
     arguments:
       scenario: "happy"
+# 일부 에뮬레이터(프리뷰 이미지)에서 첫 실행 시 뜨는 시스템 호환성 다이얼로그를 닫는다(없으면 무시).
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
 - tapOn: "리워드"
 - tapOn: "▶  광고 보기"
 - assertVisible: "에너지를 충전했어요!"

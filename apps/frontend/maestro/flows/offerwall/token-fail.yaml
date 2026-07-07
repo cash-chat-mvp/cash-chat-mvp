@@ -5,6 +5,14 @@ appId: com.nomadclub.cashchat
     clearState: true
     arguments:
       scenario: "offerwall_fail"
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
 - tapOn: "리워드"
+- scrollUntilVisible:
+    element: "TNK 오퍼월"
+    direction: DOWN
 - tapOn: "TNK 오퍼월"
 - assertVisible: "오퍼월 진입에 실패했어요"

@@ -5,5 +5,10 @@ appId: com.nomadclub.cashchat
     clearState: true
     arguments:
       scenario: "ad_quota_exceeded"
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
 - tapOn: "리워드"
 - assertVisible: "내일 다시 만나요"

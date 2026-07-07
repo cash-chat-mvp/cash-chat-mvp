@@ -5,10 +5,18 @@ appId: com.nomadclub.cashchat
     clearState: true
     arguments:
       scenario: "chat_error"
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
 - tapOn: "메시지를 입력하세요..."
-- inputText: "안녕"
-- tapOn:
-    id: "전송"
+- runFlow:
+    when:
+      visible: "Try out your stylus"
+    commands:
+      - tapOn: "Cancel"
+- inputText: "hello"
+- tapOn: "전송"
+# chat_error 시나리오는 SSE event:error 를 반환하므로 정상(목) 응답이 렌더되지 않는다.
 - assertNotVisible: "목킹응답"
-# 에러 UI 문자열을 assert 하려면 이 시나리오로 앱을 1회 구동해 실제 표시 텍스트
-# (예: "응답 생성 중 오류가 발생했어요")를 확인 후 assertVisible 로 강화한다.
