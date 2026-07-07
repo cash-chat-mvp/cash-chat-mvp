@@ -1,4 +1,4 @@
-# 혜택존(Offerwall) — TNK Factory 오퍼월 백엔드 Spec
+# 혜택존(Offerwall) — TNK Factory 오퍼월 백엔드 기술 설계
 
 > 상태: Draft
 > 범위: 백엔드 (TNK 오퍼월 적립 채널)
@@ -26,77 +26,21 @@
 | D4 | 토큰 API | `POST /api/offerwall/tnk/user-token` — get-or-create(멱등). |
 | D5 | ACK 형식 | TNK가 기대하는 정확한 ack 본문/HTTP 메서드가 SDK 문서에 미명시 → **합리적 기본값(HTTP 200 + `SUCCESS` 본문)으로 구현하고 ack 문자열을 상수로 분리**, 정확한 규격은 TNK 확인 후 조정(아래 "검증 필요 항목"). |
 
-## 유저 스토리 (User Story)
+## 유저 스토리 · 인수 조건
 
-### Story 1: 오퍼월 토큰 발급
+> 이 기능의 **유저 스토리와 관찰 가능한 인수 조건(검증 기준선)** 은 도메인 카탈로그가 단일 소유한다(SSOT): [US-REWARD-003 TNK 오퍼월 적립](../../domains/reward/US-REWARD-003-tnk-offerwall.md).
+> 본 문서는 그 계약을 만족시키는 **백엔드 구현 상세**(설계 결정·API·데이터 모델·트랜잭션 불변식·시퀀스)를 담는다.
 
-프론트는 혜택존의 TNK 오퍼월 진입 시, TNK SDK에 넘길 안정적 사용자 식별 토큰을 서버에서 받고 싶다. 같은 사용자는 항상 같은 토큰을 받아야 한다.
+## 구현 불변식 (Design Invariants)
 
-### Story 2: 오퍼 완료 적립
+관찰 가능한 AC는 위 US 파일이 소유하고, 아래는 그것을 보장하는 백엔드 구현 규칙이다(핵심 설계 결정은 위 "핵심 설계 결정" 표 참조).
 
-사용자가 TNK 오퍼를 완료하면, TNK 서버가 백엔드로 포스트백을 보내고 백엔드는 검증 후 오퍼별 보상 코인을 적립한다.
-
-### Story 3: 적립 무결성 (위조·중복 방어)
-
-백엔드는 다음을 만족해야 한다.
-
-1. `md_chk` 서명이 `appKey`(공유 시크릿)로 검증되지 않은 콜백은 적립하지 않는다 — `md_user_nm`(토큰)을 위조해도 `appKey`를 모르면 유효한 `md_chk`를 만들 수 없다.
-2. 동일 `seq_id` 콜백이 재전송되거나 동시에 도착해도 코인을 중복 적립하지 않는다.
-
-### Story 4: 운영 가시성
-
-운영자는 수신된 모든 TNK 콜백(성공·거절)을 원장에서 조회해 정산·디버깅·향후 환수 처리에 활용하고 싶다.
-
-## 인수 기준 (Acceptance Criteria)
-
-### 토큰 발급 (최초)
-
-Given 인증된 사용자가 오퍼월 토큰을 발급받은 적이 없다
-When 사용자가 `POST /api/offerwall/tnk/user-token`을 호출한다
-Then 백엔드는 `offerwall_user_tokens`에 `(userId, token=UUID)` 1행을 생성한다
-And 응답은 `{ token }` 형태로 반환된다.
-
-### 토큰 발급 (재호출 멱등)
-
-Given 사용자가 이미 토큰을 발급받았다
-When 같은 사용자가 `POST /api/offerwall/tnk/user-token`을 다시 호출한다
-Then 백엔드는 새 행을 만들지 않고 기존과 동일한 `token`을 반환한다
-And 동시 최초 호출 2건이 와도 (유니크 제약으로) 하나의 토큰만 생성되고 양쪽 모두 같은 값을 받는다.
-
-### 정상 적립
-
-Given TNK 콜백이 `seq_id`, `pay_pnt`, `md_user_nm`(유효 토큰), `md_chk`를 포함해 도착한다
-And `md_chk == MD5(appKey + md_user_nm + seq_id)` 검증을 통과한다
-And `seq_id`가 `tnk_offerwall_callbacks`에 아직 없다
-When 백엔드가 `POST /api/offerwall/tnk/callback`을 처리한다
-Then 백엔드는 **단일 `@Transactional`** 안에서 — (a) `md_user_nm`으로 `offerwall_user_tokens`를 조회해 `userId` 해석, (b) `coinAmount = floor(pay_pnt × point-to-coin-ratio)` 산출, (c) `UserPointService.recordTransaction(userId, +coinAmount, reason=OFFERWALL, idempotencyKey="tnk:offerwall:{seq_id}")` 호출, (d) `tnk_offerwall_callbacks`에 `status=GRANTED`로 INSERT — 를 수행한다
-And TNK에는 성공 ack(HTTP 200 + `SUCCESS`)를 반환한다
-And 같은 사용자의 포인트 잔액에 `coinAmount`가 반영된다.
-
-### 중복 seq_id (멱등)
-
-Given 동일 `seq_id`로 콜백이 두 번 도착한다
-When 백엔드가 두 번째 콜백을 처리한다
-Then `seq_id`가 이미 `tnk_offerwall_callbacks`에 존재하므로 추가 적립 없이 멱등하게 종료한다
-And 설령 적립 단계에 도달하더라도 멱등키 `tnk:offerwall:{seq_id}` 충돌로 중복 적립되지 않는다(이중 방어선)
-And 두 번째 콜백에도 성공 ack를 반환한다(재전송 중단)
-And 동시 도착한 동일 `seq_id` 2건 중 정확히 1건만 적립되고 나머지는 멱등 처리된다.
-
-### 서명 검증 실패
-
-Given 콜백의 `md_chk`가 `appKey` 재계산값과 일치하지 않는다 (또는 `appKey`가 미설정이라 fail-closed로 거절된다)
-When 백엔드가 콜백을 처리한다
-Then 백엔드는 적립하지 않는다
-And **서명 검증을 DB 쓰기보다 먼저 수행하므로 `tnk_offerwall_callbacks`에 행을 만들지 않고 `warn` 로그만 남긴다** — public 엔드포인트로 들어온 미검증 요청이 원장을 무제한 오염시키는 것을 막는다 (AdMob SSV 패턴과 정합). 서명 통과 콜백만 원장에 기록된다.
-And 코인이 적립되지 않는다.
-
-### 미지의 토큰
-
-Given 서명 검증은 통과했으나 `md_user_nm`이 `offerwall_user_tokens`에 없다
-When 백엔드가 콜백을 처리한다
-Then 백엔드는 적립하지 않는다
-And `tnk_offerwall_callbacks`에 `status=REJECTED_UNKNOWN_USER`(`user_id`는 null)로 기록한다
-And 코인이 적립되지 않는다.
+- **토큰 발급**은 get-or-create(멱등). `(userId, token=UUID)` 사용자당 1행, `token` UNIQUE로 동시 최초 호출도 하나만 생성.
+- **정상 적립**은 **단일 `@Transactional`** — `md_user_nm → userId` 해석 → `coinAmount = floor(pay_pnt × ratio)` → 멱등 적립(`tnk:offerwall:{seq_id}`) → ledger `GRANTED` INSERT → 성공 ack(HTTP 200 + `SUCCESS`).
+- **멱등**: `seq_id` UNIQUE(1차) + 멱등키 `tnk:offerwall:{seq_id}`(이중 방어선). 중복/동시 `seq_id`는 1건만 적립, 나머지는 멱등 종료하되 재전송 중단을 위해 성공 ack.
+- **서명 검증은 DB 쓰기보다 먼저**(fail-closed) — `md_chk` 불일치/`appKey` 미설정 시 원장 행을 만들지 않고 warn 로그만(public 엔드포인트 원장 오염 방지, AdMob SSV 패턴과 정합).
+- **미지의 토큰**(서명 통과·토큰 미매핑)은 `REJECTED_UNKNOWN_USER`(user_id=null)로 기록, 미적립.
+- `tnk_offerwall_callbacks.status`는 정산·환수·알람의 단일 source of truth. 취소/환수 자동 차감은 범위 외(D3).
 
 ## API 계약 (요약)
 

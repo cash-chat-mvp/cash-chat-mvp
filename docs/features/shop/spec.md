@@ -1,4 +1,4 @@
-# 상점(Shop) Phase 1 — 강화재료 카탈로그 · 구매 · 인벤토리 Spec
+# 상점(Shop) Phase 1 — 강화재료 카탈로그 · 구매 · 인벤토리 기술 설계
 
 > 상태: Draft
 > 범위: Phase 1 (강화재료 카탈로그 + 구매 트랜잭션 + Inventory 적재)
@@ -14,105 +14,25 @@
 - 동일 클라이언트가 동일 `idempotencyKey`로 재시도해도 중복 차감/적재가 없음
 - Inventory의 **소비(consume)** 는 본 spec의 범위 외이며, 후속 진화 시스템 spec이 본 spec이 정의한 Inventory 모델을 read/consume 한다
 
-## 유저 스토리 (User Story)
+## 유저 스토리 · 인수 조건
 
-### Story 1: 강화재료 목록 조회
+> 이 기능의 **유저 스토리와 관찰 가능한 인수 조건(검증 기준선)** 은 도메인 카탈로그가 단일 소유한다(SSOT):
+> - [US-SHOP-001 강화재료 카탈로그 조회](../../domains/shop/US-SHOP-001-enhance-catalog.md)
+> - [US-SHOP-002 코인으로 아이템 구매](../../domains/shop/US-SHOP-002-coin-purchase.md)
+> - [US-SHOP-003 인벤토리 조회](../../domains/shop/US-SHOP-003-inventory.md)
+>
+> 본 문서는 그 계약을 만족시키는 **백엔드 구현 상세**(API 계약·데이터 흐름·트랜잭션 불변식·시퀀스)를 담는다.
 
-사용자는 상점 탭에서 강화재료 5종의 가격·효과·보유 수량을 한 화면에서 보고 싶다.
+## 구현 불변식 (Design Invariants)
 
-### Story 2: 코인으로 아이템 구매
+관찰 가능한 AC는 위 US 파일이 소유하고, 아래는 그것을 보장하는 백엔드 구현 규칙이다.
 
-사용자는 보유 코인이 가격 이상일 때 아이템을 구매하고, 차감된 코인과 증가한 Inventory를 즉시 반영해서 보고 싶다.
-
-### Story 3: 코인 부족 안내
-
-사용자는 보유 코인이 가격에 미치지 못할 때 명확한 거부 메시지를 받고, 혜택존으로 이동해 코인을 모을 수 있는 동선을 제공받고 싶다.
-
-### Story 4: 구매 무결성
-
-백엔드는 네트워크 재시도/이중 탭으로 동일 구매가 두 번 도착해도 코인이 두 번 차감되지 않아야 한다.
-
-### Story 5: 인벤토리 조회
-
-후속 진화 시스템·마이페이지 등에서 보유 아이템과 수량을 조회할 수 있어야 한다.
-
-## 인수 기준 (Acceptance Criteria)
-
-### 카탈로그 조회
-
-Given Phase 1 시드(5종 ENHANCE 아이템)가 적재되어 있다
-When 사용자가 `GET /api/shop/items?category=ENHANCE`를 호출한다
-Then 응답에는 `isActive=true`인 5개 아이템이 `displayOrder` 오름차순으로 포함된다
-And 각 아이템은 `itemCode`, `name`, `priceCoin`, `effectSummary`를 포함한다.
-
-### 보유 수량 동시 조회
-
-Given 사용자가 진화석 2개, 보호권 1개를 보유한다
-When 사용자가 `GET /api/inventory/me`를 호출한다
-Then 응답은 `{ "items": [{itemCode:"EVO_STONE", qty:2}, {itemCode:"PROTECT_TICKET", qty:1}] }` 형태로 반환된다 (정확한 스키마는 "API 계약 — `GET /api/inventory/me`" 섹션 참조).
-
-### 정상 구매
-
-Given 사용자 코인 잔액 = 1,250, 진화석 가격 = 200
-When 사용자가 `POST /api/shop/purchase`를 `{itemCode:"EVO_STONE", qty:1, idempotencyKey:"k1"}`로 호출한다
-Then 단일 DB 트랜잭션 안에서 코인이 200 차감되어 1,050이 된다
-And `user_inventory.EVO_STONE.qty`가 1 증가한다
-And `purchase_order`에 `status=COMPLETED`, 복합 키 `(userId, idempotencyKey="k1")` 행이 1개 생성된다
-And `point_transaction`에 멱등성 키 `shop:purchase:<userId>:k1`(사용자 스코프)로 차감 트랜잭션이 기록된다
-And 응답에는 갱신된 코인 잔액과 갱신된 보유 수량이 포함된다.
-
-### 패키지 구매 (다건 grant)
-
-Given 사용자 코인 잔액 = 2,000, `ENHANCE_PACK` 가격 = 1,200 (grant: `EVO_STONE`×5, `LUCK_CHARM`×1)
-When 사용자가 `POST /api/shop/purchase`를 `{itemCode:"ENHANCE_PACK", qty:1, idempotencyKey:"k2"}`로 호출한다
-Then 코인이 1,200 차감되어 800이 된다
-And `user_inventory.EVO_STONE.qty`가 5 증가한다
-And `user_inventory.LUCK_CHARM.qty`가 1 증가한다
-And 두 grant는 같은 DB 트랜잭션 안에서 처리된다.
-
-### 코인 부족
-
-Given 사용자 코인 잔액 = 100, 진화석 가격 = 200
-When 사용자가 `POST /api/shop/purchase`를 호출한다
-Then 백엔드는 도메인 에러 `INSUFFICIENT_COIN`으로 거부한다
-And 코인 잔액, Inventory, `purchase_order` 어느 것도 변하지 않는다.
-
-### 멱등성 — 동일 키 재호출
-
-Given 사용자가 직전에 `idempotencyKey="k1"`로 진화석 1개 구매에 성공했다
-When 사용자가 동일 페이로드를 다시 호출한다
-Then 추가 차감/적재가 발생하지 않는다
-And 응답은 추가 차감 없이 **현재 시점**의 잔액·Inventory를 반환한다 (이중 차감만 방지하며, 첫 구매 이후 다른 거래가 있었다면 그 결과가 반영된 최신 값이다).
-
-### 멱등성 — 키 재사용 충돌 (동일 사용자)
-
-Given 사용자가 `idempotencyKey="k1"`로 진화석 1개 구매에 성공했다
-When **같은 사용자**가 동일 `idempotencyKey="k1"`로 **다른 `itemCode`/`qty`**로 호출한다
-Then 백엔드는 409 `IDEMPOTENCY_KEY_CONFLICT`로 거부한다
-And 어떤 상태도 변하지 않는다.
-
-> 멱등성 스코프는 `(userId, idempotencyKey)` 복합이다. **다른 사용자가 같은 키 값**을 쓰는 경우는 충돌이 아니라 사용자별로 독립된 별개 주문으로 처리된다(키 선점·교차 사용자 정보노출 불가).
-
-### 잘못된 itemCode
-
-Given 요청 페이로드의 `itemCode`가 시드에 없는 값이다
-When 사용자가 `POST /api/shop/purchase`를 호출한다
-Then 백엔드는 400 `ITEM_NOT_FOUND`로 거부한다
-And 어떤 상태도 변하지 않는다.
-
-### 비활성화된 아이템
-
-Given 운영자가 `shop_item.isActive=false`로 표시한 아이템이 있다
-When 사용자가 해당 itemCode로 `POST /api/shop/purchase`를 호출한다
-Then 백엔드는 도메인 에러 `ITEM_INACTIVE`로 거부한다
-And `GET /api/shop/items?category=ENHANCE` 응답에도 해당 아이템이 포함되지 않는다.
-
-### Phase 1 비대상 카테고리 호출
-
-Given 사용자가 Phase 1 비대상 카테고리(`COSMETIC`, `VOUCHER`)를 요청한다
-When `GET /api/shop/items?category=COSMETIC`을 호출한다
-Then 응답 본문은 `{ "category": "<요청값>", "phase1Active": false, "items": [] }` 형태로 빈 카탈로그와 `phase1Active=false` 플래그를 함께 반환한다 (정확한 스키마는 "API 계약" 섹션 참조)
-And Phase 1 동안 해당 카테고리 아이템은 카탈로그에 노출되지 않는다.
+- **구매는 단일 DB 트랜잭션** — 코인 차감(`recordTransaction`, 멱등키 `shop:purchase:{userId}:{idem}`) + `user_inventory` 다건 UPSERT + `purchase_order(COMPLETED)` INSERT를 원자적으로. 패키지 grant도 같은 트랜잭션.
+- **멱등성 스코프 = `(userId, idempotencyKey)` 복합 UNIQUE.** 동일 키 재호출은 추가 차감 없이 **현재 시점** 잔액·인벤토리 반환(이중 차감만 방지). 같은 사용자·같은 키·다른 itemCode/qty → `409 IDEMPOTENCY_KEY_CONFLICT`. 다른 사용자의 같은 키 값은 별개 주문(키 선점·교차 노출 불가).
+- **전역 락 순서**: `point`(`SELECT … FOR UPDATE`) → `user_inventory`(UPSERT, `itemCode` 오름차순) → `purchase_order`(INSERT). 잔액은 락 획득 후 검증(음수 방지), 다건 UPSERT는 정렬로 데드락 방지. 교차 도메인 트랜잭션도 이 순서 준수.
+- **동시 INSERT 경합**: 같은 `(userId, idem)` 동시 요청은 복합 UNIQUE로 한쪽만 성공, 패자는 제약 위반을 catch해 **`@Transactional` 경계 바깥(별도 트랜잭션)** 에서 커밋된 주문 재조회 → 멱등 경로 처리(500 미노출).
+- **거절 분기**: 잔액 부족 → `INSUFFICIENT_COIN`(포인트 레이어 402를 상점이 catch→변환), 미존재 itemCode → `ITEM_NOT_FOUND`, 비활성 → `ITEM_INACTIVE`(카탈로그에도 미노출). 어느 경우도 상태 무변화(롤백).
+- Inventory **소비(consume)** 는 범위 외 → Evolution 도메인.
 
 ## API 계약
 

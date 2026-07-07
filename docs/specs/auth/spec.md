@@ -1,4 +1,4 @@
-# Apple 소셜 로그인 백엔드 Spec
+# Apple 소셜 로그인 백엔드 기술 설계
 
 ## 목표
 
@@ -8,66 +8,20 @@ iOS 앱은 Apple에서 발급받은 `authorizationCode`를 CashChat 백엔드로
 
 이번 Spec은 백엔드 개발만 다룬다. iOS 화면, iOS SDK 연동, Android 지원 여부는 프론트엔드 담당 팀원이 별도로 결정한다.
 
-## 유저 스토리(User Story)
+## 유저 스토리 · 인수 조건
 
-### Story 1: iOS 사용자의 Apple 로그인
+> 이 기능의 **유저 스토리와 관찰 가능한 인수 조건(검증 기준선)** 은 도메인 카탈로그가 단일 소유한다(SSOT): [US-AUTH-001 Apple 소셜 로그인(iOS)](../../domains/auth/US-AUTH-001-apple-social-login.md).
+> 본 문서는 그 계약을 만족시키는 **백엔드 구현 상세**(API·백엔드 흐름·결정 기록·시퀀스)를 담는다.
 
-iOS 사용자는 Apple 계정으로 CashChat에 로그인하고 싶다. 이를 통해 게스트 세션을 회원 계정으로 전환하거나, 기존 Apple 회원 계정으로 다시 로그인할 수 있어야 한다.
+## 구현 불변식 (Design Invariants)
 
-### Story 2: 기존 게스트 계정 승격
+관찰 가능한 AC는 위 US 파일이 소유하고, 아래는 그것을 보장하는 백엔드 구현 규칙이다(상세 배경은 아래 "결정 기록" 참조).
 
-게스트 사용자는 Apple 소셜 로그인 후에도 기존 게스트 세션에서 쌓은 데이터와 포인트를 이어서 사용하고 싶다. 이를 위해 백엔드는 현재 게스트 계정을 새 회원으로 새로 만들지 않고 Apple 회원 계정으로 승격할 수 있어야 한다.
-
-### Story 3: 백엔드의 인증 무결성 보장
-
-CashChat 백엔드는 클라이언트가 전달한 사용자 식별값을 그대로 신뢰하지 않고, Apple이 발급한 `authorizationCode`와 `id_token`을 서버에서 검증하고 싶다. 이를 통해 위조된 provider id나 이메일로 로그인되는 상황을 막아야 한다.
-
-## 인수 기준(Acceptance Criteria)
-
-### Successful Apple Login
-
-Given iOS 앱이 유효한 Apple `authorizationCode`를 백엔드에 전달한다  
-And Apple token endpoint가 CashChat에 설정된 Apple client id에 대한 `id_token`을 반환한다  
-When 클라이언트가 `POST /api/auth/callback/apple`을 호출한다  
-Then 백엔드는 `id_token`의 서명, issuer, audience, expiration을 검증한다  
-And 백엔드는 CashChat `accessToken`, `refreshToken`, `userId`, `role=MEMBER`를 포함한 `AuthResponse`를 반환한다.
-
-### Guest Upgrade
-
-Given 전달된 `deviceToken`과 일치하는 게스트 사용자가 존재한다  
-And 해당 사용자의 provider가 `NONE`이다  
-And Apple 계정이 다른 CashChat 사용자에게 아직 연결되어 있지 않다  
-When 클라이언트가 해당 `deviceToken`으로 `POST /api/auth/callback/apple`을 호출한다  
-Then 백엔드는 기존 게스트 사용자의 provider를 `APPLE`로 변경하고, Apple provider id와 선택적 email/name, role `MEMBER`를 저장한다  
-And 백엔드는 승격된 사용자에서 `deviceToken`을 제거해 동일 credential 경로로 게스트 로그인이 재사용되지 않게 한다.
-
-### Existing Apple User Login
-
-Given Apple `sub` claim과 provider `APPLE`을 가진 CashChat 사용자가 이미 존재한다  
-When 같은 Apple 계정의 유효한 `authorizationCode`로 `POST /api/auth/callback/apple`을 호출한다  
-Then 백엔드는 기존 사용자에게 새 CashChat access token과 refresh token을 발급한다  
-And 중복 사용자를 생성하지 않는다.
-
-### Token Exchange Failure
-
-Given Apple이 `authorizationCode`, client secret, redirect uri, client id 중 하나를 거부한다  
-When 백엔드가 Apple에 authorization code 교환을 요청한다  
-Then 백엔드는 OAuth 인증 실패로 처리한다  
-And 응답에는 Apple 원문 응답, private key, 생성된 client secret 값이 노출되지 않는다.
-
-### Invalid Apple ID Token
-
-Given Apple token exchange 응답의 `id_token`이 없거나, 만료되었거나, 서명이 잘못되었거나, audience가 올바르지 않다  
-When 백엔드가 해당 토큰을 검증한다  
-Then 백엔드는 로그인을 거부한다  
-And 사용자를 생성하거나 수정하지 않는다.
-
-### Non-Apple Platforms
-
-Given Android 또는 iOS가 아닌 클라이언트가 Apple 로그인 지원을 원한다  
-When 이번 백엔드 Spec이 구현된다  
-Then Android 전용 Apple 로그인 흐름은 추가하지 않는다  
-And 플랫폼별 UX와 클라이언트 구현 방식은 이번 범위 밖으로 둔다.
+- **백엔드 code exchange 방식**: iOS가 넘긴 `authorizationCode`를 백엔드가 Apple token endpoint에 교환하고, 응답의 `id_token`(요청에 포함된 `identityToken`이 아니라)을 검증한다 — 서명·issuer·audience·expiration.
+- **검증된 `sub` claim만 provider id로 신뢰**. 클라이언트가 전달한 provider id/email은 그대로 신뢰하지 않는다(위조 차단).
+- **게스트 승격**: `deviceToken` 일치 + provider `NONE` + Apple 미연결이면 기존 게스트를 `APPLE` 회원으로 승격(신규 생성 아님)하고, 재사용 방지를 위해 `deviceToken`을 제거. 기존 Apple 사용자는 재로그인, 없으면 신규 생성.
+- **실패 시 무변화**: token exchange 실패/`id_token` 무효(없음·만료·서명오류·audience 불일치)는 로그인 거부, 사용자 생성·수정 없음. 오류 응답에 Apple 원문·private key·client secret 미노출.
+- Apple private key·Team ID·Key ID는 env/secret 주입(저장소 커밋 금지). Android/Web·계정 연결 해제·revoke 콜백은 범위 외.
 
 ## API 계약
 
