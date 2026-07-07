@@ -29,6 +29,35 @@ maestro test maestro/flows/chat/ai-response.yaml    # 단일 flow
 (`happy` | `chat_error` | `ad_quota_exceeded` | `offerwall_fail`) — mock 앱이 인텐트 extra
 `scenario` 를 읽어 `MockBackendState` 에 반영한다.
 
+## 수동 확인 / 데모 (사람이 화면 보며 검증)
+
+`maestro test` 는 실행 중 **에뮬레이터 화면에 실제 탭·스크롤을 그대로 보여준다.** 창을 띄워 두고 아래를 실행하면 눈으로 확인할 수 있다.
+
+**1) 그냥 보면서 실행 (정상 속도, 여정당 24~35초)**
+```bash
+cd apps/frontend
+maestro test maestro/flows/rewarded-ad/watch-reward.yaml   # 단일 여정
+maestro test maestro                                       # 전체 6개
+```
+
+**2) 딜레이 데모 (`maestro/demo/`) — 단계마다 ~1.3s 멈춤 + 스크린샷**
+사람이 각 단계를 또렷이 볼 수 있게 느리게 진행하는 데모 버전. CI 대상이 아니며 `demo/` 아래에만 둔다.
+```bash
+maestro test maestro/demo/chat.yaml          # AI 채팅
+maestro test maestro/demo/rewarded-ad.yaml   # 보상형 광고
+maestro test maestro/demo/offerwall.yaml     # TNK 오퍼월
+```
+- 단계 사이 멈춤은 `demo/_pause.yaml`(evalScript busy-wait) 서브플로우로 구현했다. 더 느리게 보려면
+  `_pause.yaml` 의 `1300`(ms)을 키운다.
+- `takeScreenshot` 로 각 단계 캡처가 `~/.maestro/tests/<타임스탬프>/` 에 저장된다.
+
+**3) 영상으로 남기기**
+```bash
+maestro record maestro/demo/chat.yaml        # 실행 영상(mp4) 저장
+```
+
+> `maestro studio` 를 실행하면 브라우저 UI 로 현재 화면의 요소를 직접 짚어 셀렉터를 확인/작성할 수 있다(셀렉터 보정에 유용).
+
 ## 에뮬레이터 관련 주의 (프리뷰 이미지에서 관측)
 
 Android 17 프리뷰 이미지에서 다음 시스템 노이즈가 flow 를 방해할 수 있어 flow 에 방어 로직을 넣었다.

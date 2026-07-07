@@ -1,0 +1,28 @@
+# 데모(사람이 보기용) — AI 채팅 happy. 단계마다 딜레이 + 스크린샷.
+# 실행: maestro test maestro/demo/chat.yaml (에뮬레이터 화면을 보면서 확인)
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "happy"
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
+- runFlow: _pause.yaml
+- takeScreenshot: chat-1-home
+- tapOn: "메시지를 입력하세요..."
+- runFlow:
+    when:
+      visible: "Try out your stylus"
+    commands:
+      - tapOn: "Cancel"
+- inputText: "hello"
+- runFlow: _pause.yaml
+- takeScreenshot: chat-2-typed
+- tapOn: "전송"
+- assertVisible: "목킹응답: 반갑습니다 👋"
+- runFlow: _pause.yaml
+- takeScreenshot: chat-3-response

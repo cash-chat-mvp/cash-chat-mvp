@@ -1,0 +1,5 @@
+# 재사용 딜레이 서브플로우 — 사람이 화면을 볼 수 있게 ~1.3s 멈춘다.
+# Maestro 엔 순수 sleep 이 없어 evalScript busy-wait 로 구현. 데모 전용(CI 미포함).
+appId: com.nomadclub.cashchat
+---
+- evalScript: ${ var t = Date.now() + 1300; while (Date.now() < t) {} }
