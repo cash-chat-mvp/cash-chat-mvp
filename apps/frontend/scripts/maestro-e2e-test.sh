@@ -100,8 +100,10 @@ if [ "$REPORT" = 1 ]; then
   log "리포트 생성: $OUT/report.html (+ debug)"
   maestro test "$TARGET" \
     --format HTML-DETAILED --output "$OUT/report.html" \
-    --debug-output "$OUT/debug" --test-suite-name "CC-391 FE 인수 테스트"
+    --debug-output "$OUT/debug" --test-output-dir "$OUT/screenshots" \
+    --test-suite-name "CC-391 FE 인수 테스트"
   echo "리포트: $OUT/report.html"
+  echo "스크린샷: $OUT/screenshots/  ·  디버그(로그/실패샷): $OUT/debug/"
 else
   maestro test "$TARGET"
 fi
