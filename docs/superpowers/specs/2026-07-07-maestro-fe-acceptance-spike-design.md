@@ -148,11 +148,35 @@ GWT는 **UI 관측 가능**하게 작성한다(Given 앱 상태 / When UI 조작
 - [ ] 각 flow가 US/AC ID 역참조
 - [ ] 회고 기록(본 문서 §9 갱신): 도입 비용·한계·확대 권고
 
-## 9. 회고 (스파이크 종료 시 작성)
+## 9. 회고 (스파이크 결과)
 
-- 도입 비용 (seam 추출·flavor·Fake 유지보수 부담):
-- 한계 (관통 깊이, 실제 계약 드리프트 위험, Compose testTag 부채):
-- 확대 권고 (다음 대상 여정, CI 배선 여부, real 서버 스모크 병행 여부):
+**결론: 가설 검증됨.** Maestro + hermetic Fake(`mock` flavor)로 백엔드 서버 없이 3개 여정 ×
+(happy + fail/경계) = **6/6 flow green** (Pixel 10 Pro 에뮬레이터, 전체 약 3분). mock APK 는
+로그인 우회(세션 심기)로 곧장 홈에 진입하고, MockEngine 이 HUD·잔액·quota·SSE 를 모두 인앱으로 서빙,
+Fake SDK presenter/launcher 가 광고·오퍼월 보상을 결정론적으로 트리거함을 실기 구동으로 확인.
+
+### 도입 비용
+- 코드 변경은 **최소·국소적**: seam 인터페이스 2개(`RewardedAdPresenter`/`OfferwallLauncher`) 추출,
+  `mock` product flavor, MockEngine Fake 백엔드(state+engine), Fake SDK 2개, mock Koin override 3개,
+  FlavorModules 부트스트랩. 총 ~11 커밋, 태스크별 리뷰 전부 clean.
+- real 플레이버 런타임 동작은 byte-equivalent(리뷰에서 라인 단위 확인). 빌드/유닛테스트 빠름(19/19).
+
+### 한계 (실기 구동에서 드러난 것)
+- **인증은 MockEngine 밖(Retrofit 스택)** → 세션을 `TokenDataStore` 에 직접 심어 우회. 인증 자체 여정은 이 방식으로 검증 불가.
+- **AdMob `MobileAdsInitProvider` 가 Application.onCreate 이전 실행** → `ADMOB_APP_ID` 부재 시 프로세스 시작 크래시.
+  `!IS_MOCK` 가드로 못 막아 `app/src/mock/AndroidManifest.xml` 에서 **공개 테스트 App ID 로 대체** 필요(발견·수정 완료).
+- **에뮬레이터 이미지 노이즈**: Android 17 프리뷰에서 16KB 호환성 다이얼로그·Gboard 스타일러스 온보딩이
+  전송 버튼을 가림 → flow 에 조건부 dismiss 삽입. **안정 이미지(API 34/35 + 기본 Gboard) 권장**.
+- **Maestro `inputText` 한글 미지원(issue #146)** → ASCII 입력으로 우회(mock 이 고정 응답이라 무해).
+- **관통 깊이**: 실제 네트워크 계약(스키마)까지는 검증 안 됨 → 기존 `commonTest` MockEngine 계약 테스트가 담당(역할 분담 유지).
+- 셀렉터는 표시 텍스트/`contentDescription` 으로 충분했고 **testTag 신규 추가는 불필요**했음(단 IME 가림은 별도 문제).
+
+### 확대 권고
+- **CI 배선**: 에뮬레이터 러너(예: `reactivecircus/android-emulator-runner`) + **안정 API 이미지**로 `maestro test maestro` 실행.
+  프리뷰 이미지 노이즈가 없어 flow 의 조건부 dismiss 대부분 불필요해짐.
+- **다음 대상 여정**: 출석 체크인·상점 구매 등. 동일 MockEngine+scenario 패턴으로 확장 가능.
+- **real 서버 스모크 병행**: 계약 드리프트 조기 감지를 위해 최소 real-backend 스모크 세트를 별도로.
+- **testTag 도입**: IME 가림이 있는 입력 화면(채팅 전송)에 한해 선별적으로 `testTag`+`testTagsAsResourceId` 검토.
 
 ## 10. 리스크 · 가정
 
