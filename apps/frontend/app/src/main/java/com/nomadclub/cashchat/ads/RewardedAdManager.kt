@@ -22,7 +22,7 @@ import com.nomadclub.cashchat.config.AppConfig
  */
 class RewardedAdManager(
     private val appConfig: AppConfig
-) {
+) : RewardedAdPresenter {
     private var rewardedAd: RewardedAd? = null
     private var isLoading = false
 
@@ -34,7 +34,7 @@ class RewardedAdManager(
      * 광고를 미리 로드합니다.
      * 이미 로드됐거나 로딩 중이면 무시합니다.
      */
-    fun preload(context: Context) {
+    override fun preload(context: Context) {
         if (rewardedAd != null || isLoading) return
         isLoading = true
         Log.d(TAG, "보상형 광고 사전 로드 시작: ${appConfig.admobRewardedAdUnitId}")
@@ -62,7 +62,7 @@ class RewardedAdManager(
     /**
      * 광고가 준비됐는지 여부를 반환합니다.
      */
-    fun isReady(): Boolean = rewardedAd != null
+    override fun isReady(): Boolean = rewardedAd != null
 
     /**
      * 보상형 광고를 노출합니다.
@@ -73,12 +73,12 @@ class RewardedAdManager(
      * @param onDismissed 광고 닫힘 시 호출 (보상 미지급 포함, 항상 호출됨)
      * @param onNotReady 광고가 준비되지 않았을 때 호출
      */
-    fun show(
+    override fun show(
         activity: Activity,
-        nonce: String? = null,
+        nonce: String?,
         onRewarded: (amount: Int) -> Unit,
         onDismissed: () -> Unit,
-        onNotReady: () -> Unit = {}
+        onNotReady: () -> Unit
     ) {
         val ad = rewardedAd
         if (ad == null) {
