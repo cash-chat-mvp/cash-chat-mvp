@@ -10,5 +10,6 @@ enum class PointTransactionReason {
     EVOLUTION_ATTEMPT,
     LEDGER_REWARD,
     SHOP_PURCHASE,
+    REFERRAL,
     CHAT_REWARD,
 }

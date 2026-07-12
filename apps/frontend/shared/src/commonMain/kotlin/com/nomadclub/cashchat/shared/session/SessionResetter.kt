@@ -5,7 +5,11 @@ import com.nomadclub.cashchat.shared.attendance.AttendanceStore
 import com.nomadclub.cashchat.shared.chat.ChatStore
 import com.nomadclub.cashchat.shared.evolution.EvolutionStore
 import com.nomadclub.cashchat.shared.hud.HudStore
+import com.nomadclub.cashchat.shared.localllm.ChatModeStore
+import com.nomadclub.cashchat.shared.localllm.LocalChatHistory
 import com.nomadclub.cashchat.shared.points.PointsRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 /**
  * 로그아웃·세션 만료 시 사용자별 상태를 보유한 공유 싱글톤 스토어를 일괄 초기화한다.
@@ -21,6 +25,9 @@ class SessionResetter(
     private val evolutionStore: EvolutionStore,
     private val adRewardStore: AdRewardStore,
     private val pointsRepository: PointsRepository,
+    private val chatModeStore: ChatModeStore,
+    private val localChatHistory: LocalChatHistory,
+    private val scope: CoroutineScope,
 ) {
     fun reset() {
         chatStore.reset()
@@ -29,5 +36,7 @@ class SessionResetter(
         evolutionStore.reset()
         adRewardStore.reset()
         pointsRepository.reset()
+        chatModeStore.reset()
+        scope.launch { localChatHistory.clear() }
     }
 }

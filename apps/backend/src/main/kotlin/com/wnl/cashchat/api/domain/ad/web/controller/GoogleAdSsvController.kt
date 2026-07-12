@@ -1,7 +1,7 @@
 package com.wnl.cashchat.api.domain.ad.web.controller
 
 import com.wnl.cashchat.api.common.web.response.ErrorResponse
-import com.wnl.cashchat.api.domain.ad.service.AdRewardService
+import com.wnl.cashchat.api.domain.ad.service.AdSsvRewardRouter
 import com.wnl.cashchat.api.domain.ad.service.GoogleAdSsvService
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.media.Content
@@ -21,7 +21,7 @@ import java.time.Instant
 @Tag(name = "Ads", description = "Advertising callback endpoints")
 class GoogleAdSsvController(
     private val googleAdSsvService: GoogleAdSsvService,
-    private val adRewardService: AdRewardService,
+    private val adSsvRewardRouter: AdSsvRewardRouter,
 ) {
     @GetMapping("/google/ssv")
     @Operation(
@@ -50,7 +50,7 @@ class GoogleAdSsvController(
         // 적립 대상 콜백만 grantFromCallback 을 호출한다(ad_unit 불일치·timestamp 윈도우 밖은 미저장이라 건너뜀 →
         // 무의미한 행 락 조회 회피). grantFromCallback 은 이미 GRANTED 된 이벤트를 멱등하게 건너뛴다.
         if (result.eligibleForGranting) {
-            adRewardService.grantFromCallback(result.callback, now)
+            adSsvRewardRouter.route(result.callback, now)
         }
         return ResponseEntity.ok().build()
     }
