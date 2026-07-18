@@ -9,8 +9,8 @@
 | 결정 | 내용 | 근거 |
 |---|---|---|
 | 프런트엔드 | **React + TypeScript (Vite)** 관리자 웹 콘솔, `apps/admin-frontend/` | 사용자 확정 (2026-07-18). 관리자 콘솔 생태계·AI 생성 품질 |
-| 백엔드 | **별도 admin 서버 신설** — Kotlin + Spring Boot, `apps/admin-backend/` | 사용자 확정 (2026-07-18). 서비스 서버와 격리 |
-| 언어·프레임워크 관례 | 기존 `apps/backend/`와 동일: Kotlin 1.9+, Spring Boot 3.5+, Java 21, Gradle Kotlin DSL, 도메인 레이어링(`persistence/{entity,repository}`·`service`·`web`) | 모노레포 일관성 (AGENTS.md) |
+| 백엔드 | **별도 admin 서버 신설** — **Java + Spring Boot**, `apps/admin-backend/` | 사용자 확정 (2026-07-18, Kotlin→Java 변경 확정). 서비스 서버와 격리 |
+| 언어·프레임워크 관례 | admin-backend는 **Java 21 + Spring Boot 3.5+, Gradle**. 도메인 레이어링(`persistence/{entity,repository}`·`service`·`web`)은 기존 `apps/backend/` 관례를 따른다(언어만 Kotlin이 아닌 Java) | 사용자 확정 + 모노레포 구조 일관성 (AGENTS.md) |
 | 인증 | 관리자 전용 ID/PW + 세션(유휴 만료·잠금) + **MFA=TOTP** — 서비스 OAuth와 분리 | REQ-001~004, UNR-009 확정 |
 | 인가 | 역할×(조회·변경·다운로드) RBAC, **서버 측 검증**(403), 메뉴는 파생 | REQ-003 |
 | 감사 | 모든 변경 API는 감사 기록과 **원자적** 커밋. 감사 실패 = 변경 롤백 | REQ-005 |
@@ -30,7 +30,7 @@
 ```text
 apps/
 ├─ admin-frontend/   # React+TS(Vite) 관리자 콘솔  ← 신규
-├─ admin-backend/    # Kotlin Spring Boot admin 서버 ← 신규
+├─ admin-backend/    # Java Spring Boot admin 서버 ← 신규
 ├─ backend/          # 기존 서비스 API (변경 최소화)
 └─ frontend/         # 기존 KMM 앱 (범위 외)
 ```
