@@ -10,8 +10,8 @@
 - 주 도메인: 보상·경제
 - 연관 도메인: 감사·보안
 - 원문 접수(INTAKE): [INTAKE-001](../../requirements/v.0.2/raw/INTAKE-001.md) INTAKE-001 §7.5 US-ADM-REWARD-003
-- 관련 Jira Epic: CC-412
-- 명세 작성 Jira Task: CC-442
+- 관련 Jira Epic: 재생성 예정
+- 명세 작성 Jira Task: 재생성 예정
 - 관련 Jira Story: 명세 승인 후 기록
 - 관련 Figma:
 - 작성자: AI (Claude) — 초안
@@ -152,7 +152,7 @@
 
 | ID | 유형 | 내용 | 영향 | 결정권자 | 기한 | 상태 |
 |---|---|---|---|---|---|---|
-| UNR-012 | 미결정 | 차감 후 음수 잔액 금지 규칙에 어뷰징 강제 회수(Clawback) 예외를 둘지 (PR 리뷰 제안) | Story 범위 확정 | [DECISION] CC-492 참조 | | OPEN |
+| UNR-012 | 미결정 | 차감 후 음수 잔액 금지 규칙에 어뷰징 강제 회수(Clawback) 예외를 둘지 (PR 리뷰 제안) | Story 범위 확정 | [DECISION] 재등록 예정 | | OPEN |
 
 ---
 

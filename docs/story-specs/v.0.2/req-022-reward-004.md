@@ -10,8 +10,8 @@
 - 주 도메인: 보상·경제
 - 연관 도메인: -
 - 원문 접수(INTAKE): [INTAKE-001](../../requirements/v.0.2/raw/INTAKE-001.md) INTAKE-001 §7.5 US-ADM-REWARD-004
-- 관련 Jira Epic: CC-412
-- 명세 작성 Jira Task: CC-443
+- 관련 Jira Epic: 재생성 예정
+- 명세 작성 Jira Task: 재생성 예정
 - 관련 Jira Story: 명세 승인 후 기록
 - 관련 Figma:
 - 작성자: AI (Claude) — 초안

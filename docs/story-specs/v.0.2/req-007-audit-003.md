@@ -10,8 +10,8 @@
 - 주 도메인: 감사·보안
 - 연관 도메인: 보상·경제, 상점·주문, 서버·배포 운영
 - 원문 접수(INTAKE): [INTAKE-001](../../requirements/v.0.2/raw/INTAKE-001.md) INTAKE-001 §7.2 US-ADM-AUDIT-003
-- 관련 Jira Epic: CC-409
-- 명세 작성 Jira Task: CC-428
+- 관련 Jira Epic: 재생성 예정
+- 명세 작성 Jira Task: 재생성 예정
 - 관련 Jira Story: 명세 승인 후 기록
 - 관련 Figma:
 - 작성자: AI (Claude) — 초안

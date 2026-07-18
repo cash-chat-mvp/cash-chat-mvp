@@ -10,8 +10,8 @@
 - 주 도메인: 상점·주문
 - 연관 도메인: 국제화
 - 원문 접수(INTAKE): [INTAKE-001](../../requirements/v.0.2/raw/INTAKE-001.md) INTAKE-001 §7.8 US-ADM-SHOP-001
-- 관련 Jira Epic: CC-415
-- 명세 작성 Jira Task: CC-455
+- 관련 Jira Epic: 재생성 예정
+- 명세 작성 Jira Task: 재생성 예정
 - 관련 Jira Story: 명세 승인 후 기록
 - 관련 Figma:
 - 작성자: AI (Claude) — 초안

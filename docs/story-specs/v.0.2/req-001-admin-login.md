@@ -10,8 +10,8 @@
 - 주 도메인: 관리자 인증·권한
 - 연관 도메인: 감사·보안(인증 이벤트 감사)
 - 원문 접수(INTAKE): [INTAKE-001](../../requirements/v.0.2/raw/INTAKE-001.md) §7.1 US-ADM-AUTH-001
-- 관련 Jira Epic: CC-408
-- 명세 작성 Jira Task: CC-422
+- 관련 Jira Epic: 재생성 예정
+- 명세 작성 Jira Task: 재생성 예정
 - 관련 Jira Story: 명세 승인 후 기록
 - 관련 Figma:
 - 작성자: AI (Claude) — 초안

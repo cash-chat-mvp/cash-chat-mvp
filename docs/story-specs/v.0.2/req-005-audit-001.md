@@ -10,8 +10,8 @@
 - 주 도메인: 감사·보안
 - 연관 도메인: 보상·경제
 - 원문 접수(INTAKE): [INTAKE-001](../../requirements/v.0.2/raw/INTAKE-001.md) INTAKE-001 §7.2 US-ADM-AUDIT-001
-- 관련 Jira Epic: CC-409
-- 명세 작성 Jira Task: CC-426
+- 관련 Jira Epic: 재생성 예정
+- 명세 작성 Jira Task: 재생성 예정
 - 관련 Jira Story: 명세 승인 후 기록
 - 관련 Figma:
 - 작성자: AI (Claude) — 초안
@@ -153,7 +153,7 @@
 
 | ID | 유형 | 내용 | 영향 | 결정권자 | 기한 | 상태 |
 |---|---|---|---|---|---|---|
-| UNR-010 | 미결정 | 감사 로그 보존 기간·백업 절차 미정 (원문 §10 별도 정의 필요) | Story 범위 확정 | [DECISION] CC-490 참조 | | OPEN |
+| UNR-010 | 미결정 | 감사 로그 보존 기간·백업 절차 미정 (원문 §10 별도 정의 필요) | Story 범위 확정 | [DECISION] 재등록 예정 | | OPEN |
 
 ---
 

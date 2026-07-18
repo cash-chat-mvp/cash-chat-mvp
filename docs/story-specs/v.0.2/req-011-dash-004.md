@@ -10,8 +10,8 @@
 - 주 도메인: 대시보드
 - 연관 도메인: 채팅·AI 운영
 - 원문 접수(INTAKE): [INTAKE-001](../../requirements/v.0.2/raw/INTAKE-001.md) INTAKE-001 §7.3 US-ADM-DASH-004
-- 관련 Jira Epic: CC-410
-- 명세 작성 Jira Task: CC-432
+- 관련 Jira Epic: 재생성 예정
+- 명세 작성 Jira Task: 재생성 예정
 - 관련 Jira Story: 명세 승인 후 기록
 - 관련 Figma:
 - 작성자: AI (Claude) — 초안
@@ -152,7 +152,7 @@
 
 | ID | 유형 | 내용 | 영향 | 결정권자 | 기한 | 상태 |
 |---|---|---|---|---|---|---|
-| UNR-003 | 미결정 | AI 모델 단가 데이터의 소유 도메인 미확정 | Story 범위 확정 | [DECISION] CC-483 참조 | | OPEN |
+| UNR-003 | 미결정 | AI 모델 단가 데이터의 소유 도메인 미확정 | Story 범위 확정 | [DECISION] 재등록 예정 | | OPEN |
 
 ---
 
