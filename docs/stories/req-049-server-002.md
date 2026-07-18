@@ -8,11 +8,11 @@ Status: Draft
 
 - 우선순위: P1
 - 주 도메인: 서버·배포 운영
-- Epic: 서버·배포 운영 (v.0.2) — Jira CC-503
-- Jira Task: CC-555
+- 에픽: 서버·배포 운영 (v.0.2) — CC-577
+- Jira 스토리: CC-630
 - 원문 근거: INTAKE-001 US-ADM-SERVER-002
 - 기존 관계: 신규 (v.0.2)
-- UI: N/A (백엔드·연동 기반 Story)
+- UI: N/A (백엔드·연동 기반 스토리)
 
 ## Acceptance Criteria (원문 전사)
 
@@ -20,16 +20,14 @@ Status: Draft
 2. AC-02 오류 검색: 추적 ID, API, 오류 종류, 기간으로 검색하고 민감정보를 마스킹한다.
 3. AC-03 운영 데이터 연결: 권한 범위 안에서 관련 운영 데이터로 이동한다.
 
-## Dev Notes
-
-- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유.
-- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
-- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.
-
-## 관계
-
-- 없음
-
 ## Tasks
 
-- [ ] 구현 착수 시 세분화 (스프린트 4단계)
+- [ ] AC-01 메트릭 — 구현·검증 (CC-893)
+- [ ] AC-02 오류 검색 — 구현·검증 (CC-894)
+- [ ] AC-03 운영 데이터 연결 — 구현·검증 (CC-895)
+
+## Dev Notes
+
+- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유 / MFA=TOTP.
+- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
+- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.

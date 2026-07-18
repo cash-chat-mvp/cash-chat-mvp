@@ -8,11 +8,11 @@ Status: Draft
 
 - 우선순위: P1
 - 주 도메인: 대시보드
-- Epic: 대시보드 (v.0.2) — Jira CC-495
-- Jira Task: CC-515
+- 에픽: 대시보드 (v.0.2) — CC-569
+- Jira 스토리: CC-590
 - 원문 근거: INTAKE-001 US-ADM-DASH-002
 - 기존 관계: 신규 (v.0.2)
-- UI: ADMIN_UI — 와이어프레임: ../ux/wireframes/req-009/index.html
+- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
 
 ## Acceptance Criteria (원문 전사)
 
@@ -20,16 +20,15 @@ Status: Draft
 2. AC-02 활성 회원: 활동 이벤트 정의가 확정된 상태에서 DAU·WAU·MAU 조회 시 중복 제거한 활성 회원 수와 정의를 함께 표시한다.
 3. AC-03 비교: 직전 동일 기간 대비 증감 수와 비율을 반환한다.
 
-## Dev Notes
-
-- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유.
-- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
-- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.
-
-## 관계
-
-- 없음
-
 ## Tasks
 
-- [ ] 구현 착수 시 세분화 (스프린트 4단계)
+- [ ] AC-01 가입자 — 구현·검증 (CC-733)
+- [ ] AC-02 활성 회원 — 구현·검증 (CC-734)
+- [ ] AC-03 비교 — 구현·검증 (CC-735)
+- [ ] 관리 화면 구현 (와이어프레임 기준) (CC-736)
+
+## Dev Notes
+
+- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유 / MFA=TOTP.
+- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
+- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.

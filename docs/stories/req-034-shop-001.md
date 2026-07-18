@@ -8,11 +8,11 @@ Status: Draft
 
 - 우선순위: P2
 - 주 도메인: 상점·주문
-- Epic: 상점·주문 (v.0.2) — Jira CC-500
-- Jira Task: CC-540
+- 에픽: 상점·주문 (v.0.2) — CC-574
+- Jira 스토리: CC-615
 - 원문 근거: INTAKE-001 US-ADM-SHOP-001
 - 기존 관계: 신규 (v.0.2)
-- UI: ADMIN_UI — 와이어프레임: ../ux/wireframes/req-034/index.html
+- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
 
 ## Acceptance Criteria (원문 전사)
 
@@ -20,16 +20,15 @@ Status: Draft
 2. AC-02 판매 활성화: 필수 정보·재고 정책이 유효하면 서비스 카탈로그에 노출한다.
 3. AC-03 삭제 제한: 주문·인벤토리 이력이 있는 상품은 물리 삭제를 거부하고 비활성화만 허용한다.
 
-## Dev Notes
-
-- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유.
-- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
-- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.
-
-## 관계
-
-- 없음
-
 ## Tasks
 
-- [ ] 구현 착수 시 세분화 (스프린트 4단계)
+- [ ] AC-01 상품 등록 — 구현·검증 (CC-834)
+- [ ] AC-02 판매 활성화 — 구현·검증 (CC-835)
+- [ ] AC-03 삭제 제한 — 구현·검증 (CC-836)
+- [ ] 관리 화면 구현 (와이어프레임 기준) (CC-837)
+
+## Dev Notes
+
+- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유 / MFA=TOTP.
+- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
+- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.

@@ -8,11 +8,11 @@ Status: Draft
 
 - 우선순위: P1
 - 주 도메인: 채팅·AI 운영
-- Epic: 채팅·AI 운영 (v.0.2) — Jira CC-499
-- Jira Task: CC-536
+- 에픽: 채팅·AI 운영 (v.0.2) — CC-573
+- Jira 스토리: CC-611
 - 원문 근거: INTAKE-001 US-ADM-CHAT-002
 - 기존 관계: 신규 (v.0.2)
-- UI: ADMIN_UI — 와이어프레임: ../ux/wireframes/req-030/index.html
+- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
 
 ## Acceptance Criteria (원문 전사)
 
@@ -20,16 +20,15 @@ Status: Draft
 2. AC-02 모델별 분석: 모델별 요청 수, 성공률, 실패율을 반환한다.
 3. AC-03 자산 처리 연결: 메시지 상태와 관련 Energy·포인트·경험치 거래를 연결한다.
 
-## Dev Notes
-
-- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유.
-- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
-- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.
-
-## 관계
-
-- 없음
-
 ## Tasks
 
-- [ ] 구현 착수 시 세분화 (스프린트 4단계)
+- [ ] AC-01 상태 집계 — 구현·검증 (CC-818)
+- [ ] AC-02 모델별 분석 — 구현·검증 (CC-819)
+- [ ] AC-03 자산 처리 연결 — 구현·검증 (CC-820)
+- [ ] 관리 화면 구현 (와이어프레임 기준) (CC-821)
+
+## Dev Notes
+
+- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유 / MFA=TOTP.
+- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
+- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.

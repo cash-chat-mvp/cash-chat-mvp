@@ -8,11 +8,11 @@ Status: Draft
 
 - 우선순위: P0
 - 주 도메인: 회원·제재
-- Epic: 회원·제재 (v.0.2) — Jira CC-496
-- Jira Task: CC-520
+- 에픽: 회원·제재 (v.0.2) — CC-570
+- Jira 스토리: CC-595
 - 원문 근거: INTAKE-001 US-ADM-MEMBER-003
 - 기존 관계: 신규 (v.0.2)
-- UI: N/A (백엔드·연동 기반 Story)
+- UI: N/A (백엔드·연동 기반 스토리)
 
 ## Acceptance Criteria (원문 전사)
 
@@ -21,16 +21,15 @@ Status: Draft
 3. AC-03 해제: 권한 있는 관리자가 해제 사유 입력 시 정상 상태로 변경하고 다음 인증부터 허용한다.
 4. AC-04 감사: 제재 상태 변경 시 전후 상태, 기간, 사유, 처리자를 기록한다.
 
-## Dev Notes
-
-- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유.
-- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
-- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.
-
-## 관계
-
-- REQ-014 is blocked by REQ-013
-
 ## Tasks
 
-- [ ] 구현 착수 시 세분화 (스프린트 4단계)
+- [ ] AC-01 정지·기간 제한 — 구현·검증 (CC-754)
+- [ ] AC-02 서비스 적용 — 구현·검증 (CC-755)
+- [ ] AC-03 해제 — 구현·검증 (CC-756)
+- [ ] AC-04 감사 — 구현·검증 (CC-757)
+
+## Dev Notes
+
+- Architecture: [architecture.md](../architecture.md) — React+TS admin-frontend / Kotlin Spring Boot admin-backend / 운영 MySQL 공유 / MFA=TOTP.
+- 불변 규칙: 인증·RBAC 통과 없이는 반환·변경 금지, 자산 변경은 원장 필수, 변경은 감사와 원자적 커밋.
+- DB 테이블·컬럼·API 스키마는 구현(4단계)에서 확정한다.
