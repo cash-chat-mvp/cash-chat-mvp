@@ -12,7 +12,7 @@ Status: Draft
 - Jira 스토리: CC-623
 - 원문 근거: INTAKE-001 US-ADM-NOTICE-001
 - 기존 관계: 신규 (v.0.2)
-- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
+- UI: [공지·약관 관리](../ux/wireframes/pages/22-notices-terms/index.html)
 
 ## Acceptance Criteria (원문 전사)
 

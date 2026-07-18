@@ -12,7 +12,7 @@ Status: Draft
 - Jira 스토리: CC-601
 - 원문 근거: INTAKE-001 US-ADM-REWARD-002
 - 기존 관계: 신규 (v.0.2)
-- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
+- UI: [포인트·Energy 수동 조정](../ux/wireframes/pages/10-manual-adjust/index.html)
 
 ## Acceptance Criteria (원문 전사)
 

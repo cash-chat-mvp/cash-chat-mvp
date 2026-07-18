@@ -12,7 +12,7 @@ Status: Draft
 - Jira 스토리: CC-587
 - 원문 근거: INTAKE-001 US-ADM-AUDIT-002
 - 기존 관계: 신규 (v.0.2)
-- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
+- UI: [감사 로그 조회](../ux/wireframes/pages/33-audit-log/index.html)
 
 ## Acceptance Criteria (원문 전사)
 

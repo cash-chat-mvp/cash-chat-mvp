@@ -12,7 +12,7 @@ Status: Draft
 - Jira 스토리: CC-595
 - 원문 근거: INTAKE-001 US-ADM-MEMBER-003
 - 기존 관계: 신규 (v.0.2)
-- UI: N/A (백엔드·연동 기반 스토리)
+- UI: [이용 제재](../ux/wireframes/pages/07-sanctions/index.html)
 
 ## Acceptance Criteria (원문 전사)
 

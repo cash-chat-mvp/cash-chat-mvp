@@ -12,7 +12,7 @@ Status: Draft
 - Jira 스토리: CC-631
 - 원문 근거: INTAKE-001 US-ADM-SERVER-003
 - 기존 관계: 신규 (v.0.2)
-- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
+- UI: [배포·재기동 요청](../ux/wireframes/pages/26-deploy/index.html)
 
 ## Acceptance Criteria (원문 전사)
 

@@ -12,7 +12,7 @@ Status: Draft
 - Jira 스토리: CC-588
 - 원문 근거: INTAKE-001 US-ADM-AUDIT-003
 - 기존 관계: 신규 (v.0.2)
-- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
+- UI: 공통 모달(이중 확인) — 제재·조정·취소 등 위험 작업 페이지에 포함 (별도 페이지 없음)
 
 ## Acceptance Criteria (원문 전사)
 

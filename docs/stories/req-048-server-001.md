@@ -12,7 +12,7 @@ Status: Draft
 - Jira 스토리: CC-629
 - 원문 근거: INTAKE-001 US-ADM-SERVER-001
 - 기존 관계: 신규 (v.0.2)
-- UI: N/A (백엔드·연동 기반 스토리)
+- UI: [서비스 상태·성능](../ux/wireframes/pages/25-system-status/index.html)
 
 ## Acceptance Criteria (원문 전사)
 

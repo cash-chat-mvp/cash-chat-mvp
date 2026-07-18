@@ -12,7 +12,7 @@ Status: Draft
 - Jira 스토리: CC-622
 - 원문 근거: INTAKE-001 US-ADM-CONTENT-003
 - 기존 관계: 신규 (v.0.2)
-- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
+- UI: [출석·초대·룰렛 정책](../ux/wireframes/pages/21-retention-policy/index.html)
 
 ## Acceptance Criteria (원문 전사)
 

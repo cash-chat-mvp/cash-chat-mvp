@@ -12,7 +12,7 @@ Status: Draft
 - Jira 스토리: CC-611
 - 원문 근거: INTAKE-001 US-ADM-CHAT-002
 - 기존 관계: 신규 (v.0.2)
-- UI: 2단계에서 와이어프레임 작성 (docs/ux/wireframes/)
+- UI: [채팅 성공·실패 분석](../ux/wireframes/pages/16-chat-analytics/index.html)
 
 ## Acceptance Criteria (원문 전사)
 
