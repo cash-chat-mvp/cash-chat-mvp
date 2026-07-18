@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><title>REQ-020 포인트 수동 조정 — lo-fi</title>
+<style>
+body{font-family:sans-serif;margin:0;background:#f0f0f0;color:#333}
+.top{background:#bbb;padding:10px 16px;font-weight:bold}
+.crumb{background:#ddd;padding:6px 16px;font-size:13px;color:#666}
+.wrap{display:flex}
+.side{width:180px;background:#ccc;min-height:80vh;padding:12px}
+.side div{background:#bbb;margin:6px 0;padding:8px;font-size:13px}
+.main{flex:1;padding:16px}
+.box{background:#fff;border:2px dashed #999;margin:0 0 12px;padding:14px}
+.box h3{margin:0 0 8px;font-size:14px;color:#555}
+.ph{background:#e5e5e5;height:28px;margin:6px 0}
+.btn{display:inline-block;background:#aaa;color:#fff;padding:6px 14px;margin:4px 6px 0 0;font-size:13px}
+.note{font-size:12px;color:#888}
+</style></head><body>
+<div class="top">Cash Chat Admin — lo-fi wireframe</div>
+<div class="crumb">보상·경제 &gt; 포인트 수동 조정 (REQ-020 · P0)</div>
+<div class="wrap">
+<div class="side"><div>대시보드</div><div><b>보상·경제</b></div><div>…</div></div>
+<div class="main">
+<div class="box"><h3>화면 목적</h3><div class="note">권한 있는 운영 관리자로서 보상 누락과 오지급을 정정하기 위해 회원의 포인트를 수동으로 지급하거나 차감할 수 있다.</div></div>
+<div class="box"><h3>지급·차감</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-01 지급·차감: 회원, 금액, 사유, 관련 번호가 유효하면 지갑과 원장을 단일 트랜잭션으로 변경한다.</div></div>
+<div class="box"><h3>음수 방지</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-02 음수 방지: 차감 후 잔액이 음수가 되면 거부하고 데이터를 변경하지 않는다.</div></div>
+<div class="box"><h3>멱등성</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-03 멱등성: 동일 요청 식별자 재요청은 기존 결과를 반환하고 중복 조정하지 않는다.</div></div>
+<div class="box"><h3>동작</h3><span class="btn">지급·차감</span><span class="btn">음수 방지</span><span class="btn">멱등성</span><div class="note">권한 없는 동작은 미노출(서버 검증 별도)</div></div>
+</div></div></body></html>

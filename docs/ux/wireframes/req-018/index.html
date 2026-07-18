@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><title>REQ-018 회원 탈퇴 처리 — lo-fi</title>
+<style>
+body{font-family:sans-serif;margin:0;background:#f0f0f0;color:#333}
+.top{background:#bbb;padding:10px 16px;font-weight:bold}
+.crumb{background:#ddd;padding:6px 16px;font-size:13px;color:#666}
+.wrap{display:flex}
+.side{width:180px;background:#ccc;min-height:80vh;padding:12px}
+.side div{background:#bbb;margin:6px 0;padding:8px;font-size:13px}
+.main{flex:1;padding:16px}
+.box{background:#fff;border:2px dashed #999;margin:0 0 12px;padding:14px}
+.box h3{margin:0 0 8px;font-size:14px;color:#555}
+.ph{background:#e5e5e5;height:28px;margin:6px 0}
+.btn{display:inline-block;background:#aaa;color:#fff;padding:6px 14px;margin:4px 6px 0 0;font-size:13px}
+.note{font-size:12px;color:#888}
+</style></head><body>
+<div class="top">Cash Chat Admin — lo-fi wireframe</div>
+<div class="crumb">회원·제재 &gt; 회원 탈퇴 처리 (REQ-018 · P1)</div>
+<div class="wrap">
+<div class="side"><div>대시보드</div><div><b>회원·제재</b></div><div>…</div></div>
+<div class="main">
+<div class="box"><h3>화면 목적</h3><div class="note">운영·CS 관리자로서 회원의 탈퇴 요청을 정책에 맞게 처리하기 위해 탈퇴 상태와 개인정보 처리 단계를 관리할 수 있다.</div></div>
+<div class="box"><h3>탈퇴 예약</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-01 탈퇴 예약: 요청 근거와 처리 예정일 확인 시 탈퇴 예정 상태로 변경하고 활성 인증 토큰을 무효화한다.</div></div>
+<div class="box"><h3>보존 정책 적용</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-02 보존 정책 적용: 처리일 도래 시 법적·회계 보존 대상과 즉시 삭제·익명화 대상을 구분 처리한다.</div></div>
+<div class="box"><h3>재가입 식별 정책</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-03 재가입 식별 정책: 익명화 후 동일 OAuth·기기 재가입은 확정된 정책에 따라 허용·차단하고 과거 개인정보를 임의 복원하지 않는다.</div></div>
+<div class="box"><h3>처리 감사</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-04 처리 감사: 상태·처리 단계 변경 시 근거, 처리자, 전후 상태, 결과를 감사 로그에 기록한다.</div></div>
+<div class="box"><h3>동작</h3><span class="btn">탈퇴 예약</span><span class="btn">보존 정책 적용</span><span class="btn">재가입 식별 정책</span><span class="btn">처리 감사</span><div class="note">권한 없는 동작은 미노출(서버 검증 별도)</div></div>
+</div></div></body></html>

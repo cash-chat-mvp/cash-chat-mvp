@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><title>REQ-038 교환 상품·발송 관리 — lo-fi</title>
+<style>
+body{font-family:sans-serif;margin:0;background:#f0f0f0;color:#333}
+.top{background:#bbb;padding:10px 16px;font-weight:bold}
+.crumb{background:#ddd;padding:6px 16px;font-size:13px;color:#666}
+.wrap{display:flex}
+.side{width:180px;background:#ccc;min-height:80vh;padding:12px}
+.side div{background:#bbb;margin:6px 0;padding:8px;font-size:13px}
+.main{flex:1;padding:16px}
+.box{background:#fff;border:2px dashed #999;margin:0 0 12px;padding:14px}
+.box h3{margin:0 0 8px;font-size:14px;color:#555}
+.ph{background:#e5e5e5;height:28px;margin:6px 0}
+.btn{display:inline-block;background:#aaa;color:#fff;padding:6px 14px;margin:4px 6px 0 0;font-size:13px}
+.note{font-size:12px;color:#888}
+</style></head><body>
+<div class="top">Cash Chat Admin — lo-fi wireframe</div>
+<div class="crumb">상점·주문 &gt; 교환 상품·발송 관리 (REQ-038 · P3)</div>
+<div class="wrap">
+<div class="side"><div>대시보드</div><div><b>상점·주문</b></div><div>…</div></div>
+<div class="main">
+<div class="box"><h3>화면 목적</h3><div class="note">운영 관리자로서 기프티콘과 교환 상품을 안정적으로 제공하기 위해 공급업체와 발송 상태를 관리할 수 있다.</div></div>
+<div class="box"><h3>공급 정보</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-01 공급 정보: 공급업체, 공급 상품 코드, 유효기간 정책을 등록하고 민감 인증 정보는 암호화 저장한다.</div></div>
+<div class="box"><h3>발송 상태</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-02 발송 상태: 요청, 성공, 실패, 재시도 상태와 외부 거래 ID를 기록한다.</div></div>
+<div class="box"><h3>실패 재처리</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-03 실패 재처리: 같은 외부 멱등 키로 중복 발송 없이 처리한다.</div></div>
+<div class="box"><h3>동작</h3><span class="btn">공급 정보</span><span class="btn">발송 상태</span><span class="btn">실패 재처리</span><div class="note">권한 없는 동작은 미노출(서버 검증 별도)</div></div>
+</div></div></body></html>

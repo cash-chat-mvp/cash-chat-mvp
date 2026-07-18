@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><title>REQ-012 회원 검색 — lo-fi</title>
+<style>
+body{font-family:sans-serif;margin:0;background:#f0f0f0;color:#333}
+.top{background:#bbb;padding:10px 16px;font-weight:bold}
+.crumb{background:#ddd;padding:6px 16px;font-size:13px;color:#666}
+.wrap{display:flex}
+.side{width:180px;background:#ccc;min-height:80vh;padding:12px}
+.side div{background:#bbb;margin:6px 0;padding:8px;font-size:13px}
+.main{flex:1;padding:16px}
+.box{background:#fff;border:2px dashed #999;margin:0 0 12px;padding:14px}
+.box h3{margin:0 0 8px;font-size:14px;color:#555}
+.ph{background:#e5e5e5;height:28px;margin:6px 0}
+.btn{display:inline-block;background:#aaa;color:#fff;padding:6px 14px;margin:4px 6px 0 0;font-size:13px}
+.note{font-size:12px;color:#888}
+</style></head><body>
+<div class="top">Cash Chat Admin — lo-fi wireframe</div>
+<div class="crumb">회원·제재 &gt; 회원 검색 (REQ-012 · P0)</div>
+<div class="wrap">
+<div class="side"><div>대시보드</div><div><b>회원·제재</b></div><div>…</div></div>
+<div class="main">
+<div class="box"><h3>화면 목적</h3><div class="note">운영·CS 관리자로서 문의 또는 운영 대상 회원을 찾기 위해 회원 목록을 검색할 수 있다.</div></div>
+<div class="box"><h3>조건 검색</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-01 조건 검색: ID, 이름, 이메일, 가입 유형, 상태, 가입 기간 조건을 모두 만족하는 회원을 페이징 반환한다.</div></div>
+<div class="box"><h3>기본 정보</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-02 기본 정보: ID, 이름, 마스킹 이메일, 가입 유형, 상태, 가입일을 반환한다.</div></div>
+<div class="box"><h3>개인정보 제한</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-03 개인정보 제한: 원문 권한이 없으면 이메일과 외부 식별자를 마스킹한다.</div></div>
+<div class="box"><h3>동작</h3><span class="btn">조건 검색</span><span class="btn">기본 정보</span><span class="btn">개인정보 제한</span><div class="note">권한 없는 동작은 미노출(서버 검증 별도)</div></div>
+</div></div></body></html>

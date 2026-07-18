@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><title>REQ-008 핵심 운영 현황 — lo-fi</title>
+<style>
+body{font-family:sans-serif;margin:0;background:#f0f0f0;color:#333}
+.top{background:#bbb;padding:10px 16px;font-weight:bold}
+.crumb{background:#ddd;padding:6px 16px;font-size:13px;color:#666}
+.wrap{display:flex}
+.side{width:180px;background:#ccc;min-height:80vh;padding:12px}
+.side div{background:#bbb;margin:6px 0;padding:8px;font-size:13px}
+.main{flex:1;padding:16px}
+.box{background:#fff;border:2px dashed #999;margin:0 0 12px;padding:14px}
+.box h3{margin:0 0 8px;font-size:14px;color:#555}
+.ph{background:#e5e5e5;height:28px;margin:6px 0}
+.btn{display:inline-block;background:#aaa;color:#fff;padding:6px 14px;margin:4px 6px 0 0;font-size:13px}
+.note{font-size:12px;color:#888}
+</style></head><body>
+<div class="top">Cash Chat Admin — lo-fi wireframe</div>
+<div class="crumb">대시보드 &gt; 핵심 운영 현황 (REQ-008 · P1)</div>
+<div class="wrap">
+<div class="side"><div>대시보드</div><div><b>대시보드</b></div><div>…</div></div>
+<div class="main">
+<div class="box"><h3>화면 목적</h3><div class="note">운영 관리자로서 서비스 이상과 운영량을 빠르게 파악하기 위해 핵심 지표를 한 화면에서 조회할 수 있다.</div></div>
+<div class="box"><h3>기간 지표</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-01 기간 지표: 오늘·주간·월간 대시보드 조회 시 신규·탈퇴 회원, 채팅, 광고 보상, 포인트·Energy, 구매 지표를 같은 기간 기준으로 반환한다.</div></div>
+<div class="box"><h3>성공·실패 구분</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-02 성공·실패 구분: 채팅·광고·오퍼월의 요청 수와 성공·실패·거절 수를 구분한다.</div></div>
+<div class="box"><h3>상세 이동</h3><div class="ph"></div><div class="ph" style="width:70%"></div><div class="note">AC-03 상세 이동: 지표 카드 선택 시 동일 기간·상태 필터가 적용된 상세 목록으로 이동한다.</div></div>
+<div class="box"><h3>동작</h3><span class="btn">기간 지표</span><span class="btn">성공·실패 구분</span><span class="btn">상세 이동</span><div class="note">권한 없는 동작은 미노출(서버 검증 별도)</div></div>
+</div></div></body></html>
