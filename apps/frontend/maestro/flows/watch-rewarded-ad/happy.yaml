@@ -1,0 +1,17 @@
+# 여정: watch-rewarded-ad | US-REWARD-002 / AC-FE-01 — 광고 시청 완료 시 보상이 반영된다
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "happy"
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
+- tapOn: "리워드"
+- takeScreenshot: watch-rewarded-ad-01-rewards   # 상태 변화: 혜택존 진입
+- tapOn: "▶  광고 보기"
+- assertVisible: "에너지를 충전했어요!"
+- takeScreenshot: watch-rewarded-ad-02-rewarded  # 상태 변화: 보상 반영 피드백

@@ -113,8 +113,8 @@ val appModule = module {
             get<com.nomadclub.cashchat.config.AppConfig>().adChatInterval
         }
     }
-    single { com.nomadclub.cashchat.ads.RewardedAdManager(get()) }
+    single<com.nomadclub.cashchat.ads.RewardedAdPresenter> { com.nomadclub.cashchat.ads.RewardedAdManager(get()) }
     single { com.nomadclub.cashchat.ads.NativeAdManager(get()) }
 
-    single { com.nomadclub.cashchat.offerwall.TnkOfferwallManager(get()) }
+    single<com.nomadclub.cashchat.offerwall.OfferwallLauncher> { com.nomadclub.cashchat.offerwall.TnkOfferwallManager(get()) }
 }

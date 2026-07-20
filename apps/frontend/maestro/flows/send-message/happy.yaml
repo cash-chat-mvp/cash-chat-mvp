@@ -1,0 +1,26 @@
+# 여정: send-message | US-CHAT-001 / AC-FE-01 — 메시지를 보내면 AI(목) 응답을 받는다
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "happy"
+# 프리뷰 에뮬레이터의 첫 실행 시스템 호환성 다이얼로그(없으면 무시).
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
+- tapOn: "메시지를 입력하세요..."
+# 일부 에뮬레이터에서 입력창 포커스 시 Gboard 스타일러스 온보딩이 떠 전송 버튼을 가린다(없으면 무시).
+- runFlow:
+    when:
+      visible: "Try out your stylus"
+    commands:
+      - tapOn: "Cancel"
+# Maestro inputText 는 유니코드(한글) 미지원(issue #146). mock 은 메시지 내용과 무관하게
+# 고정 SSE 응답을 반환하므로 ASCII 로 전송한다.
+- inputText: "hello"
+- tapOn: "전송"        # contentDescription(접근성 텍스트) 매칭
+- assertVisible: "목킹응답: 반갑습니다 👋"
+- takeScreenshot: send-message-01-response   # 상태 변화: AI 응답 렌더됨

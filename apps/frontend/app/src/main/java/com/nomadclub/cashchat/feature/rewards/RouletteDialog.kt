@@ -23,7 +23,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nomadclub.cashchat.ads.RewardedAdManager
+import com.nomadclub.cashchat.ads.RewardedAdPresenter
 import com.nomadclub.cashchat.shared.roulette.RouletteSpinResult
 import com.nomadclub.cashchat.shared.roulette.RouletteStore
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -89,7 +89,7 @@ private fun resultText(r: RouletteSpinResult): String =
 fun RouletteDialog(
     onDismiss: () -> Unit,
     vm: RouletteViewModel = koinViewModel(),
-    adManager: RewardedAdManager = koinInject(),
+    adManager: RewardedAdPresenter = koinInject(),
 ) {
     val status by vm.status.collectAsState()
     val phase by vm.phase.collectAsState()

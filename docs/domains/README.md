@@ -18,6 +18,7 @@
 | **reward** | 혜택존 코인/밥 적립 채널 (출석·리워드 광고·오퍼월·친구 초대) | [reward/README.md](./reward/README.md) |
 | **shop** | 상점 카탈로그·구매·인벤토리 | [shop/README.md](./shop/README.md) |
 | **auth** | 소셜 로그인·토큰 발급 | [auth/README.md](./auth/README.md) |
+| **chat** | AI 채팅(서버 SSE 스트리밍) | [chat/README.md](./chat/README.md) |
 
 ## 원본 spec과의 관계
 

@@ -31,7 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import com.nomadclub.cashchat.ads.RewardedAdManager
+import com.nomadclub.cashchat.ads.RewardedAdPresenter
 import com.nomadclub.cashchat.shared.core.config.FeatureFlags
 import com.nomadclub.cashchat.shared.core.network.ApiException
 import com.nomadclub.cashchat.shared.energy.EnergyTopupApi
@@ -45,7 +45,7 @@ import org.koin.compose.koinInject
 @Composable
 fun EnergyGateBottomSheet(
     viewModel: ChatViewModel,
-    adManager: RewardedAdManager = koinInject(),
+    adManager: RewardedAdPresenter = koinInject(),
     topupApi: EnergyTopupApi = koinInject(),
 ) {
     val quota by viewModel.adRewardStore.quota.collectAsState()

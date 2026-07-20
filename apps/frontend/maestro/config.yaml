@@ -1,0 +1,3 @@
+# Maestro 테스트 스위트 설정. `maestro test maestro` 로 실행하면 서브디렉터리 flow 를 모두 포함한다.
+flows:
+  - "flows/**"

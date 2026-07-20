@@ -43,10 +43,23 @@ related-domains: [offerwall, point, ledger]
   Given 서명은 통과했으나 `md_user_nm`이 매핑에 없다
   Then 적립하지 않고 ledger에 `REJECTED_UNKNOWN_USER`(user_id=null)로 기록한다.
 
+## FE 관통 인수 기준 (Acceptance Criteria)
+
+- [ ] **AC-FE-01 오퍼 완료 → 잔액 증가**
+  Given mock 플레이버 앱이 혜택존에 있다
+  When [TNK 오퍼월] 카드를 눌러 (Fake) 오퍼를 완료한다
+  Then 코인 잔액이 증가해 상단 잔액 칩(`🪙 1500`)에 반영된다.
+
+- [ ] **AC-FE-02 진입 실패**
+  Given `offerwall_fail` 시나리오다
+  When [TNK 오퍼월] 카드를 누른다
+  Then 진입 실패 안내(`오퍼월 진입에 실패했어요`)가 표시된다.
+
 ## 검증 매핑 (Verification)
 
 - BE: `md_chk` 서명 검증, 멱등(`seq_id` UNIQUE + 멱등 키), fail-closed 순서 테스트
 - 규격 확인: TNK Android SDK "자체 서버 포인트 관리" 콜백 규격과 일치 확인 완료 (spec §검증 항목)
+- FE(Maestro) 여정 `complete-offerwall`: apps/frontend/maestro/flows/complete-offerwall/happy.yaml, token-fail.yaml (AC-FE-01/02)
 
 ## 관련
 

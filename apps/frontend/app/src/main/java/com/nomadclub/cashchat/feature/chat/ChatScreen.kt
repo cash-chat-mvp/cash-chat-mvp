@@ -57,7 +57,7 @@ import android.provider.Settings
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nomadclub.cashchat.ads.ChatNativeAdView
-import com.nomadclub.cashchat.ads.RewardedAdManager
+import com.nomadclub.cashchat.ads.RewardedAdPresenter
 import com.nomadclub.cashchat.core.data.CharacterPreferenceStore
 import com.nomadclub.cashchat.feature.chat.components.AdGateCard
 import com.nomadclub.cashchat.feature.chat.components.CharacterAvatar
@@ -85,7 +85,7 @@ fun ChatScreen(
     onOpenEvolution: () -> Unit,
     viewModel: ChatViewModel = koinViewModel(),
     localViewModel: LocalChatViewModel = koinViewModel(),
-    adManager: RewardedAdManager = koinInject(),
+    adManager: RewardedAdPresenter = koinInject(),
     nativeAdManager: com.nomadclub.cashchat.ads.NativeAdManager = koinInject(),
     characterStore: CharacterPreferenceStore = koinInject(),
 ) {

@@ -21,7 +21,7 @@ import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.nomadclub.cashchat.offerwall.TnkOfferwallManager
+import com.nomadclub.cashchat.offerwall.OfferwallLauncher
 import com.nomadclub.cashchat.shared.attendance.AttendanceStore
 import com.nomadclub.cashchat.shared.points.PointsRepository
 import kotlinx.coroutines.launch
@@ -32,7 +32,7 @@ import org.koin.compose.koinInject
 fun BenefitZoneScreen(
     store: AttendanceStore = koinInject(),
     pointsRepository: PointsRepository = koinInject(),
-    offerwallManager: TnkOfferwallManager = koinInject(),
+    offerwallManager: OfferwallLauncher = koinInject(),
 ) {
     val state by store.state.collectAsState()
     val balance by pointsRepository.balance.collectAsState()

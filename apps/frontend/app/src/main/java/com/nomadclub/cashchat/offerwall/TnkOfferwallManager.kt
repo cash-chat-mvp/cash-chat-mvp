@@ -16,9 +16,9 @@ import com.tnkfactory.ad.TnkOfferwall
  * `setUserName(String)` / `startOfferwallActivity(Context)` 는 인스턴스 메서드이므로
  * Activity 로 생성한 인스턴스에서 호출한다.
  */
-class TnkOfferwallManager(private val offerwallApi: OfferwallApi) {
+class TnkOfferwallManager(private val offerwallApi: OfferwallApi) : OfferwallLauncher {
     /** `startOfferwallActivity` 는 메인 스레드에서 호출해야 한다. 호출부는 Main 디스패처 코루틴에서 [launch] 를 호출한다. */
-    suspend fun launch(activity: Activity): Result<Unit> = runCatching {
+    override suspend fun launch(activity: Activity): Result<Unit> = runCatching {
         val token = offerwallApi.issueUserToken().token
         val offerwall = TnkOfferwall(activity)
         offerwall.setUserName(token)

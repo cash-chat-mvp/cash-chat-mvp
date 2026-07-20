@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nomadclub.cashchat.ads.RewardedAdManager
+import com.nomadclub.cashchat.ads.RewardedAdPresenter
 import com.nomadclub.cashchat.shared.ads.AdRewardStore
 import com.nomadclub.cashchat.shared.ads.RewardOutcome
 import com.nomadclub.cashchat.shared.hud.HudStore
@@ -98,7 +98,7 @@ class BenefitRewardViewModel(
 fun RewardAdCard(
     modifier: Modifier = Modifier,
     vm: BenefitRewardViewModel = koinViewModel(),
-    adManager: RewardedAdManager = koinInject(),
+    adManager: RewardedAdPresenter = koinInject(),
 ) {
     val quota by vm.quota.collectAsState()
     val phase by vm.phase.collectAsState()

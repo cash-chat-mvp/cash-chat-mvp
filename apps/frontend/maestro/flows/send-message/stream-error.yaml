@@ -1,0 +1,23 @@
+# 여정: send-message | US-CHAT-001 / AC-FE-02 — 스트림 에러 시 정상 응답이 렌더되지 않는다
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "chat_error"
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
+- tapOn: "메시지를 입력하세요..."
+- runFlow:
+    when:
+      visible: "Try out your stylus"
+    commands:
+      - tapOn: "Cancel"
+- inputText: "hello"
+- tapOn: "전송"
+# chat_error 시나리오는 SSE event:error 를 반환하므로 정상(목) 응답이 렌더되지 않는다.
+- assertNotVisible: "목킹응답"
+- takeScreenshot: send-message-02-stream-error   # 상태: 에러 경로(정상 응답 없음)

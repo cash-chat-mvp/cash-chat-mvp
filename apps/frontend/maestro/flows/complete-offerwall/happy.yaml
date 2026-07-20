@@ -1,0 +1,24 @@
+# 여정: complete-offerwall | US-REWARD-003 / AC-FE-01 — 오퍼 완료 시 코인 잔액이 증가한다
+appId: com.nomadclub.cashchat
+---
+- launchApp:
+    clearState: true
+    arguments:
+      scenario: "happy"
+- runFlow:
+    when:
+      visible: "Don't Show Again"
+    commands:
+      - tapOn: "Don't Show Again"
+- tapOn: "리워드"
+# TNK 오퍼월 카드는 혜택존 하단에 있어 스크롤로 노출한다.
+- scrollUntilVisible:
+    element: "TNK 오퍼월"
+    direction: DOWN
+- takeScreenshot: complete-offerwall-01-card   # 상태 변화: 오퍼월 카드 노출
+- tapOn: "TNK 오퍼월"
+# 잔액 칩(🪙 1500)은 상단이므로 위로 스크롤해 확인.
+- scrollUntilVisible:
+    element: "🪙 1500"
+    direction: UP
+- takeScreenshot: complete-offerwall-02-balance   # 상태 변화: 코인 잔액 증가
