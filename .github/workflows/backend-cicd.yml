@@ -52,7 +52,11 @@ jobs:
     name: Backend CD
     runs-on: ubuntu-latest
     needs: ci
-    if: github.event_name == 'push'
+    # 2026-09 개발 서버 회수로 배포를 중단한다.
+    # 그 서버는 다른 프로젝트가 재사용하므로, 이 job 이 살아 있으면 dev 에 push 가
+    # 들어올 때 남의 서버로 배포된다. DEPLOY_HOST/USER/SSH_KEY/PATH 시크릿도 삭제했다.
+    # 되살리려면 새 배포 대상과 시크릿을 먼저 준비한다.
+    if: false  # 원래 조건: github.event_name == 'push'
     steps:
       - name: Checkout
         uses: actions/checkout@v5
